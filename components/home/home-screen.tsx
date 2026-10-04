@@ -94,6 +94,12 @@ export default function HomeScreen() {
   const live = activeVideos.find((video) => video.liveStatus === "live");
   const heroItems = [...activeVideos.filter((video) => video.liveStatus === "live"), ...activeVideos.filter((video) => video.website?.featured && video.liveStatus !== "live"), ...activeVideos.filter((video) => video.liveStatus !== "live" && !video.website?.featured)].slice(0, 4);
   const heroVideo = heroItems[heroItems.length ? heroIndex % heroItems.length : 0];
+
+  useEffect(() => {
+    if (heroItems.length < 2) return;
+    const timer = window.setInterval(() => setHeroIndex((index) => (index + 1) % heroItems.length), 5000);
+    return () => window.clearInterval(timer);
+  }, [heroItems.length]);
   const allTopPlaylists = activePlaylists.filter((playlist) => playlist.website?.featured).concat(activePlaylists.filter((playlist) => !playlist.website?.featured));
   const topPlaylists = allTopPlaylists.slice(0, 8);
   const allPastPlaylists = activePlaylists.filter((playlist) => /meeting|rally|workshop|camp|conference|retreat/i.test(playlist.title));

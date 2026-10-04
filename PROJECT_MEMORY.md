@@ -15,3 +15,10 @@ Record verified errors and fixes, plus major changes, here. Review this file bef
 - **Major changes:** Removed Firestore `orderBy("publishedAt")` from the latest videos listener. Ordering is already performed client-side, so the server-side ordering was redundant and could make the listener require an unconfigured composite index. Raised the listener cap from 40 to 300 before client sorting.
 - **Errors and fixes:** No build/runtime errors encountered during this change.
 - **Verification:** `npm.cmd run build` completed successfully, including TypeScript checks and generation of `/playlists` and `/playlists/[id]`.
+
+## 2026-10-04: Featured playlist sizing and hero rotation
+
+- **Major changes:** Featured playlist cards now use larger fixed-width cards in a horizontally scrollable, snap-aligned mobile row, showing at most a few cards at once while keeping the rest accessible by scrolling.
+- **Major changes:** Hero content rotates every five seconds when multiple videos are available. Hero height is now content-driven with a responsive minimum, so long titles or descriptions can expand the section rather than being clipped by a fixed maximum height.
+- **Errors and fixes:** No build/runtime errors encountered.
+- **Verification:** `npm.cmd run build` completed successfully, including TypeScript checks and page generation.
