@@ -1,0 +1,62 @@
+rules_version = '2';
+service cloud.firestore {
+  match /databases/{database}/documents {
+    function signedIn() {
+      return request.auth != null;
+    }
+
+    function isAdmin() {
+      return signedIn()
+        && exists(/databases/$(database)/documents/admins/$(request.auth.uid))
+        && get(/databases/$(database)/documents/admins/$(request.auth.uid)).data.enabled == true;
+    }
+
+    // The initial administrator is allowlisted here so the app can provision
+    // their role marker on first sign-in without opening admin creation to others.
+    match /admins/{uid} {
+      allow get: if signedIn() && request.auth.uid == uid;
+      allow create: if signedIn()
+        && request.auth.uid == '3H3BclyO2FePQ59KYIO2kKSirnx2'
+        && uid == request.auth.uid
+        && request.resource.data.keys().hasOnly(['enabled'])
+        && request.resource.data.enabled == true;
+      allow update: if signedIn()
+        && request.auth.uid == '3H3BclyO2FePQ59KYIO2kKSirnx2'
+        && uid == request.auth.uid
+        && request.resource.data.keys().hasOnly(['enabled'])
+        && request.resource.data.enabled == true;
+      allow list, delete: if false;
+    }
+
+    match /syncLeases/{channelId} {
+      allow read, create, update, delete: if isAdmin();
+    }
+
+    // These collections contain public YouTube metadata and website presentation fields.
+    match /channels/{channelId} {
+      allow read: if true;
+      allow create, update: if isAdmin()
+        && request.resource.data.id == channelId
+        && request.resource.data.enabled is bool;
+      allow delete: if isAdmin();
+    }
+
+    match /videos/{videoId} {
+      allow read: if true;
+      allow create, update: if isAdmin()
+        && request.resource.data.id == videoId
+        && request.resource.data.title is string
+        && request.resource.data.channelId is string;
+      allow delete: if isAdmin();
+    }
+
+    match /playlists/{playlistId} {
+      allow read: if true;
+      allow create, update: if isAdmin()
+        && request.resource.data.id == playlistId
+        && request.resource.data.title is string
+        && request.resource.data.videoIds is list;
+      allow delete: if isAdmin();
+    }
+  }
+}
