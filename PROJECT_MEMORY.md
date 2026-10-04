@@ -22,3 +22,11 @@ Record verified errors and fixes, plus major changes, here. Review this file bef
 - **Major changes:** Hero content rotates every five seconds when multiple videos are available. Hero height is now content-driven with a responsive minimum, so long titles or descriptions can expand the section rather than being clipped by a fixed maximum height.
 - **Errors and fixes:** No build/runtime errors encountered.
 - **Verification:** `npm.cmd run build` completed successfully, including TypeScript checks and page generation.
+
+## 2026-10-04: Video descriptions, sharing, and playlist detail layout
+
+- **Major changes:** Latest video cards and playlist detail video cards now show the video description, falling back to the channel name when the description is empty. Descriptions are clamped to two lines in the card layout.
+- **Major changes:** Video overflow buttons open the native share sheet with only the YouTube URL, allowing messaging apps such as WhatsApp to render YouTube's standard rich link preview. Browsers without native sharing copy the link instead.
+- **Major changes:** Removed the white card treatment from playlist detail, restyled playlist entries like featured video cards, added suggested playlists, and added fixed mobile navigation.
+- **Errors and fixes:** No build/runtime errors encountered.
+- **Verification:** `npm.cmd run build` completed successfully, including TypeScript checks and page generation.
