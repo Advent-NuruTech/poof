@@ -1,7 +1,7 @@
 "use client";
 
 import { onAuthStateChanged, signOut, type User } from "firebase/auth";
-import { collection, limit, onSnapshot, orderBy, query, where } from "firebase/firestore";
+import { collection, limit, onSnapshot, query, where } from "firebase/firestore";
 import { useEffect, useState } from "react";
 import type { ReactNode } from "react";
 import { auth, db } from "@/lib/firebase";
@@ -45,7 +45,6 @@ export default function HomeScreen() {
   const [watching, setWatching] = useState<Video | null>(null);
   const [selectedPlaylist, setSelectedPlaylist] = useState<Playlist | null>(null);
   const [showAllVideos, setShowAllVideos] = useState(false);
-  const [showAllPlaylists, setShowAllPlaylists] = useState(false);
   const [showAllMeetings, setShowAllMeetings] = useState(false);
   const [accountOpen, setAccountOpen] = useState(false);
   const [activeNav, setActiveNav] = useState("Home");
@@ -61,7 +60,7 @@ export default function HomeScreen() {
     if (!ids.length) { setVideos([]); return; }
     const groupRows = new Map<number, Map<string, Video>>();
     const subscriptions = chunks(ids, 30).map((group, groupIndex) => onSnapshot(
-      query(collection(db, "videos"), where("catalogChannelIds", "array-contains-any", group), orderBy("publishedAt", "desc"), limit(40)),
+      query(collection(db, "videos"), where("catalogChannelIds", "array-contains-any", group), limit(300)),
       (snapshot) => {
         groupRows.set(groupIndex, new Map(snapshot.docs.map((entry) => [entry.id, { ...entry.data(), id: entry.id } as Video])));
         const merged = new Map<string, Video>();
@@ -96,7 +95,7 @@ export default function HomeScreen() {
   const heroItems = [...activeVideos.filter((video) => video.liveStatus === "live"), ...activeVideos.filter((video) => video.website?.featured && video.liveStatus !== "live"), ...activeVideos.filter((video) => video.liveStatus !== "live" && !video.website?.featured)].slice(0, 4);
   const heroVideo = heroItems[heroItems.length ? heroIndex % heroItems.length : 0];
   const allTopPlaylists = activePlaylists.filter((playlist) => playlist.website?.featured).concat(activePlaylists.filter((playlist) => !playlist.website?.featured));
-  const topPlaylists = showAllPlaylists ? allTopPlaylists : allTopPlaylists.slice(0, 8);
+  const topPlaylists = allTopPlaylists.slice(0, 8);
   const allPastPlaylists = activePlaylists.filter((playlist) => /meeting|rally|workshop|camp|conference|retreat/i.test(playlist.title));
   const pastPlaylists = showAllMeetings ? allPastPlaylists : allPastPlaylists.slice(0, 8);
   const visibleVideos = showAllVideos ? latest : latest.slice(0, 6);
@@ -109,7 +108,7 @@ export default function HomeScreen() {
   return <main className="home-app">
     <header className="site-header">
       <a className="brand" href="/" aria-label="Pioneers of Our Faith home"><img src="/images/logo.jpeg" alt=""/><span>Pioneers <b>of Our Faith</b></span></a>
-      <nav className="desktop-nav"><a className="nav-current" href="#home">Home</a><a href="#featured-playlists">Playlists</a><a href="#channels">Channels</a><a href="/admin">Manage videos</a></nav>
+      <nav className="desktop-nav"><a className="nav-current" href="#home">Home</a><a href="/playlists">Playlists</a><a href="#channels">Channels</a><a href="/admin">Manage videos</a></nav>
       <div className="header-actions">{searchOpen && <input autoFocus className="header-search" placeholder="Search recent videos…" value={search} onChange={(event) => setSearch(event.target.value)} onKeyDown={(event) => event.key === "Escape" && setSearchOpen(false)}/>}<button className="header-icon" aria-label="Search videos" onClick={() => { setSearchOpen(!searchOpen); setSearch(""); }}><Icon name={searchOpen ? "close" : "search"} size={27}/></button><button className="header-icon account-trigger" aria-label="Account" onClick={() => setAccountOpen(!accountOpen)}>{user?.photoURL ? <img src={user.photoURL} alt=""/> : <Icon name="user" size={25}/>}</button>
         {accountOpen && <div className="account-menu">{user ? <><strong>{user.displayName ?? "Signed in"}</strong><span>{user.email}</span><a href="/admin">Channel dashboard</a><button onClick={() => signOut(auth)}>Sign out</button></> : <><strong>Welcome</strong><span>Sign in with Google to manage channels.</span>{authError && <span className="auth-error">{authError}</span>}<button onClick={() => void signInWithGoogle().catch((reason) => setAuthError(reason instanceof Error ? reason.message : "Google sign-in failed."))}>Continue with Google</button><a href="/admin">Administrator tools</a></>}</div>}</div>
     </header>
@@ -122,8 +121,8 @@ export default function HomeScreen() {
     <div className="home-content">
       <section className="home-section latest-section" id="latest"><SectionTitle icon="list" title={search ? "Search results" : "Latest Videos"} onViewAll={() => setShowAllVideos(!showAllVideos)}/>
         {visibleVideos.length ? <div className="latest-list">{visibleVideos.map((video) => <article className="latest-card" key={video.id}><button className="video-thumb" onClick={() => setWatching(video)} aria-label={`Watch ${video.title}`}><img src={video.thumbnail} alt=""/><span className="duration-tag">{formatDuration(video.duration)}</span><span className="thumb-play"><Icon name="play" size={17}/></span></button><button className="video-copy" onClick={() => setWatching(video)}><strong>{video.website?.displayTitle || video.title}</strong><time>{formatDate(video.publishedAt)}</time><span>{video.channelTitle}</span></button><button className="more-button" aria-label={`More options for ${video.title}`} onClick={() => setWatching(video)}><Icon name="menu"/></button></article>)}</div> : <div className="empty-home"><span className="empty-video-icon"><Icon name="play" size={19}/></span><div><strong>{search ? "No videos found" : channels.length ? "Your videos are syncing" : "Your next favorite video is on its way"}</strong><p>{search ? "Try another title, topic, or channel." : channels.length ? "New videos will appear here as soon as the channel sync finishes." : "Connect a YouTube channel and its latest videos will appear here."}</p>{!channels.length && <a href="/admin">Connect a channel <Icon name="chevron" size={15}/></a>}</div></div>}</section>
-      <section className="home-section" id="featured-playlists"><SectionTitle icon="list" title="Featured Playlists" onViewAll={() => setShowAllPlaylists(!showAllPlaylists)}/>{topPlaylists.length ? <div className="playlist-strip">{topPlaylists.map((playlist) => <button className="playlist-card" onClick={() => setSelectedPlaylist(playlist)} key={playlist.id}><span className="playlist-art"><img src={playlist.thumbnail} alt=""/><span>{playlist.itemCount} videos</span></span><strong>{playlist.title}</strong><small>{playlist.channelTitle}</small></button>)}</div> : <div className="playlist-empty"><Icon name="list" size={20}/><span>Playlists from your connected channels will show up here.</span></div>}</section>
-      <section className="home-section past-section" id="library"><SectionTitle icon="grid" title="Past Meetings" onViewAll={() => setShowAllMeetings(!showAllMeetings)}/>{pastPlaylists.length ? <div className="meeting-grid">{pastPlaylists.map((playlist) => <button className="meeting-card" onClick={() => setSelectedPlaylist(playlist)} key={playlist.id}><img src={playlist.thumbnail} alt=""/><span className="meeting-gradient"/><span className="meeting-copy"><strong>{playlist.title}</strong><small>{playlist.itemCount} videos · {playlist.channelTitle}</small></span></button>)}</div> : <div className="playlist-empty"><Icon name="grid" size={20}/><span>Meeting series and events will appear here when they are found in your playlists.</span></div>}</section>
+      <section className="home-section" id="featured-playlists"><SectionTitle icon="list" title="Featured Playlists" href="/playlists"/>{topPlaylists.length ? <div className="playlist-strip">{topPlaylists.map((playlist) => <a className="playlist-card" href={`/playlists/${encodeURIComponent(playlist.id)}`} key={playlist.id}><span className="playlist-art"><img src={playlist.thumbnail} alt=""/><span>{playlist.itemCount} videos</span></span><strong>{playlist.title}</strong><small>{playlist.channelTitle}</small></a>)}</div> : <div className="playlist-empty"><Icon name="list" size={20}/><span>Playlists from your connected channels will show up here.</span></div>}</section>
+      <section className="home-section past-section" id="library"><SectionTitle icon="grid" title="Past Meetings" onViewAll={() => setShowAllMeetings(!showAllMeetings)}/>{pastPlaylists.length ? <div className="meeting-grid">{pastPlaylists.map((playlist) => <a className="meeting-card" href={`/playlists/${encodeURIComponent(playlist.id)}`} key={playlist.id}><img src={playlist.thumbnail} alt=""/><span className="meeting-gradient"/><span className="meeting-copy"><strong>{playlist.title}</strong><small>{playlist.itemCount} videos · {playlist.channelTitle}</small></span></a>)}</div> : <div className="playlist-empty"><Icon name="grid" size={20}/><span>Meeting series and events will appear here when they are found in your playlists.</span></div>}</section>
       <section className="home-section channels-section" id="channels"><SectionTitle icon="grid" title="Our Channels" href="#channels"/>{channels.length ? <div className="channel-strip">{channels.map((channel) => <a className="public-channel" href={channel.customUrl ? `https://www.youtube.com/${channel.customUrl}` : `https://www.youtube.com/channel/${channel.id}`} target="_blank" rel="noreferrer" key={channel.id}><img src={channel.thumbnail} alt=""/><span><strong>{channel.title}</strong><small>Explore channel</small></span><Icon name="chevron" size={16}/></a>)}</div> : <p className="channel-empty">A growing collection of messages, ministries, and music.</p>}</section>
       <footer className="site-footer" id="contact"><span>© Pioneers Of Our Faith</span><a href="/admin">Channel administration</a></footer>
     </div>
