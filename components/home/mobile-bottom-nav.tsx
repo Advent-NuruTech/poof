@@ -1,0 +1,19 @@
+import type { ReactNode } from "react";
+
+type Section = "home" | "playlists" | "meetings" | "contact";
+
+const tabs: { section: Section; label: string; href: string; icon: ReactNode }[] = [
+  { section: "home", label: "Home", href: "/", icon: <path d="m3 10 9-7 9 7v10a1 1 0 0 1-1 1h-5v-7H9v7H4a1 1 0 0 1-1-1V10Z" fill="currentColor" stroke="none"/> },
+  { section: "playlists", label: "Playlists", href: "/playlists", icon: <><rect x="3" y="3" width="7" height="7" rx="1.5"/><rect x="14" y="3" width="7" height="7" rx="1.5"/><rect x="3" y="14" width="7" height="7" rx="1.5"/><rect x="14" y="14" width="7" height="7" rx="1.5"/></> },
+  { section: "meetings", label: "Zoom", href: "/meetings", icon: <><rect x="3" y="7" width="18" height="13" rx="3"/><path d="m8 7 1.5-3h5L16 7M12 11v5m-2.5-2.5h5"/><circle cx="17.5" cy="10.5" r=".5" fill="currentColor"/></> },
+  { section: "contact", label: "Contact", href: "/contact", icon: <><circle cx="12" cy="8" r="3.5"/><path d="M4.5 20c.7-3.5 3.3-5.5 7.5-5.5s6.8 2 7.5 5.5"/></> },
+];
+
+export default function MobileBottomNav({ current }: { current: Section }) {
+  return <nav className="mobile-tabbar" aria-label="Main navigation">
+    {tabs.map((tab) => <a key={tab.section} className={current === tab.section ? "tab-active" : ""} href={tab.href} aria-current={current === tab.section ? "page" : undefined}>
+      <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">{tab.icon}</svg>
+      <span>{tab.label}</span>
+    </a>)}
+  </nav>;
+}

@@ -1,9 +1,10 @@
-"use client";
+﻿"use client";
 
 import { collection, doc, getDoc, onSnapshot } from "firebase/firestore";
 import { useEffect, useState } from "react";
 import { db } from "@/lib/firebase";
 import { formatDate, formatDuration, type Channel, type Playlist, type Video } from "@/lib/catalog";
+import MobileBottomNav from "@/components/home/mobile-bottom-nav";
 
 export default function PlaylistsPage({ playlistId }: { playlistId?: string }) {
   const [channels, setChannels] = useState<Channel[]>([]);
@@ -59,29 +60,29 @@ export default function PlaylistsPage({ playlistId }: { playlistId?: string }) {
   }
 
   return <main className="playlist-page">
-    <header className="playlist-page-header"><a href="/">← Home</a><span className="eyebrow">POF VIDEO LIBRARY</span><h1>{playlist ? playlist.title : "Playlists"}</h1><p>{playlist ? playlist.channelTitle : "Browse every playlist from our connected channels."}</p></header>
+    <header className="playlist-page-header"><a href="/">â† Home</a><span className="eyebrow">POF VIDEO LIBRARY</span><h1>{playlist ? playlist.title : "Playlists"}</h1><p>{playlist ? playlist.channelTitle : "Browse every playlist from our connected channels."}</p></header>
     {playlist ? <section className="playlist-detail">
-      <div className="playlist-detail-heading"><img src={playlist.thumbnail} alt=""/><div><span className="eyebrow">PLAYLIST · {playlist.itemCount} VIDEOS</span><h2>{playlist.title}</h2><p>{playlist.channelTitle}</p></div></div>
+      <div className="playlist-detail-heading"><img src={playlist.thumbnail} alt=""/><div><span className="eyebrow">PLAYLIST Â· {playlist.itemCount} VIDEOS</span><h2>{playlist.title}</h2><p>{playlist.channelTitle}</p></div></div>
       {playlist.description && <p className="playlist-description">{playlist.description}</p>}
       <div className="latest-list playlist-featured-videos">{playlist.videoIds.map((id, index) => {
         const video = videos[id];
         return <article className="latest-card" key={`${id}-${index}`}>
           <button className="video-thumb" onClick={() => video ? setWatching(video) : window.open(`https://www.youtube.com/watch?v=${id}`, "_blank", "noopener,noreferrer")} aria-label={`Watch ${video?.title ?? "video"}`}>
-            {video && <img src={video.thumbnail} alt=""/>}<span className="duration-tag">{formatDuration(video?.duration)}</span><span className="thumb-play">▶</span>
+            {video && <img src={video.thumbnail} alt=""/>}<span className="duration-tag">{formatDuration(video?.duration)}</span><span className="thumb-play">â–¶</span>
           </button>
           <button className="video-copy" onClick={() => video ? setWatching(video) : window.open(`https://www.youtube.com/watch?v=${id}`, "_blank", "noopener,noreferrer")}>
             <strong>{video?.website?.displayTitle || video?.title || "Watch this video on YouTube"}</strong><time>{video ? formatDate(video.publishedAt) : ""}</time><span className="video-description">{video?.description?.trim() || video?.channelTitle || "Open on YouTube"}</span>
           </button>
-          {video && <button className="more-button" aria-label={`Share ${video.title}`} title="Share video" onClick={() => void shareVideo(video)}>•••</button>}
+          {video && <button className="more-button" aria-label={`Share ${video.title}`} title="Share video" onClick={() => void shareVideo(video)}>â€¢â€¢â€¢</button>}
         </article>;
       })}</div>
-      {visiblePlaylists.filter((item) => item.id !== playlist.id).length > 0 && <section className="home-section may-like-section"><div className="home-section-title"><h2>You may also like</h2><a href="/playlists">View all ›</a></div><div className="playlist-strip">{visiblePlaylists.filter((item) => item.id !== playlist.id).slice(0, 8).map((item) => <a className="playlist-card" href={`/playlists/${encodeURIComponent(item.id)}`} key={item.id}><span className="playlist-art"><img src={item.thumbnail} alt=""/><span>{item.itemCount} videos</span></span><strong>{item.title}</strong><small>{item.channelTitle}</small></a>)}</div></section>}
-      <a className="playlist-back" href="/playlists">← All playlists</a>
+      {visiblePlaylists.filter((item) => item.id !== playlist.id).length > 0 && <section className="home-section may-like-section"><div className="home-section-title"><h2>You may also like</h2><a href="/playlists">View all â€º</a></div><div className="playlist-strip">{visiblePlaylists.filter((item) => item.id !== playlist.id).slice(0, 8).map((item) => <a className="playlist-card" href={`/playlists/${encodeURIComponent(item.id)}`} key={item.id}><span className="playlist-art"><img src={item.thumbnail} alt=""/><span>{item.itemCount} videos</span></span><strong>{item.title}</strong><small>{item.channelTitle}</small></a>)}</div></section>}
+      <a className="playlist-back" href="/playlists">â† All playlists</a>
     </section> : <section className="playlist-directory">{visiblePlaylists.map((item) => <a className="playlist-directory-card" href={`/playlists/${encodeURIComponent(item.id)}`} key={item.id}>
       <span className="playlist-art"><img src={item.thumbnail} alt=""/><span>{item.itemCount} videos</span></span><strong>{item.title}</strong><small>{item.channelTitle}</small>
     </a>)}</section>}
-    {watching && <div className="player-backdrop" role="dialog" aria-modal="true" aria-label={watching.title} onClick={() => setWatching(null)}><div className="player-modal" onClick={(event) => event.stopPropagation()}><button className="player-close" aria-label="Close player" onClick={() => setWatching(null)}>×</button><div className="player-frame">{watching.embeddable === false ? <div className="player-unavailable"><strong>This video can only be watched on YouTube.</strong><a href={`https://www.youtube.com/watch?v=${watching.id}`} target="_blank" rel="noreferrer">Open on YouTube</a></div> : <iframe src={`https://www.youtube-nocookie.com/embed/${watching.id}?autoplay=1&rel=0`} title={watching.title} allow="accelerometer; autoplay; clipboard-write; encrypted-media; gyroscope; picture-in-picture; web-share" allowFullScreen/>}</div><div className="player-caption"><h2>{watching.website?.displayTitle || watching.title}</h2><p>{watching.description?.trim() || watching.channelTitle}</p></div></div></div>}
+    {watching && <div className="player-backdrop" role="dialog" aria-modal="true" aria-label={watching.title} onClick={() => setWatching(null)}><div className="player-modal" onClick={(event) => event.stopPropagation()}><button className="player-close" aria-label="Close player" onClick={() => setWatching(null)}>Ã—</button><div className="player-frame">{watching.embeddable === false ? <div className="player-unavailable"><strong>This video can only be watched on YouTube.</strong><a href={`https://www.youtube.com/watch?v=${watching.id}`} target="_blank" rel="noreferrer">Open on YouTube</a></div> : <iframe src={`https://www.youtube-nocookie.com/embed/${watching.id}?autoplay=1&rel=0`} title={watching.title} allow="accelerometer; autoplay; clipboard-write; encrypted-media; gyroscope; picture-in-picture; web-share" allowFullScreen/>}</div><div className="player-caption"><h2>{watching.website?.displayTitle || watching.title}</h2><p>{watching.description?.trim() || watching.channelTitle}</p></div></div></div>}
     {shareNotice && <div className="share-notice" role="status">{shareNotice}</div>}
-    <nav className="playlist-bottom-nav" aria-label="Main navigation"><a href="/">⌂<span>Home</span></a><a href="/playlists">▦<span>Playlists</span></a><a href="/#latest">▶<span>Videos</span></a><a href="/#contact">♡<span>Contact</span></a></nav>
+    <MobileBottomNav current="playlists"/>
   </main>;
 }
