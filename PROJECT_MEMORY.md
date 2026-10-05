@@ -14,6 +14,13 @@
 - **Errors and fixes:** No build/runtime errors encountered during this change.
 - **Verification:** Not run per instruction.
 
+## 2026-10-05: In-site PDF reader and meeting-style share action
+
+- **Major changes:** Replaced the reader's native PDF iframe with PDF.js canvas rendering for every page, using the same-origin download proxy to retrieve the file. The PDF worker and its Apache 2.0 license are served from `public/`. Reader zoom now scales the rendered pages and the page stack adapts to the available screen width. The document Share button uses the same `sharePublicUrl` helper and meeting share icon/button styling as meeting cards.
+- **Cause:** The previous fix only changed listing thumbnails. The full reader still embedded the original PDF, so mobile browsers continued to show the browser's “Open” fallback.
+- **Errors and fixes:** The initial sandboxed `npm install` could not reach the package registry; reran with approved network access and installed `pdfjs-dist` successfully.
+- **Verification:** `git diff --check` passed; no build/runtime error was observed.
+
 ## 2026-10-05: Library navigation, categorized resources, and online reader
 
 - **Major changes:** Replaced the Playlists destination with Library in desktop and mobile navigation. Added `/library` as one directory for the existing synced video playlists plus published study resources, with text search and category selection. Added `/library/[id]` to read authored rich-text notes, preview PDFs and Word files in-page, adjust note zoom, and download uploads.
@@ -77,7 +84,7 @@
 
 - **Major changes:** Updated the Advent Nurutech credit to type in blue on a continuous loop. Footer links now stay aligned in a centered side-by-side row on larger screens and wrap cleanly on narrow screens.
 - **Errors and fixes:** No build/runtime errors encountered during this change.
-- **Verification:** Not run.
+- **Verification:** `npx.cmd tsc --noEmit` and `git diff --check` passed.
 
 ## 2026-10-04: Playlist archive order and footer credit
 
@@ -250,3 +257,9 @@ Record verified errors and fixes, plus major changes, here. Review this file bef
 - **Major changes:** Authenticated admin routes now share a persistent responsive sidebar for Channels, Meetings, Library, Contact & prayer, and Link requests, with a direct public-site link. Desktop uses a true workspace sidebar; smaller screens turn it into a compact horizontal navigation.
 - **Errors and fixes:** No build or runtime errors encountered during this change.
 - **Verification:** `npx.cmd tsc --noEmit`, `npm.cmd run build`, and `git diff --check` passed.
+
+## 2026-10-05: Longer meeting hero slides and event details
+
+- **Major changes:** Meeting slides in the homepage hero now remain visible for 15 seconds, while video slides retain their five-second rotation. Meeting slides include a secondary “See details” action that always opens the public event page.
+- **Errors and fixes:** No build or runtime errors encountered during this change.
+- **Verification:** Not run.
