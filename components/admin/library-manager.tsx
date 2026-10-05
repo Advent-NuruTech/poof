@@ -1,6 +1,6 @@
 "use client";
 
-import { addDoc, collection, deleteDoc, doc, getDocs, onSnapshot, setDoc } from "firebase/firestore";
+import { addDoc, collection, deleteDoc, doc, getDocs, onSnapshot, setDoc, updateDoc } from "firebase/firestore";
 import { onAuthStateChanged } from "firebase/auth";
 import { useEffect, useRef, useState } from "react";
 import { auth, db } from "@/lib/firebase";
@@ -25,15 +25,23 @@ export default function LibraryManager() {
       const rows = snapshot.docs.map((item) => ({ ...item.data(), id: item.id }) as LibraryCategory);
       setCategories(rows);
       setCategoryId((current) => current || rows[0]?.id || "");
+      setParentId((current) => current || rows.find((item) => !item.parentId)?.id || "");
     }, (reason) => setError(reason.message));
     const stopAuth = onAuthStateChanged(auth, async (user) => {
       if (!user || seededDefaults.current) return;
       seededDefaults.current = true;
       try {
-        if (!(await getDocs(collection(db, "libraryCategories"))).empty) return;
+        const existing = await getDocs(collection(db, "libraryCategories"));
+        if (!existing.empty) {
+          const legacyOtherStudies = existing.docs.find((item) => item.id === "bible-studies");
+          if (legacyOtherStudies && !existing.docs.some((item) => item.id === "other-studies")) {
+            await updateDoc(doc(db, "libraryCategories", "bible-studies"), { name: "Other Studies" });
+          }
+          return;
+        }
         await Promise.all([
           setDoc(doc(db, "libraryCategories", "health"), { name: "Health", parentId: null }),
-          setDoc(doc(db, "libraryCategories", "bible-studies"), { name: "Bible Studies", parentId: null }),
+          setDoc(doc(db, "libraryCategories", "other-studies"), { name: "Other Studies", parentId: null }),
         ]);
       } catch (reason) { setError(reason instanceof Error ? reason.message : "Could not initialize library categories."); }
     });
@@ -90,13 +98,13 @@ export default function LibraryManager() {
   return <main className="admin-content library-admin">
     <header className="admin-heading"><div><span className="eyebrow">PUBLIC READING ROOM</span><h1>Library</h1><p>Publish study notes and downloadable reading materials.</p></div><a className="outline-button" href="/library">View library</a></header>
     {error && <p className="notice error-notice">{error}</p>}{notice && <p className="notice">{notice}</p>}
-    <section className="admin-panel"><h2>Categories</h2><p className="library-help">Health and Bible Studies are created automatically. Add topics under either one; new topics remain available for later uploads.</p>
-      <form className="library-category-form" onSubmit={addCategory}><input aria-label="Category name" placeholder="New topic, e.g. Diabetes treatment plan" value={newCategory} onChange={(e) => setNewCategory(e.target.value)} required/><select aria-label="Parent category" value={parentId} onChange={(e) => setParentId(e.target.value)}><option value="">Main category</option>{categories.filter((item) => !item.parentId).map((item) => <option key={item.id} value={item.id}>{item.name}</option>)}</select><button className="primary-button">Add category</button></form>
+    <section className="admin-panel"><h2>Categories</h2><p className="library-help">Health and Other Studies are the two main categories. Add topics under either one; new topics remain available for later uploads.</p>
+      <form className="library-category-form" onSubmit={addCategory}><input aria-label="Category name" placeholder="New topic, e.g. Diabetes treatment plan" value={newCategory} onChange={(e) => setNewCategory(e.target.value)} required/><select aria-label="Parent category" value={parentId} onChange={(e) => setParentId(e.target.value)} required>{categories.filter((item) => !item.parentId).map((item) => <option key={item.id} value={item.id}>{item.name}</option>)}</select><button className="primary-button">Add category</button></form>
       <div className="library-category-chips">{categories.map((item) => <span key={item.id}>{item.parentId ? `${categories.find((parent) => parent.id === item.parentId)?.name ?? "Library"} / ` : ""}{item.name}</span>)}</div>
     </section>
     <section className="admin-panel"><h2>Publish to the library</h2><form className="library-publish-form" onSubmit={saveNote}>
       <label>Title<input value={title} onChange={(e) => setTitle(e.target.value)} placeholder="Give this resource a title" required/></label>
-      <label>Category<select value={categoryId} onChange={(e) => setCategoryId(e.target.value)} required>{categories.map((item) => <option key={item.id} value={item.id}>{item.parentId ? `${categories.find((parent) => parent.id === item.parentId)?.name ?? "Library"} / ` : ""}{item.name}</option>)}</select></label>
+      <label>Category<select value={categoryId} onChange={(e) => setCategoryId(e.target.value)} required>{categories.map((item) => <option key={item.id} value={item.id}>{item.name}</option>)}</select></label>
       <label>Description<input value={description} onChange={(e) => setDescription(e.target.value)} placeholder="Optional summary"/></label>
       <div className="library-editor-label"><strong>Write a note</strong><span>Paste formatted text from Word or Google Docs. Bold, headings, links, lists, and inline styling are retained.</span></div>
       <div className="rich-toolbar" role="toolbar" aria-label="Note formatting"><button type="button" onMouseDown={(e) => e.preventDefault()} onClick={() => document.execCommand("bold")}><b>B</b></button><button type="button" onMouseDown={(e) => e.preventDefault()} onClick={() => document.execCommand("italic")}><i>I</i></button><button type="button" onMouseDown={(e) => e.preventDefault()} onClick={() => document.execCommand("underline")}><u>U</u></button><select aria-label="Text style" defaultValue="p" onMouseDown={(e) => e.preventDefault()} onChange={(e) => { editor.current?.focus(); document.execCommand("formatBlock", false, e.target.value); }}><option value="p">Paragraph</option><option value="h2">Heading</option><option value="h3">Subheading</option><option value="blockquote">Quote</option></select><button type="button" onMouseDown={(e) => e.preventDefault()} onClick={() => document.execCommand("insertUnorderedList")}>• List</button><button type="button" onMouseDown={(e) => e.preventDefault()} onClick={() => document.execCommand("insertOrderedList")}>1. List</button></div>

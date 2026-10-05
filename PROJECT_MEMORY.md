@@ -1,5 +1,12 @@
 # Project Memory
 
+## 2026-10-05: Library document previews, download routing, and flatter listing
+
+- **Major changes:** Library resource listings now show a first-page PDF/Word preview or the beginning of a note, followed by the title and a description clamped to two lines. The search field sticks while scrolling. Playlist rows and resource listings no longer use extra enclosing card backgrounds; keep library content on the original page background in future UI work unless a card treatment is specifically requested.
+- **Major changes:** File downloads now go through `/api/library/download`, which streams only HTTPS Cloudinary resource URLs back with an attachment filename, keeping download actions on the site. The existing legacy `bible-studies` root is renamed to `Other Studies` when an administrator opens the library manager; new child topics can be selected by their own names, without a parent prefix. New topics are added under one of the two seeded parent categories, Health or Other Studies.
+- **Errors and fixes:** No build or runtime errors encountered during this change. A first CSS patch did not match the minified stylesheet line; the intended styles were added as a focused override instead.
+- **Verification:** Not run per instruction.
+
 ## 2026-10-05: Library navigation, categorized resources, and online reader
 
 - **Major changes:** Replaced the Playlists destination with Library in desktop and mobile navigation. Added `/library` as one directory for the existing synced video playlists plus published study resources, with text search and category selection. Added `/library/[id]` to read authored rich-text notes, preview PDFs and Word files in-page, adjust note zoom, and download uploads.
