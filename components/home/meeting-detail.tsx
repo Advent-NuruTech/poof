@@ -7,6 +7,7 @@ import MobileBottomNav from "@/components/home/mobile-bottom-nav";
 import { db } from "@/lib/firebase";
 import { formatMeetingDate, formatMeetingTime, meetingJoinVisible, meetingStatus, type Meeting } from "@/lib/meetings";
 import MeetingCountdown from "@/components/home/meeting-countdown";
+import { sharePublicUrl } from "@/lib/share";
 
 export default function MeetingDetail({ id }: { id: string }) {
   const [meeting, setMeeting] = useState<Meeting | null>(null);
@@ -15,6 +16,7 @@ export default function MeetingDetail({ id }: { id: string }) {
     setMeeting(snapshot.exists() ? ({ ...snapshot.data(), id: snapshot.id } as Meeting) : null);
   }, () => setMeeting(null)), [id]);
   useEffect(() => { const initial = window.setTimeout(() => setNow(Date.now()), 0); const timer = window.setInterval(() => setNow(Date.now()), 30_000); return () => { window.clearTimeout(initial); window.clearInterval(timer); }; }, []);
+  async function shareMeeting() { await sharePublicUrl(`${window.location.origin}/meetings/${encodeURIComponent(id)}`); }
 
   return <main className="zoom-meetings-page meeting-detail-page">
     <header className="zoom-page-header"><Link href="/meetings">&larr; Meetings</Link><span>MEETING DETAILS</span><h1>{meeting?.title ?? "Meeting"}</h1></header>
@@ -25,7 +27,7 @@ export default function MeetingDetail({ id }: { id: string }) {
         <div className="zoom-meeting-meta"><span>{formatMeetingDate(meeting.startsAt)}</span><span>{formatMeetingTime(meeting)}</span></div>
         <MeetingCountdown meeting={meeting}/>
         <p className="meeting-format">{meeting.meetingType === "onsite" ? `Onsite · ${meeting.venue ?? "Venue to be announced"}` : "Online"}</p>
-        {meetingJoinVisible(meeting, now) && <a className="zoom-join-button" href={meeting.meetingUrl} target="_blank" rel="noreferrer">Join meeting</a>}
+        <div className="meeting-actions">{meetingJoinVisible(meeting, now) && <a className="zoom-join-button" href={meeting.meetingUrl} target="_blank" rel="noreferrer">Join meeting</a>}{meeting.meetingType !== "onsite" && <Link className="meeting-request-button" href="/meeting-link-request">Request meeting link</Link>}<button className="meeting-share-button" type="button" onClick={() => void shareMeeting()}>Share</button></div>
       </div>
     </article>}
     <MobileBottomNav current="meetings"/>

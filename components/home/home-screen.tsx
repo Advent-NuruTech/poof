@@ -6,7 +6,7 @@ import type { ReactNode } from "react";
 import Link from "next/link";
 import { db } from "@/lib/firebase";
 import { formatDate, formatDuration, type Channel, type Playlist, type Video } from "@/lib/catalog";
-import { meetingGroups, type Meeting } from "@/lib/meetings";
+import { formatMeetingDate, formatMeetingTime, meetingGroups, meetingJoinVisible, meetingStatus, type Meeting } from "@/lib/meetings";
 import MeetingCard from "@/components/home/meeting-card";
 import MobileBottomNav from "@/components/home/mobile-bottom-nav";
 import { CardGridSkeleton, MeetingListSkeleton, VideoListSkeleton } from "@/components/home/skeleton";
@@ -120,8 +120,12 @@ export default function HomeScreen() {
   const latest = term ? activeVideos.filter((video) => `${video.title} ${video.description} ${video.channelTitle}`.toLowerCase().includes(term)) : activeVideos;
   const activePlaylists = playlists.filter((playlist) => channelIds.has(playlist.channelId));
   const live = activeVideos.find((video) => video.liveStatus === "live");
-  const heroItems = [...activeVideos.filter((video) => video.liveStatus === "live"), ...activeVideos.filter((video) => video.website?.featured && video.liveStatus !== "live"), ...activeVideos.filter((video) => video.liveStatus !== "live" && !video.website?.featured)].slice(0, 4);
-  const heroVideo = heroItems[heroItems.length ? heroIndex % heroItems.length : 0];
+  const heroVideos = [...activeVideos.filter((video) => video.liveStatus === "live"), ...activeVideos.filter((video) => video.website?.featured && video.liveStatus !== "live"), ...activeVideos.filter((video) => video.liveStatus !== "live" && !video.website?.featured)].map((video) => ({ kind: "video" as const, video }));
+  const priorityMeetings = meetingGroups(meetings, now).filter((group) => group.status !== "completed").flatMap((group) => group.meetings).map((meeting) => ({ kind: "meeting" as const, meeting }));
+  const heroItems = [...priorityMeetings, ...heroVideos].slice(0, 4);
+  const heroItem = heroItems[heroItems.length ? heroIndex % heroItems.length : 0];
+  const heroVideo = heroItem?.kind === "video" ? heroItem.video : undefined;
+  const heroMeeting = heroItem?.kind === "meeting" ? heroItem.meeting : undefined;
 
   useEffect(() => {
     if (heroItems.length < 2) return;
@@ -130,7 +134,7 @@ export default function HomeScreen() {
   }, [heroItems.length]);
   const allTopPlaylists = activePlaylists.filter((playlist) => playlist.website?.featured).concat(activePlaylists.filter((playlist) => !playlist.website?.featured));
   const topPlaylists = allTopPlaylists.slice(0, 8);
-  const meetingGroupsShown = meetingGroups(meetings, now).map((group) => ({ ...group, meetings: group.meetings.slice(0, 2) })).filter((group) => group.meetings.length);
+  const meetingGroupsShown = meetingGroups(meetings, now).filter((group) => group.status !== "completed").map((group) => ({ ...group, meetings: group.meetings.slice(0, 2) })).filter((group) => group.meetings.length);
   const visibleVideos = showAllVideos ? latest : latest.slice(0, 6);
 
   async function shareVideo(video: Video) {
@@ -159,9 +163,9 @@ export default function HomeScreen() {
       <div className={`header-actions${searchOpen ? " search-active" : ""}`}>{searchOpen && <input autoFocus className="header-search" aria-label="Search videos" placeholder="Search videos…" value={search} onChange={(event) => setSearch(event.target.value)} onKeyDown={(event) => { if (event.key === "Escape") { setSearchOpen(false); setSearch(""); } }}/>}<button className="header-icon" aria-label={searchOpen ? "Close search" : "Search videos"} onClick={() => { setSearchOpen(!searchOpen); setSearch(""); }}><Icon name={searchOpen ? "close" : "search"} size={27}/></button></div>
     </header>
     {searchOpen && <div className="search-overlay" onClick={() => { setSearchOpen(false); setSearch(""); }}><section className="search-panel" role="dialog" aria-label="Video search results" onClick={(event) => event.stopPropagation()}><div className="search-panel-heading"><strong>{term ? `Results for “${search.trim()}”` : "Search videos"}</strong><span>{term ? `${latest.length} ${latest.length === 1 ? "video" : "videos"}` : "Search titles, topics, and channels"}</span></div>{!term ? <p className="search-prompt">Start typing to find a video.</p> : !videosLoaded ? <VideoListSkeleton/> : latest.length ? <div className="search-results">{latest.map((video) => <article className="latest-card" key={video.id}><button className="video-thumb" onClick={() => { setWatching(video); setSearchOpen(false); }} aria-label={`Watch ${video.title}`}><img src={video.thumbnail} alt=""/><span className="duration-tag">{formatDuration(video.duration)}</span><span className="thumb-play"><Icon name="play" size={17}/></span></button><button className="video-copy" onClick={() => { setWatching(video); setSearchOpen(false); }}><strong>{video.website?.displayTitle || video.title}</strong><time>{formatDate(video.publishedAt)}</time><span className="video-description">{video.description?.trim() || video.channelTitle}</span></button><button className="more-button" aria-label={`Share ${video.title}`} title="Share video" onClick={() => void shareVideo(video)}><Icon name="menu"/></button></article>)}</div> : <div className="search-empty"><strong>No videos found</strong><span>Try another title, topic, or channel.</span></div>}</section></div>}
-    <section className="hero" id="home" style={{ backgroundImage: heroVideo?.thumbnail ? `linear-gradient(90deg, rgba(5,13,18,.88) 0%, rgba(5,13,18,.48) 42%, rgba(5,13,18,.02) 100%), url("${heroVideo.thumbnail}")` : "radial-gradient(ellipse at 74% 45%, #bd9154 0%, #654c37 17%, transparent 38%), linear-gradient(110deg, #111e24, #293b3f 58%, #11191d)" }}>
+    <section className={`hero${heroMeeting ? " hero-meeting" : ""}`} id="home" style={{ backgroundImage: heroMeeting?.posterUrl ? `linear-gradient(90deg, rgba(5,13,18,.91) 0%, rgba(5,13,18,.58) 48%, rgba(5,13,18,.18) 100%), url("${heroMeeting.posterUrl}")` : heroVideo?.thumbnail ? `linear-gradient(90deg, rgba(5,13,18,.88) 0%, rgba(5,13,18,.48) 42%, rgba(5,13,18,.02) 100%), url("${heroVideo.thumbnail}")` : "radial-gradient(ellipse at 74% 45%, #bd9154 0%, #654c37 17%, transparent 38%), linear-gradient(110deg, #111e24, #293b3f 58%, #11191d)" }}>
       <button className="hero-arrow hero-arrow-left" aria-label="Previous featured video" onClick={() => setHeroIndex((index) => (index + Math.max(heroItems.length, 1) - 1) % Math.max(heroItems.length, 1))}>‹</button>
-      <div className="hero-copy"><span className="hero-kicker">{live ? <><i/> LIVE NOW</> : heroVideo ? "FEATURED MESSAGE" : "FAITH OF THE PIONEERS"}</span><h1>{heroVideo?.title ?? <>Faith for<br/>every season.</>}</h1><p>{heroVideo?.channelTitle ?? "A home for uplifting messages, worship, and Bible study."}</p>{heroVideo ? <button className="watch-button" onClick={() => setWatching(heroVideo)}><Icon name="play" size={16}/> Watch now</button> : <a className="watch-button" href="#latest"><Icon name="play" size={16}/> Explore videos</a>}</div>
+      <div className="hero-copy"><span className="hero-kicker">{heroMeeting ? <><i/> {meetingStatus(heroMeeting, now) === "ongoing" ? "HAPPENING NOW" : "UPCOMING EVENT"}</> : live ? <><i/> LIVE NOW</> : heroVideo ? "FEATURED MESSAGE" : "FAITH OF THE PIONEERS"}</span><h1>{heroMeeting?.title ?? heroVideo?.title ?? <>Faith for<br/>every season.</>}</h1><p>{heroMeeting ? `${formatMeetingDate(heroMeeting.startsAt)} · ${formatMeetingTime(heroMeeting)}` : heroVideo?.channelTitle ?? "A home for uplifting messages, worship, and Bible study."}</p>{heroMeeting ? meetingJoinVisible(heroMeeting, now) ? <a className="watch-button" href={heroMeeting.meetingUrl} target="_blank" rel="noreferrer">Join meeting <Icon name="chevron" size={16}/></a> : heroMeeting.meetingType !== "onsite" ? <Link className="watch-button" href="/meeting-link-request">Request meeting link <Icon name="chevron" size={16}/></Link> : <Link className="watch-button" href={`/meetings/${encodeURIComponent(heroMeeting.id)}`}>View event <Icon name="chevron" size={16}/></Link> : heroVideo ? <button className="watch-button" onClick={() => setWatching(heroVideo)}><Icon name="play" size={16}/> Watch now</button> : <a className="watch-button" href="#latest"><Icon name="play" size={16}/> Explore videos</a>}</div>
       <button className="hero-arrow hero-arrow-right" aria-label="Next featured video" onClick={() => setHeroIndex((index) => (index + 1) % Math.max(heroItems.length, 1))}>›</button>
       <div className="hero-dots">{Array.from({ length: heroItems.length ? Math.min(heroItems.length, 4) : 4 }, (_, dot) => <button key={dot} className={dot === heroIndex % Math.max(heroItems.length, 1) ? "dot-current" : ""} aria-label={`Show featured item ${dot + 1}`} onClick={() => setHeroIndex(dot)}/>)}</div>
     </section>

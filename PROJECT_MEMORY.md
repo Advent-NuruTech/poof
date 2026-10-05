@@ -7,6 +7,13 @@
 - **Errors and fixes:** No build or runtime errors encountered during this change. A first CSS patch did not match the minified stylesheet line; the intended styles were added as a focused override instead.
 - **Verification:** Not run per instruction.
 
+## 2026-10-05: Consistent library document preview on mobile
+
+- **Major changes:** Resource-list PDF previews now use a Cloudinary-generated JPEG of page one, avoiding browser-specific PDF iframe rendering. Word documents retain their embedded Office viewer. The mobile resource list uses one column and portrait page proportions so the first page is legible at phone width; desktop keeps the multi-column grid with the same page proportions.
+- **Cause:** The native PDF iframe depends on browser PDF support. Mobile Chrome fell back to its PDF open/download surface rather than painting the page inside the listing. Cloudinary supports generating images from remotely fetched PDF pages; see [PDF delivery documentation](https://cloudinary.com/documentation/ts_how_to_upload_manage_and_deliver_pdf_files) and [remote PDF fetch previews](https://cloudinary.com/documentation/fetch_remote_images).
+- **Errors and fixes:** No build/runtime errors encountered during this change.
+- **Verification:** Not run per instruction.
+
 ## 2026-10-05: Library navigation, categorized resources, and online reader
 
 - **Major changes:** Replaced the Playlists destination with Library in desktop and mobile navigation. Added `/library` as one directory for the existing synced video playlists plus published study resources, with text search and category selection. Added `/library/[id]` to read authored rich-text notes, preview PDFs and Word files in-page, adjust note zoom, and download uploads.
@@ -235,3 +242,11 @@ Record verified errors and fixes, plus major changes, here. Review this file bef
 - **Major changes:** Added a Share action to each public event card using the native share sheet or copying the direct /meetings/{eventId} URL. Added a direct event page and server-generated Open Graph/Twitter metadata from the public Firestore record, including its description and poster image when available; the share payload includes only the URL.
 - **Errors and fixes:** No build/runtime errors encountered.
 - **Verification:** Targeted ESLint completed with zero errors and two existing image element warnings; git diff --check passed. Build not run.
+
+## 2026-10-05: Prioritized event hero, study sharing, and admin workspace navigation
+
+- **Major changes:** The homepage hero now puts ongoing and upcoming meetings first in its five-second rotation, with event-specific CTAs (join when available, otherwise request an online meeting link). The homepage meeting section now intentionally omits completed events; history remains available on the dedicated schedule page.
+- **Major changes:** Extracted the meeting native-share/clipboard fallback into `lib/share.ts` and reused it for public library study readers. Online meeting cards and detail pages now expose a clear “Request meeting link” action alongside the existing join and share actions.
+- **Major changes:** Authenticated admin routes now share a persistent responsive sidebar for Channels, Meetings, Library, Contact & prayer, and Link requests, with a direct public-site link. Desktop uses a true workspace sidebar; smaller screens turn it into a compact horizontal navigation.
+- **Errors and fixes:** No build or runtime errors encountered during this change.
+- **Verification:** `npx.cmd tsc --noEmit`, `npm.cmd run build`, and `git diff --check` passed.

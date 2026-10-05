@@ -1,5 +1,6 @@
 import Link from "next/link";
 import { cookies } from "next/headers";
+import AdminSidebar from "@/components/admin/admin-sidebar";
 
 const SESSION_COOKIE = "poof_admin_session";
 
@@ -28,5 +29,5 @@ async function getAdminSession() {
 
 export default async function AdminLayout({ children }: { children: React.ReactNode }) {
   if (!await getAdminSession()) return <main className="auth-page"><section className="auth-card sign-in-panel"><div className="panel-icon">◉</div><h1>Sign in to continue</h1><p>Your admin session is missing or expired. Sign in again to open the administrator pages.</p><Link className="primary-button" href="/signin">Go to sign in</Link></section></main>;
-  return children;
+  return <div className="admin-workspace"><AdminSidebar/><div className="admin-workspace-page">{children}</div></div>;
 }

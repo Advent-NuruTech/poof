@@ -3,6 +3,7 @@
 import Link from "next/link";
 import MeetingCountdown from "@/components/home/meeting-countdown";
 import { formatMeetingDate, formatMeetingTime, meetingJoinVisible, meetingStatus, type Meeting } from "@/lib/meetings";
+import { sharePublicUrl } from "@/lib/share";
 
 export function MeetingIcon({ name }: { name: "calendar" | "clock" | "arrow" | "search" }) {
   const props = { width: 16, height: 16, viewBox: "0 0 24 24", fill: "none", stroke: "currentColor", strokeWidth: 1.8, strokeLinecap: "round" as const, strokeLinejoin: "round" as const, "aria-hidden": true as const };
@@ -17,13 +18,7 @@ export default function MeetingCard({ meeting, now }: { meeting: Meeting; now: n
 
   async function shareMeeting() {
     const url = `${window.location.origin}/meetings/${encodeURIComponent(meeting.id)}`;
-    try {
-      if (navigator.share) await navigator.share({ url });
-      else await navigator.clipboard.writeText(url);
-    } catch (error) {
-      if (error instanceof Error && error.name === "AbortError") return;
-      try { await navigator.clipboard.writeText(url); } catch { /* Sharing is unavailable in this browser. */ }
-    }
+    await sharePublicUrl(url);
   }
 
   return <article className="zoom-meeting-card">
@@ -40,6 +35,7 @@ export default function MeetingCard({ meeting, now }: { meeting: Meeting; now: n
       <p className="meeting-format">{meeting.meetingType === "onsite" ? `Onsite · ${meeting.venue ?? "Venue to be announced"}` : "Online"}</p>
       <div className="meeting-actions">
         {meetingJoinVisible(meeting, now) && <a className="zoom-join-button" href={meeting.meetingUrl} target="_blank" rel="noreferrer">Join meeting <MeetingIcon name="arrow"/></a>}
+        {meeting.meetingType !== "onsite" && <Link className="meeting-request-button" href="/meeting-link-request">Request meeting link</Link>}
         <Link className="meeting-details-button" href={`/meetings/${encodeURIComponent(meeting.id)}`}>Details</Link>
         <button className="meeting-share-button" type="button" onClick={() => void shareMeeting()} aria-label={`Share ${meeting.title}`} title="Share meeting"><svg width="17" height="17" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true"><circle cx="18" cy="5" r="3"/><circle cx="6" cy="12" r="3"/><circle cx="18" cy="19" r="3"/><path d="m8.7 10.7 6.6-4.4m-6.6 7 6.6 4.2"/></svg><span>Share</span></button>
       </div>
