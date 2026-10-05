@@ -18,8 +18,8 @@ export async function POST(request: Request) {
     if (!uid || uid.length > 128) return Response.json({ error: "Invalid administrator session." }, { status: 401 });
     const adminResponse = await fetch(`https://firestore.googleapis.com/v1/projects/${encodeURIComponent(projectId)}/databases/(default)/documents/admins/${encodeURIComponent(uid)}`, { headers: { Authorization: `Bearer ${token}` }, cache: "no-store" });
     if (!adminResponse.ok) return Response.json({ error: "Administrator access is required to upload a poster." }, { status: 403 });
-    const admin = await adminResponse.json() as { fields?: { enabled?: { booleanValue?: boolean } } };
-    if (admin.fields?.enabled?.booleanValue !== true) return Response.json({ error: "Administrator access is required to upload a poster." }, { status: 403 });
+    const admin = await adminResponse.json() as { fields?: { enabled?: { booleanValue?: boolean }; expiresAt?: { timestampValue?: string } } };
+    if (admin.fields?.enabled?.booleanValue !== true || Date.parse(admin.fields?.expiresAt?.timestampValue ?? "") <= Date.now()) return Response.json({ error: "Administrator access is required to upload a poster." }, { status: 403 });
 
     const form = await request.formData();
     const file = form.get("file");

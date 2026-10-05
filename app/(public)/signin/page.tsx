@@ -3,14 +3,24 @@
 import { signInWithEmailAndPassword } from "firebase/auth";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
-import { useState, type FormEvent } from "react";
+import { useEffect, useState, type FormEvent } from "react";
 import { auth } from "@/lib/firebase";
 import { signInWithGoogle } from "@/lib/sign-in";
+import { startAdminSession } from "@/lib/admin-session";
+import { getRedirectResult } from "firebase/auth";
 
 export default function SigninPage() {
   const router = useRouter();
   const [error, setError] = useState("");
   const [busy, setBusy] = useState(false);
+
+  useEffect(() => {
+    getRedirectResult(auth).then(async (credential) => {
+      if (!credential) return;
+      await startAdminSession(credential.user);
+      router.replace("/admin");
+    }).catch((reason) => setError(reason instanceof Error ? reason.message : "Google sign-in failed."));
+  }, [router]);
 
   async function submit(event: FormEvent<HTMLFormElement>) {
     event.preventDefault();
@@ -18,7 +28,8 @@ export default function SigninPage() {
     setError("");
     const form = new FormData(event.currentTarget);
     try {
-      await signInWithEmailAndPassword(auth, String(form.get("email") ?? "").trim(), String(form.get("password") ?? ""));
+      const credential = await signInWithEmailAndPassword(auth, String(form.get("email") ?? "").trim(), String(form.get("password") ?? ""));
+      await startAdminSession(credential.user);
       router.replace("/admin");
     } catch (reason) {
       setError(reason instanceof Error ? reason.message : "Could not sign in.");
@@ -35,7 +46,7 @@ export default function SigninPage() {
       <button className="primary-button" disabled={busy}>{busy ? "Signing in…" : "Sign in"}</button>
     </form>
     <div className="auth-divider">or</div>
-    <button className="outline-button auth-google" onClick={() => { setError(""); void signInWithGoogle().then(() => router.replace("/admin")).catch((reason) => setError(reason instanceof Error ? reason.message : "Google sign-in failed.")); }}>Continue with Google</button>
+    <button className="outline-button auth-google" onClick={() => { setError(""); void signInWithGoogle().then(async (credential) => { if ("user" in credential) { await startAdminSession(credential.user); router.replace("/admin"); } }).catch((reason) => setError(reason instanceof Error ? reason.message : "Google sign-in failed.")); }}>Continue with Google</button>
     <p className="auth-switch">Need an account? <Link href="/signup">Sign up with a code</Link></p>
   </section></main>;
 }

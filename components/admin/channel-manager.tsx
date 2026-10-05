@@ -6,13 +6,14 @@ import { useCallback, useEffect, useRef, useState } from "react";
 import type { FormEvent } from "react";
 import { auth, db } from "@/lib/firebase";
 import { signInWithGoogle } from "@/lib/sign-in";
+import { endAdminSession } from "@/lib/admin-session";
 import type { Channel, Playlist, Video } from "@/lib/catalog";
 import { formatDate } from "@/lib/catalog";
 import ContentEditor from "./content-editor";
+import AdminInvites from "./admin-invites";
 
 type DraftChannel = Channel & { playlistCount?: number; videoCount?: number };
 const AUTO_SYNC_INTERVAL_MS = 6 * 60 * 60 * 1000;
-const INITIAL_ADMIN_UID = "3H3BclyO2FePQ59KYIO2kKSirnx2";
 
 export default function AdminPage() {
   const [user, setUser] = useState<User | null>(null);
@@ -36,18 +37,8 @@ export default function AdminPage() {
     let active = true;
     const adminRef = doc(db, "admins", user.uid);
     getDoc(adminRef).then(async (snapshot) => {
-      if (snapshot.exists()) {
-        if (snapshot.data()?.enabled === true) {
-          if (active) setIsAdmin(true);
-          return;
-        }
-      }
-      if (user.uid !== INITIAL_ADMIN_UID) {
-        if (active) setIsAdmin(false);
-        return;
-      }
-      await setDoc(adminRef, { enabled: true });
-      if (active) setIsAdmin(true);
+      const expiresAt = snapshot.data()?.expiresAt?.toMillis?.() ?? 0;
+      if (active) setIsAdmin(snapshot.exists() && snapshot.data()?.enabled === true && expiresAt > Date.now());
     }).catch((reason) => {
       if (!active) return;
       setIsAdmin(false);
@@ -214,16 +205,17 @@ export default function AdminPage() {
   if (!authReady) return <main className="admin-shell"><div className="loading-card">Loading administrator access…</div></main>;
   return (
     <main className="admin-shell">
-      <header className="admin-top"><a className="back-link" href="/">← <span>Home</span></a><div className="admin-mark">POF <span>STUDIO</span></div>{user ? <button className="text-button" onClick={() => signOut(auth)}>Sign out</button> : <span />}</header>
+      <header className="admin-top"><a className="back-link" href="/">← <span>Home</span></a><div className="admin-mark">POF <span>STUDIO</span></div>{user ? <button className="text-button" onClick={() => void endAdminSession().finally(() => signOut(auth))}>Sign out</button> : <span />}</header>
       <div className="admin-content">
         <div className="admin-heading"><span className="eyebrow">CONTENT CONTROL</span><h1>YouTube channels</h1><p>Connect your channels once. Videos and playlists stay in sync automatically.</p><a className="outline-button meeting-admin-link" href="/admin/meetings">Manage Zoom meetings</a> <a className="outline-button meeting-admin-link" href="/admin/contacts">View contact messages</a></div>
-        {!user ? <section className="admin-panel sign-in-panel"><div className="panel-icon">◉</div><h2>Administrator sign in</h2><p>Sign in with your Google account to manage YouTube sources.</p>{error && <p className="inline-error">{error}</p>}<button className="primary-button" onClick={() => void signInWithGoogle().catch((reason) => setError(reason instanceof Error ? reason.message : "Google sign-in failed."))}>Continue with Google</button></section> : !isAdmin ? <section className="admin-panel sign-in-panel"><div className="panel-icon">⌑</div><h2>Admin access hasn’t been enabled</h2><p>Signed in as <strong>{user.displayName ?? user.email}</strong>.{user.uid === INITIAL_ADMIN_UID ? " Administrator access is being set up automatically." : " This Google account is not authorized to manage the site."}</p>{error && <p className="inline-error">{error}</p>}<button className="outline-button" onClick={() => signOut(auth)}>Sign out</button></section> : <>
+        {!user ? <section className="admin-panel sign-in-panel"><div className="panel-icon">◉</div><h2>Administrator sign in</h2><p>Sign in with your account to manage YouTube sources.</p>{error && <p className="inline-error">{error}</p>}<button className="primary-button" onClick={() => void signInWithGoogle().catch((reason) => setError(reason instanceof Error ? reason.message : "Google sign-in failed."))}>Continue with Google</button></section> : !isAdmin ? <section className="admin-panel sign-in-panel"><div className="panel-icon">⌑</div><h2>Admin session expired</h2><p>Sign in again to renew your one-hour administrator session.</p>{error && <p className="inline-error">{error}</p>}<button className="outline-button" onClick={() => signOut(auth)}>Sign out</button></section> : <>
           <section className="admin-panel add-panel"><div className="section-heading"><div><span className="eyebrow">SOURCES</span><h2>Add a YouTube channel</h2></div><span className="secure-label">● Private admin access</span></div><form className="channel-form" onSubmit={lookupChannel}><input value={queryText} onChange={(event) => setQueryText(event.target.value)} placeholder="Paste a channel URL, @handle, or channel ID" aria-label="YouTube channel URL, handle, or ID"/><button className="primary-button" disabled={busy === "lookup" || !queryText}>{busy === "lookup" ? "Checking…" : "Find channel"}</button></form>{preview && <div className="channel-preview"><img src={preview.thumbnail} alt=""/><div className="preview-copy"><strong>{preview.title}</strong><span>{preview.customUrl || preview.id}</span><small>{preview.playlistCount} playlists · {preview.videoCount} videos</small></div><button className="primary-button" onClick={addChannel}>Add & sync</button></div>}</section>
           <section className="catalog-summary" aria-label="Catalog totals"><div><span>CHANNELS</span><strong>{channels.length}</strong></div><div><span>PLAYLISTS</span><strong>{catalogCounts.playlists.toLocaleString()}</strong></div><div><span>VIDEOS</span><strong>{catalogCounts.videos.toLocaleString()}</strong></div><div><span>SYNC STATE</span><strong>{busy && busy !== "lookup" ? "Syncing" : error ? "Attention" : "Ready"}</strong></div></section>
           {(notice || error) && <div className={error ? "notice error-notice" : "notice"}>{error || notice}</div>}
           <div className="channel-list-heading"><h2>Your channels <span>{channels.length}</span></h2><span>Auto sync every 6 hours while this page is open</span></div>
           {channels.length === 0 ? <section className="admin-panel empty-state"><span className="empty-plus">＋</span><h3>No channels connected yet</h3><p>Add your first YouTube channel above to start building the video catalog.</p></section> : <div className="admin-channel-list">{channels.map((channel) => <article className="admin-channel" key={channel.id}><img className="channel-avatar" src={channel.thumbnail} alt=""/><div className="channel-details"><div className="channel-title-row"><h3>{channel.title}</h3><span className={`status-pill ${channel.syncStatus === "error" ? "status-error" : channel.enabled ? "" : "status-paused"}`}>{channel.syncStatus === "error" ? "Needs attention" : channel.enabled ? channel.syncStatus === "syncing" ? "Syncing" : "Connected" : "Paused"}</span></div><p>{channel.customUrl || channel.id}</p><small>{channel.lastSyncedAt ? `Last synced ${formatDate(((channel.lastSyncedAt as { toDate?: () => Date }).toDate?.() ?? new Date()).toISOString())}` : "Waiting for first sync"}{channel.lastSyncNewVideoCount ? ` · ${channel.lastSyncNewVideoCount} new videos` : ""}{channel.lastSyncError ? ` · ${channel.lastSyncError}` : ""}</small></div><div className="channel-actions"><button className="outline-button" disabled={Boolean(busy)} onClick={() => void syncChannel(channel)}>{busy === channel.id ? "Syncing…" : "Sync now"}</button><button className="icon-action" title={channel.enabled ? "Pause channel" : "Enable channel"} onClick={() => void toggleChannel(channel)}>{channel.enabled ? "Ⅱ" : "▶"}</button><button className="icon-action remove-action" title="Remove channel" onClick={() => void removeChannel(channel)}>×</button></div></article>)}</div>}
           <ContentEditor />
+          <AdminInvites />
           <div className="admin-footnote">YouTube is the source of truth for video and playlist details. Website visibility and featured settings remain separate.</div>
         </>}
       </div>

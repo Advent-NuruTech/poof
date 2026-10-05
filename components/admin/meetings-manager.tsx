@@ -1,14 +1,14 @@
 "use client";
 
-import { onAuthStateChanged, type User } from "firebase/auth";
-import { addDoc, collection, deleteDoc, doc, getDoc, onSnapshot, setDoc } from "firebase/firestore";
+import { onAuthStateChanged, signOut, type User } from "firebase/auth";
+import { addDoc, collection, deleteDoc, doc, getDoc, onSnapshot } from "firebase/firestore";
 import { useEffect, useState } from "react";
 import type { FormEvent } from "react";
 import { auth, db } from "@/lib/firebase";
 import { signInWithGoogle } from "@/lib/sign-in";
+import { endAdminSession } from "@/lib/admin-session";
 import { formatMeetingDate, formatMeetingTime, type Meeting } from "@/lib/meetings";
 
-const INITIAL_ADMIN_UID = "3H3BclyO2FePQ59KYIO2kKSirnx2";
 const blank = { title: "", description: "", posterUrl: "", date: "", start: "", end: "", meetingUrl: "" };
 function localDateTime(date: string, time: string) { return new Date(`${date}T${time}`).toISOString(); }
 
@@ -29,10 +29,8 @@ export default function MeetingsManager() {
     let active = true;
     const adminRef = doc(db, "admins", user.uid);
     getDoc(adminRef).then(async (snapshot) => {
-      if (snapshot.exists() && snapshot.data().enabled === true) { if (active) setIsAdmin(true); return; }
-      if (user.uid !== INITIAL_ADMIN_UID) { if (active) setIsAdmin(false); return; }
-      await setDoc(adminRef, { enabled: true });
-      if (active) setIsAdmin(true);
+      const expiresAt = snapshot.data()?.expiresAt?.toMillis?.() ?? 0;
+      if (active) setIsAdmin(snapshot.exists() && snapshot.data()?.enabled === true && expiresAt > Date.now());
     }).catch((reason) => { if (active) setError(reason instanceof Error ? reason.message : "Could not verify admin access."); });
     return () => { active = false; };
   }, [user]);
@@ -70,7 +68,7 @@ export default function MeetingsManager() {
     finally { setUploadingPoster(false); }
   }
 
-  return <main className="admin-shell"><header className="admin-top"><a className="back-link" href="/admin">← Channel admin</a><span className="admin-mark">POOF <span>MEETINGS</span></span><a className="text-button" href="/meetings" target="_blank">View public page ↗</a></header>
+  return <main className="admin-shell"><header className="admin-top"><a className="back-link" href="/admin">← Channel admin</a><span className="admin-mark">POOF <span>MEETINGS</span></span><button className="text-button" onClick={() => void endAdminSession().finally(() => signOut(auth))}>Sign out</button><a className="text-button" href="/meetings" target="_blank">View public page ↗</a></header>
     <div className="admin-content"><div className="admin-heading"><span className="eyebrow">MEETING SCHEDULE</span><h1>Zoom meetings</h1><p>Create a meeting with a poster, schedule, and join link.</p></div>
       {!ready ? <section className="admin-panel loading-card">Checking administrator access…</section> : !user || !isAdmin ? <section className="admin-panel sign-in-panel"><div className="panel-icon">◉</div><h2>{user ? "Admin access required" : "Administrator sign in"}</h2><p>{user ? "This Google account is not authorized to manage meetings." : "Sign in with your administrator Google account."}</p>{error && <p className="notice error-notice">{error}</p>}{!user && <button className="primary-button" onClick={() => void signInWithGoogle().catch((reason) => setError(reason instanceof Error ? reason.message : "Google sign-in failed."))}>Continue with Google</button>}</section> : <>
         <section className="admin-panel"><div className="section-heading"><div><span className="eyebrow">NEW MEETING</span><h2>Meeting details</h2></div><span className="secure-label">● Private admin access</span></div>

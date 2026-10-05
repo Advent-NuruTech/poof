@@ -8,24 +8,48 @@ service cloud.firestore {
     function isAdmin() {
       return signedIn()
         && exists(/databases/$(database)/documents/admins/$(request.auth.uid))
-        && get(/databases/$(database)/documents/admins/$(request.auth.uid)).data.enabled == true;
+        && get(/databases/$(database)/documents/admins/$(request.auth.uid)).data.enabled == true
+        && get(/databases/$(database)/documents/admins/$(request.auth.uid)).data.expiresAt > request.time;
     }
 
-    // The initial administrator is allowlisted here so the app can provision
-    // their role marker on first sign-in without opening admin creation to others.
     match /admins/{uid} {
       allow get: if signedIn() && request.auth.uid == uid;
       allow create: if signedIn()
-        && request.auth.uid == '3H3BclyO2FePQ59KYIO2kKSirnx2'
         && uid == request.auth.uid
-        && request.resource.data.keys().hasOnly(['enabled'])
-        && request.resource.data.enabled == true;
+        && request.resource.data.keys().hasOnly(['enabled', 'expiresAt'])
+        && request.resource.data.enabled == true
+        && request.resource.data.expiresAt > request.time
+        && request.resource.data.expiresAt <= request.time + duration.value(1, 'h');
       allow update: if signedIn()
-        && request.auth.uid == '3H3BclyO2FePQ59KYIO2kKSirnx2'
         && uid == request.auth.uid
-        && request.resource.data.keys().hasOnly(['enabled'])
-        && request.resource.data.enabled == true;
+        && (!('expiresAt' in resource.data) || resource.data.expiresAt <= request.time)
+        && request.resource.data.keys().hasOnly(['enabled', 'expiresAt'])
+        && request.resource.data.enabled == true
+        && request.resource.data.expiresAt > request.time
+        && request.resource.data.expiresAt <= request.time + duration.value(1, 'h');
       allow list, delete: if false;
+    }
+
+    // Invite URLs are single-use bearer tokens. Public access is limited to
+    // reading one known, unexpired invite so an invite can authorize signup.
+    match /adminInvites/{inviteId} {
+      allow get: if resource.data.used == false && resource.data.expiresAt > request.time;
+      allow list: if isAdmin();
+      allow create: if isAdmin()
+        && request.resource.data.keys().hasOnly(['email', 'createdAt', 'expiresAt', 'used'])
+        && request.resource.data.email is string
+        && request.resource.data.email.size() > 0
+        && request.resource.data.used == false
+        && request.resource.data.createdAt == request.time
+        && request.resource.data.expiresAt > request.time
+        && request.resource.data.expiresAt <= request.time + duration.value(2, 'h');
+      allow update: if signedIn()
+        && resource.data.email == request.auth.token.email
+        && resource.data.used == false
+        && resource.data.expiresAt > request.time
+        && request.resource.data.diff(resource.data).affectedKeys().hasOnly(['used'])
+        && request.resource.data.used == true;
+      allow delete: if isAdmin();
     }
 
     // Signed-in accounts can maintain only their own basic profile.

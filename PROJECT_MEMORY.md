@@ -1,5 +1,11 @@
 # Project Memory
 
+## 2026-10-04: Archive row alternation
+
+- **Major changes:** Alternated older-video archive rows so every other wide video appears on the right, removed the archive video-count labels, and hide the four-year section when its videos have loaded and none are available.
+- **Errors and fixes:** No build/runtime errors encountered during this change.
+- **Verification:** Not run.
+
 ## 2026-10-04: Featured playlists heading accent
 
 - **Major changes:** Changed the icon before “Featured Playlists” from black to the site’s red accent so the heading stands out.

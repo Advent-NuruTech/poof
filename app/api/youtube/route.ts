@@ -53,8 +53,9 @@ async function authorize(request: Request): Promise<string | null> {
     headers: { Authorization: `Bearer ${token}` }, cache: "no-store",
   });
   if (!admin.ok) return null;
-  const record = await admin.json() as { fields?: { enabled?: { booleanValue?: boolean } } };
-  return record.fields?.enabled?.booleanValue === true ? uid : null;
+  const record = await admin.json() as { fields?: { enabled?: { booleanValue?: boolean }; expiresAt?: { timestampValue?: string } } };
+  const expiresAt = Date.parse(record.fields?.expiresAt?.timestampValue ?? "");
+  return record.fields?.enabled?.booleanValue === true && expiresAt > Date.now() ? uid : null;
 }
 
 async function allPages<T>(resource: string, params: Record<string, string>) {

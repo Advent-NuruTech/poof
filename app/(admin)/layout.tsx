@@ -1,54 +1,32 @@
-"use client";
+import Link from "next/link";
+import { cookies } from "next/headers";
 
-import { onAuthStateChanged, type User } from "firebase/auth";
-import { doc, getDoc, setDoc } from "firebase/firestore";
-import { useEffect, useState } from "react";
-import { auth, db } from "@/lib/firebase";
+const SESSION_COOKIE = "poof_admin_session";
 
-const INITIAL_ADMIN_UID = "3H3BclyO2FePQ59KYIO2kKSirnx2";
+async function getAdminSession() {
+  const token = (await cookies()).get(SESSION_COOKIE)?.value;
+  const apiKey = process.env.NEXT_PUBLIC_FIREBASE_API_KEY;
+  const projectId = process.env.NEXT_PUBLIC_FIREBASE_PROJECT_ID;
+  if (!token || !apiKey || !projectId) return false;
+  try {
+    const identityResponse = await fetch(`https://identitytoolkit.googleapis.com/v1/accounts:lookup?key=${encodeURIComponent(apiKey)}`, {
+      method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ idToken: token }), cache: "no-store",
+    });
+    const identity = await identityResponse.json() as { users?: Array<{ localId?: string }> };
+    const uid = identity.users?.[0]?.localId;
+    if (!identityResponse.ok || !uid) return false;
+    const adminResponse = await fetch(`https://firestore.googleapis.com/v1/projects/${encodeURIComponent(projectId)}/databases/(default)/documents/admins/${encodeURIComponent(uid)}`, {
+      headers: { Authorization: `Bearer ${token}` }, cache: "no-store",
+    });
+    if (!adminResponse.ok) return false;
+    const admin = await adminResponse.json() as { fields?: { enabled?: { booleanValue?: boolean }; expiresAt?: { timestampValue?: string } } };
+    return admin.fields?.enabled?.booleanValue === true && Date.parse(admin.fields.expiresAt?.timestampValue ?? "") > Date.now();
+  } catch {
+    return false;
+  }
+}
 
-export default function AdminLayout({ children }: { children: React.ReactNode }) {
-  const [user, setUser] = useState<User | null>(null);
-  const [ready, setReady] = useState(false);
-  const [authorized, setAuthorized] = useState(false);
-  const [error, setError] = useState("");
-
-  useEffect(() => onAuthStateChanged(auth, (current) => {
-    setUser(current);
-    setReady(!current);
-    setAuthorized(false);
-    setError("");
-  }), []);
-
-  useEffect(() => {
-    if (!user) return;
-    let active = true;
-    const verify = async () => {
-      try {
-        const adminRef = doc(db, "admins", user.uid);
-        let snapshot = await getDoc(adminRef);
-        if (!snapshot.exists() && user.uid === INITIAL_ADMIN_UID) {
-          await setDoc(adminRef, { enabled: true });
-          snapshot = await getDoc(adminRef);
-        }
-        if (active) setAuthorized(snapshot.exists() && snapshot.data()?.enabled === true);
-      } catch (reason) {
-        if (active) setError(reason instanceof Error ? reason.message : "Could not verify administrator access.");
-      } finally {
-        if (active) setReady(true);
-      }
-    };
-    void verify();
-    return () => { active = false; };
-  }, [user]);
-
-  if (!ready) return <main className="loading-card">Checking administrator access…</main>;
-  if (!user || !authorized) return <main className="sign-in-panel admin-panel">
-    <div className="panel-icon">◉</div>
-    <h2>{user ? "Admin access required" : "Administrator sign in"}</h2>
-    <p>{user ? "This account is not authorized to view administrator pages." : "Sign in with your administrator Google account to continue."}</p>
-    {error && <p className="notice error-notice">{error}</p>}
-    {!user && <a className="primary-button" href="/signin">Go to sign in</a>}
-  </main>;
+export default async function AdminLayout({ children }: { children: React.ReactNode }) {
+  if (!await getAdminSession()) return <main className="auth-page"><section className="auth-card sign-in-panel"><div className="panel-icon">◉</div><h1>Sign in to continue</h1><p>Your admin session is missing or expired. Sign in again to open the administrator pages.</p><Link className="primary-button" href="/signin">Go to sign in</Link></section></main>;
   return children;
 }
