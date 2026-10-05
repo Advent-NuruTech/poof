@@ -9,7 +9,8 @@ import { signInWithGoogle } from "@/lib/sign-in";
 import { endAdminSession } from "@/lib/admin-session";
 import { deviceTimeZone, formatMeetingDate, formatMeetingTime, type Meeting } from "@/lib/meetings";
 
-const blank = { title: "", description: "", posterUrl: "", date: "", start: "", end: "", meetingType: "online" as "online" | "onsite", meetingUrl: "", venue: "" };
+const blank = { title: "", description: "", posterUrl: "", date: "", start: "", end: "", meetingType: "online" as "online" | "onsite", meetingUrl: "", venue: "", repeats: false, repeatDays: [] as number[], repeatUntil: "never" as "never" | "date", untilDate: "" };
+const weekdays = ["Sunday", "Monday", "Tuesday", "Wednesday", "Thursday", "Friday", "Saturday"];
 function localDateTime(date: string, time: string) { return new Date(`${date}T${time}`).toISOString(); }
 
 export default function MeetingsManager() {
@@ -45,9 +46,13 @@ export default function MeetingsManager() {
       const startsAt = localDateTime(form.date, form.start);
       const endsAt = localDateTime(form.date, form.end);
       if (new Date(endsAt) <= new Date(startsAt)) throw new Error("The end time must be later than the start time.");
+      if (form.repeats && !form.repeatDays.length) throw new Error("Choose at least one day for a repeating meeting.");
+      if (form.repeats && form.repeatUntil === "date" && !form.untilDate) throw new Error("Choose the date when this repeating meeting ends.");
+      if (form.repeats && form.repeatUntil === "date" && form.untilDate < form.date) throw new Error("The repeat end date must be on or after the first meeting date.");
       setBusy(true);
       if (form.meetingType === "onsite" && !form.venue.trim()) throw new Error("Enter the meeting venue.");
-      await addDoc(collection(db, "meetings"), { title: form.title.trim(), description: form.description.trim(), posterUrl: form.posterUrl.trim(), startsAt, endsAt, timeZone: deviceTimeZone(), meetingType: form.meetingType, meetingUrl: form.meetingType === "online" ? form.meetingUrl.trim() : "", venue: form.meetingType === "onsite" ? form.venue.trim() : "" });
+      const recurrence = form.repeats ? { frequency: "weekly" as const, days: form.repeatDays, ...(form.repeatUntil === "date" ? { until: form.untilDate } : {}) } : undefined;
+      await addDoc(collection(db, "meetings"), { title: form.title.trim(), description: form.description.trim(), posterUrl: form.posterUrl.trim(), startsAt, endsAt, timeZone: deviceTimeZone(), ...(recurrence ? { recurrence } : {}), meetingType: form.meetingType, meetingUrl: form.meetingType === "online" ? form.meetingUrl.trim() : "", venue: form.meetingType === "onsite" ? form.venue.trim() : "" });
       setForm(blank); setNotice("Meeting published.");
     } catch (reason) { setError(reason instanceof Error ? reason.message : "Could not save this meeting."); }
     finally { setBusy(false); }
@@ -82,6 +87,7 @@ export default function MeetingsManager() {
             {form.meetingType === "online" ? <label>Meeting link <span>Optional · visible one hour before start</span><input type="url" value={form.meetingUrl} onChange={(event) => setForm({ ...form, meetingUrl: event.target.value })} placeholder="https://zoom.us/j/…"/></label> : <label>Venue<input required value={form.venue} onChange={(event) => setForm({ ...form, venue: event.target.value })} placeholder="Address or venue name"/></label>}
             <div className="meeting-time-fields"><label>Date<input required type="date" value={form.date} onChange={(event) => setForm({ ...form, date: event.target.value })}/></label><label>Starts at<input required type="time" value={form.start} onChange={(event) => setForm({ ...form, start: event.target.value })}/></label><label>Ends at<input required type="time" value={form.end} onChange={(event) => setForm({ ...form, end: event.target.value })}/></label></div>
             <p className="meeting-timezone-note">Scheduling in your device timezone: <strong>{deviceTimeZone()}</strong>. Visitors will see this meeting in their own local timezone.</p>
+            <fieldset className="meeting-recurrence"><legend>Does this repeat?</legend><label className="repeat-choice"><input type="radio" name="repeats" checked={!form.repeats} onChange={() => setForm({ ...form, repeats: false })}/> No</label><label className="repeat-choice"><input type="radio" name="repeats" checked={form.repeats} onChange={() => setForm({ ...form, repeats: true })}/> Yes</label>{form.repeats && <div className="repeat-options"><label>Repeat<select value="weekly" disabled><option value="weekly">Weekly</option></select></label><div><span className="repeat-label">Days</span><div className="repeat-days">{weekdays.map((day, index) => <label key={day}><input type="checkbox" checked={form.repeatDays.includes(index)} onChange={() => setForm({ ...form, repeatDays: form.repeatDays.includes(index) ? form.repeatDays.filter((value) => value !== index) : [...form.repeatDays, index] })}/>{day}</label>)}</div></div><label>Until<select value={form.repeatUntil} onChange={(event) => setForm({ ...form, repeatUntil: event.target.value as "never" | "date" })}><option value="never">Never</option><option value="date">A date</option></select></label>{form.repeatUntil === "date" && <label>End date<input required type="date" min={form.date || undefined} value={form.untilDate} onChange={(event) => setForm({ ...form, untilDate: event.target.value })}/></label>}</div>}</fieldset>
             {error && <p className="notice error-notice">{error}</p>}{notice && <p className="notice">{notice}</p>}
             <button className="primary-button" disabled={busy}>{busy ? "Publishing…" : "Publish meeting"}</button>
           </form>

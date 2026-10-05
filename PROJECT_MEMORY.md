@@ -18,8 +18,8 @@
 
 - **Major changes:** Replaced the reader's native PDF iframe with PDF.js canvas rendering for every page, using the same-origin download proxy to retrieve the file. The PDF worker and its Apache 2.0 license are served from `public/`. Reader zoom now scales the rendered pages and the page stack adapts to the available screen width. The document Share button uses the same `sharePublicUrl` helper and meeting share icon/button styling as meeting cards.
 - **Cause:** The previous fix only changed listing thumbnails. The full reader still embedded the original PDF, so mobile browsers continued to show the browser's “Open” fallback.
-- **Errors and fixes:** The initial sandboxed `npm install` could not reach the package registry; reran with approved network access and installed `pdfjs-dist` successfully.
-- **Verification:** `git diff --check` passed; no build/runtime error was observed.
+- **Errors and fixes:** The initial sandboxed `npm install` could not reach the package registry; reran with approved network access and installed `pdfjs-dist` successfully. The first TypeScript check found PDF.js `RenderParameters` requires both `canvas` and `canvasContext`, its render result is a `RenderTask`, and `PDFDocumentProxy` has no `destroy()` method. Passed the canvas and context, used the render task's type, and clean up with `PDFDocumentLoadingTask.destroy()`.
+- **Verification:** `npx.cmd tsc --noEmit`, `npm.cmd run build`, and `git diff --check` passed. The production build generated all 28 routes.
 
 ## 2026-10-05: Library navigation, categorized resources, and online reader
 
