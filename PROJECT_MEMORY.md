@@ -1,5 +1,13 @@
 # Project Memory
 
+## 2026-10-05: Library navigation, categorized resources, and online reader
+
+- **Major changes:** Replaced the Playlists destination with Library in desktop and mobile navigation. Added `/library` as one directory for the existing synced video playlists plus published study resources, with text search and category selection. Added `/library/[id]` to read authored rich-text notes, preview PDFs and Word files in-page, adjust note zoom, and download uploads.
+- **Major changes:** Added `/admin/library` for admins to create persistent categories, publish rich-text notes, and upload PDF/DOC/DOCX documents. Health and Bible Studies seed the category collection the first time an authenticated admin opens the manager; admins can add persistent child topics, which become selectable for later resources. Pasted formatting is retained in the contenteditable note editor.
+- **Security and storage:** Added public-read/admin-write Firestore rules for library category and resource metadata. Added `/api/library/upload`, which validates the Firebase bearer token against Firestore admin status and uploads up to 25 MB to the existing signed Cloudinary setup. Cloudinary credentials must be configured as documented in `.env.example`.
+- **Build issue and fix:** The first TypeScript check found that the not-yet-generated `/library/[id]` route was absent from the current generated `PageProps` route union. Typed its promised `params` directly as `{ id: string }`; TypeScript and the production build then passed.
+- **Verification:** `npx.cmd tsc --noEmit` passed. `npm.cmd run build` passed and generated 27 routes, including `/library`, `/library/[id]`, `/admin/library`, and `/api/library/upload`. Firestore rules were updated but not exercised against an emulator.
+
 ## 2026-10-05: Device-local meeting timezones
 
 - **Major changes:** Meeting scheduling now records the administrator device's IANA timezone alongside the ISO start/end instants. Public and admin meeting dates/times explicitly format in each viewer's detected device timezone and include the local timezone abbreviation, so the same meeting is not presented as the scheduler's wall-clock time to people in another region. The scheduling form identifies the detected timezone and explains that visitors receive their local conversion.

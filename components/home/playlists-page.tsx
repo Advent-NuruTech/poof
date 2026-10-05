@@ -94,6 +94,6 @@ export default function PlaylistsPage({ playlistId }: { playlistId?: string }) {
     </a>)}</section>}
     {watching && <div className="player-backdrop" role="dialog" aria-modal="true" aria-label={watching.title} onClick={() => setWatching(null)}><div className="player-modal" onClick={(event) => event.stopPropagation()}><button className="player-close" aria-label="Close player" onClick={() => setWatching(null)}>×</button><div className="player-frame">{watching.embeddable === false ? <div className="player-unavailable"><strong>This video can only be watched on YouTube.</strong><a href={`https://www.youtube.com/watch?v=${watching.id}`} target="_blank" rel="noreferrer">Open on YouTube</a></div> : <iframe src={`https://www.youtube-nocookie.com/embed/${watching.id}?autoplay=1&rel=0`} title={watching.title} allow="accelerometer; autoplay; clipboard-write; encrypted-media; gyroscope; picture-in-picture; web-share" allowFullScreen/>}</div><div className="player-caption"><h2>{watching.website?.displayTitle || watching.title}</h2><p>{watching.description?.trim() || watching.channelTitle}</p></div></div></div>}
     {shareNotice && <div className="share-notice" role="status">{shareNotice}</div>}
-    <MobileBottomNav current="playlists"/>
+    <MobileBottomNav current="library"/>
   </main>;
 }
