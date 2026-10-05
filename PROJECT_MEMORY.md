@@ -8,6 +8,12 @@
 
 Record verified errors and fixes, plus major changes, here. Review this file before related work to avoid repeating known issues in future versions.
 
+## 2026-10-04: Shared homepage branding and doctrine build fix
+
+- **Major changes:** Recorded the homepage typography and color palette as the shared site branding. Public meeting and contact pages now use shared theme colors for their page surfaces, dividers, and secondary text. Added a branded placeholder page for the empty `/doctrine/fundermentalprinciples` route.
+- **Build error and fix:** Next.js TypeScript validation reported `app/(public)/doctrine/fundermentalprinciples/page.tsx` was not a module. The file was zero bytes; adding a default exported React page makes it a valid App Router page.
+- **Verification:** `npm.cmd run build` completed successfully, including TypeScript validation and static generation of `/doctrine/fundermentalprinciples`.
+
 ## 2026-10-04: Reuse homepage mobile navigation
 
 - **Major changes:** Extracted the homepage mobile bottom navigation into a shared component and reused it on playlist, meetings, and contact pages. These pages now share the same tabs, icons, layout, styling, and current-page state. Removed the page-specific bottom navigation styles.
@@ -24,7 +30,7 @@ Record verified errors and fixes, plus major changes, here. Review this file bef
 ## 2026-10-04: Zoom meetings page
 
 - **Major changes:** Added a public `/meetings` page connected to admin-managed Firestore meeting records. The homepage Zoom navigation opens this page. Meetings have a title, optional description and poster, local date and start/end times, and a join link; the public page groups meetings into live, upcoming, and history, with a live Join now action. Added `/admin/meetings` for authorized admins to publish and delete meetings and restricted Firestore writes to admins. Poster uploads use a server-side signed Cloudinary upload, with admin access checked through Firestore before upload; only the returned secure image URL is stored in the meeting document.
-- **Design rule:** Keep homepage and meeting page branding black and white; do not introduce new brand colors. Always display meeting posters without cropping (`object-fit: contain`).
+- **Design rule:** Use the homepage typography (Arial/Helvetica sans-serif) and shared black, white, gray, and red accent palette across all pages. Always display meeting posters without cropping (`object-fit: contain`).
 - **Build issue:** `npm.cmd run build` fails when Next.js type-checks the pre-existing zero-byte `app/(public)/doctrine/28fundermental/page.tsx`, because it is not a module. The file was restored byte-for-byte after verification. A temporary default page export let the production build complete and verified the meeting routes and upload handler; the placeholder was removed afterward, so the original build issue remains.
 - **Verification:** Production build completed with the temporary doctrine-page placeholder. Build without that placeholder remains blocked by the zero-byte page described above.
 
