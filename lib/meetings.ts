@@ -10,7 +10,14 @@ export type Meeting = {
   meetingType?: "online" | "onsite";
   meetingUrl?: string;
   venue?: string;
+  /** The scheduler's IANA timezone, retained as a reference for administrators. */
+  timeZone?: string;
 };
+
+/** The browser's IANA timezone, for example "America/Los_Angeles". */
+export function deviceTimeZone() {
+  return Intl.DateTimeFormat().resolvedOptions().timeZone || "UTC";
+}
 
 export function meetingStatus(meeting: Meeting, now = Date.now()): MeetingStatus {
   const start = new Date(meeting.startsAt).getTime();
@@ -51,14 +58,17 @@ export function meetingSearchText(meeting: Meeting) {
 }
 
 export function formatMeetingDate(value: string) {
-  return new Intl.DateTimeFormat(undefined, { dateStyle: "full" }).format(new Date(value));
+  return new Intl.DateTimeFormat(undefined, { dateStyle: "full", timeZone: deviceTimeZone() }).format(new Date(value));
 }
 
 export function formatMeetingDay(value: string) {
-  return new Intl.DateTimeFormat(undefined, { month: "short", day: "numeric", year: "numeric" }).format(new Date(value));
+  return new Intl.DateTimeFormat(undefined, { month: "short", day: "numeric", year: "numeric", timeZone: deviceTimeZone() }).format(new Date(value));
 }
 
 export function formatMeetingTime(meeting: Meeting) {
-  const options: Intl.DateTimeFormatOptions = { hour: "numeric", minute: "2-digit" };
-  return `${new Intl.DateTimeFormat(undefined, options).format(new Date(meeting.startsAt))} – ${new Intl.DateTimeFormat(undefined, options).format(new Date(meeting.endsAt))}`;
+  const timeZone = deviceTimeZone();
+  const options: Intl.DateTimeFormatOptions = { hour: "numeric", minute: "2-digit", timeZone };
+  const formatter = new Intl.DateTimeFormat(undefined, options);
+  const zoneLabel = new Intl.DateTimeFormat(undefined, { timeZone, timeZoneName: "short" }).formatToParts(new Date(meeting.startsAt)).find((part) => part.type === "timeZoneName")?.value ?? timeZone;
+  return `${formatter.format(new Date(meeting.startsAt))} – ${formatter.format(new Date(meeting.endsAt))} (${zoneLabel})`;
 }

@@ -1,5 +1,11 @@
 # Project Memory
 
+## 2026-10-05: Device-local meeting timezones
+
+- **Major changes:** Meeting scheduling now records the administrator device's IANA timezone alongside the ISO start/end instants. Public and admin meeting dates/times explicitly format in each viewer's detected device timezone and include the local timezone abbreviation, so the same meeting is not presented as the scheduler's wall-clock time to people in another region. The scheduling form identifies the detected timezone and explains that visitors receive their local conversion.
+- **Errors and fixes:** `apply_patch` initially did not match lines containing an en dash from the source encoding. Retried with the exact Unicode source text; no source content was lost.
+- **Verification:** `npx.cmd tsc --noEmit`, `npm.cmd run build`, and `git diff --check` pass. The production build generated all 24 routes.
+
 ## 2026-10-05: Desktop navigation parity with mobile
 
 - **Major changes:** Updated the homepage desktop navigation from a plain text row to a compact, icon-led pill navigation. It now uses the same destination language as the mobile tab bar (Home, Playlists, Channels, Zoom, and Contact), clearly marks the current page, has keyboard-visible focus treatment, and keeps route transitions on internal destinations using `next/link`.
