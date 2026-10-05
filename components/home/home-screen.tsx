@@ -63,7 +63,7 @@ export default function HomeScreen() {
     const groupRows = new Map<number, Map<string, Video>>();
     const groups = chunks(ids, 30);
     const subscriptions = groups.map((group, groupIndex) => onSnapshot(
-      query(collection(db, "videos"), where("catalogChannelIds", "array-contains-any", group), limit(300)),
+      query(collection(db, "videos"), where("catalogChannelIds", "array-contains-any", group), limit(1000)),
       (snapshot) => {
         groupRows.set(groupIndex, new Map(snapshot.docs.map((entry) => [entry.id, { ...entry.data(), id: entry.id } as Video])));
         const merged = new Map<string, Video>();
@@ -96,6 +96,10 @@ export default function HomeScreen() {
 
   const channelIds = new Set(channels.map((channel) => channel.id));
   const activeVideos = videos.filter((video) => video.catalogChannelIds?.some((id) => channelIds.has(id)));
+  const currentYear = new Date().getFullYear();
+  const videosFromYear = (year: number) => activeVideos.filter((video) => video.publishedAt && new Date(video.publishedAt).getFullYear() === year).slice(0, 15);
+  const twoYearVideos = videosFromYear(currentYear - 2);
+  const fourYearVideos = videosFromYear(currentYear - 4);
   const term = search.trim().toLowerCase();
   const latest = term ? activeVideos.filter((video) => `${video.title} ${video.description} ${video.channelTitle}`.toLowerCase().includes(term)) : activeVideos;
   const activePlaylists = playlists.filter((playlist) => channelIds.has(playlist.channelId));
@@ -151,6 +155,19 @@ export default function HomeScreen() {
         {!videosLoaded ? <VideoListSkeleton/> : visibleVideos.length ? <div className="latest-list">{visibleVideos.map((video) => <article className="latest-card" key={video.id}><button className="video-thumb" onClick={() => setWatching(video)} aria-label={`Watch ${video.title}`}><img src={video.thumbnail} alt=""/><span className="duration-tag">{formatDuration(video.duration)}</span><span className="thumb-play"><Icon name="play" size={17}/></span></button><button className="video-copy" onClick={() => setWatching(video)}><strong>{video.website?.displayTitle || video.title}</strong><time>{formatDate(video.publishedAt)}</time><span className="video-description">{video.description?.trim() || video.channelTitle}</span></button><button className="more-button" aria-label={`Share ${video.title}`} title="Share video" onClick={() => void shareVideo(video)}><Icon name="menu"/></button></article>)}</div> : <div className="empty-home"><span className="empty-video-icon"><Icon name="play" size={19}/></span><div><strong>{search ? "No videos found" : "Videos will appear here soon"}</strong><p>{search ? "Try another title, topic, or channel." : "New videos and messages will be added to the library as they become available."}</p></div></div>}</section>
       <section className="home-section" id="featured-playlists"><SectionTitle icon="list" title="Featured Playlists" href="/playlists"/>{!playlistsLoaded ? <CardGridSkeleton/> : topPlaylists.length ? <div className="playlist-strip">{topPlaylists.map((playlist) => <a className="playlist-card" href={`/playlists/${encodeURIComponent(playlist.id)}`} key={playlist.id}><span className="playlist-art"><img src={playlist.thumbnail} alt=""/><span>{playlist.itemCount} videos</span></span><strong>{playlist.title}</strong><small>{playlist.channelTitle}</small></a>)}</div> : <div className="playlist-empty"><Icon name="list" size={20}/><span>Playlists will appear here as they become available.</span></div>}</section>
       <section className="home-section past-section" id="library"><SectionTitle icon="grid" title="Past Meetings" onViewAll={() => setShowAllMeetings(!showAllMeetings)}/>{!playlistsLoaded ? <CardGridSkeleton/> : pastPlaylists.length ? <div className="meeting-grid">{pastPlaylists.map((playlist) => <a className="meeting-card" href={`/playlists/${encodeURIComponent(playlist.id)}`} key={playlist.id}><img src={playlist.thumbnail} alt=""/><span className="meeting-gradient"/><span className="meeting-copy"><strong>{playlist.title}</strong><small>{playlist.itemCount} videos · {playlist.channelTitle}</small></span></a>)}</div> : <div className="playlist-empty"><Icon name="grid" size={20}/><span>Meeting series will appear here as they become available.</span></div>}</section>
+      {[{ label: "2 years ago", items: twoYearVideos }, { label: "4 years ago", items: fourYearVideos }].map(({ label, items }, archiveIndex) => <section className="home-section archive-section" key={label}>
+        <div className="archive-heading"><h2>{label}</h2><span>{items.length} videos</span></div>
+        {!videosLoaded ? <VideoListSkeleton/> : items.length ? <div className="archive-list">{chunks(items, 3).map((row, rowIndex) => <div className="archive-row" key={`${label}-${rowIndex}`}>
+          {row.map((video, itemIndex) => {
+            const isFeature = itemIndex === 0;
+            const autoPlay = archiveIndex === 0 && rowIndex === 0 && itemIndex === 0 && video.embeddable !== false;
+            return <article className={`archive-video${isFeature ? " archive-video-feature" : " archive-video-small"}`} key={video.id}>
+              {autoPlay ? <div className="archive-player"><iframe src={`https://www.youtube-nocookie.com/embed/${video.id}?autoplay=1&mute=1&rel=0`} title={video.title} allow="accelerometer; autoplay; clipboard-write; encrypted-media; gyroscope; picture-in-picture; web-share" allowFullScreen/></div> : <button className="archive-thumb" onClick={() => setWatching(video)} aria-label={`Watch ${video.title}`}><img src={video.thumbnail} alt=""/><span className="archive-play"><Icon name="play" size={18}/></span></button>}
+              <button className="archive-copy" onClick={() => setWatching(video)}><strong>{video.website?.displayTitle || video.title}</strong><small>{video.channelTitle} · {formatDate(video.publishedAt)}</small></button>
+            </article>;
+          })}
+        </div>)}</div> : <div className="playlist-empty"><Icon name="play" size={20}/><span>No videos from {label} are available in the connected channels.</span></div>}
+      </section>)}
       <section className="home-section channels-section" id="channels"><SectionTitle icon="grid" title="Our Channels" href="#channels"/>{!channelsLoaded ? <CardGridSkeleton/> : channels.length ? <div className="channel-strip">{channels.map((channel) => <a className="public-channel" href={channel.customUrl ? `https://www.youtube.com/${channel.customUrl}` : `https://www.youtube.com/channel/${channel.id}`} target="_blank" rel="noreferrer" key={channel.id}><img src={channel.thumbnail} alt=""/><span><strong>{channel.title}</strong><small>Explore channel</small></span><Icon name="chevron" size={16}/></a>)}</div> : <p className="channel-empty">A growing collection of messages, ministries, and music.</p>}</section>
     <footer className="site-footer"><span>© Pioneers Of Our Faith</span><div style={{ display: "flex", gap: 16, flexWrap: "wrap" }}><a href="/privacy-policy">Privacy Policy</a><a href="/terms-of-use">Terms of Use</a><a href="/cookies-policy">Cookies Policy</a><a href="/contact">Contact us</a></div></footer>
     {shareNotice && <div className="share-notice" role="status">{shareNotice}</div>}

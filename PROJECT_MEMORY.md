@@ -1,5 +1,23 @@
 # Project Memory
 
+## 2026-10-04: Featured playlists heading accent
+
+- **Major changes:** Changed the icon before “Featured Playlists” from black to the site’s red accent so the heading stands out.
+- **Errors and fixes:** No build/runtime errors encountered during this change.
+- **Verification:** Not run.
+
+## 2026-10-04: Homepage older-video archives
+
+- **Major changes:** Added two homepage video archives directly below Past Meetings for videos published in the calendar years two and four years before the current year. Each archive shows up to 15 videos in repeating groups of one wide video and two smaller videos. The first embeddable video in the two-year archive autoplays muted inline; other videos open the existing player when selected. Raised the homepage Firestore video query cap from 300 to 1,000 so older archive items are more likely to be in the loaded catalog.
+- **Errors and fixes:** No build/runtime errors encountered during this change.
+- **Verification:** Not run.
+
+## 2026-10-04: Public mobile breadcrumb text encoding
+
+- **Major changes:** Replaced mojibake punctuation on the contact and playlist pages with valid Unicode, including the Home back arrow, contact label separator, playlist controls, and contact status messages. This fixes the garbled breadcrumb visible on mobile and cleans up adjacent labels in the same views.
+- **Errors and fixes:** No build/runtime errors encountered during this change.
+- **Verification:** `rg` confirmed the affected public page components no longer contain mojibake. Build and lint not run.
+
 ## 2026-10-04: Public search, empty states, and shared loading UI
 
 - **Major changes:** Search mode now uses the full public header row on desktop and mobile. Removed public links to administrator tools and removed the YouTube channel connection prompt from the public video empty state. Added reusable skeleton loading components and used them for homepage videos, playlists, and channels, playlist data, and Zoom meetings. Updated the Zoom page header to use a plain meeting schedule label and corrected its broken arrows and apostrophe; added visible calendar, clock, and join icons to meeting details and actions.
