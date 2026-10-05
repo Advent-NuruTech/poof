@@ -16,13 +16,23 @@ function MeetingIcon({ name }: { name: "calendar" | "clock" | "arrow" }) {
 }
 
 function MeetingCard({ meeting, status, now }: { meeting: Meeting; status: string; now: number }) {
+  async function shareMeeting() {
+    const url = `${window.location.origin}/meetings/${encodeURIComponent(meeting.id)}`;
+    try {
+      if (navigator.share) await navigator.share({ url });
+      else await navigator.clipboard.writeText(url);
+    } catch (error) {
+      if (error instanceof Error && error.name === "AbortError") return;
+      try { await navigator.clipboard.writeText(url); } catch { /* Sharing is unavailable in this browser. */ }
+    }
+  }
   return <article className="zoom-meeting-card">
     {meeting.posterUrl && <div className="zoom-poster"><img src={meeting.posterUrl} alt={`${meeting.title} poster`}/></div>}
     <div className="zoom-meeting-copy"><span className={`meeting-status status-${status}`}>{status}</span><h2>{meeting.title}</h2>
       {meeting.description && <p>{meeting.description}</p>}
       <div className="zoom-meeting-meta"><span><MeetingIcon name="calendar"/>{formatMeetingDate(meeting.startsAt)}</span><span><MeetingIcon name="clock"/>{formatMeetingTime(meeting)}</span></div>
       <p className="meeting-format">{meeting.meetingType === "onsite" ? `Onsite · ${meeting.venue ?? "Venue to be announced"}` : "Online"}</p>
-      {meetingJoinVisible(meeting, now) && <a className="zoom-join-button" href={meeting.meetingUrl} target="_blank" rel="noreferrer">Join meeting <MeetingIcon name="arrow"/></a>}
+      <div className="meeting-actions"><button className="meeting-share-button" type="button" onClick={() => void shareMeeting()} aria-label={`Share ${meeting.title}`} title="Share event"><svg width="17" height="17" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true"><circle cx="18" cy="5" r="3"/><circle cx="6" cy="12" r="3"/><circle cx="18" cy="19" r="3"/><path d="m8.7 10.7 6.6-4.4m-6.6 7 6.6 4.2"/></svg><span>Share</span></button>{meetingJoinVisible(meeting, now) && <a className="zoom-join-button" href={meeting.meetingUrl} target="_blank" rel="noreferrer">Join meeting <MeetingIcon name="arrow"/></a>}</div>
     </div>
   </article>;
 }

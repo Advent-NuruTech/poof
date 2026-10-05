@@ -1,5 +1,13 @@
 # Project Memory
 
+## 2026-10-04: Prayer request inbox and admin notifications
+
+- **Major changes:** Reused the public contact form component for a new `/prayer-request` page with prayer-specific copy and submission labeling. Contact and prayer submissions share the `contacts` Firestore collection through a bounded `category` field, and the admin inbox now displays both types.
+- **Major changes:** Added a real-time admin notification bell to the channel dashboard and contact inbox. It watches new inbox records, shows contact/prayer labels and a count, links to the inbox, and stores the per-admin read timestamp in local storage.
+- **Security:** Updated Firestore contact creation rules to require `category` to be either `contact` or `prayer`, while retaining bounded name, email, phone, message, and server timestamp validation.
+- **Errors and fixes:** Targeted ESLint initially flagged synchronous read-state initialization inside an effect and an internal home anchor. The notification bell now uses lazy state initialization, and the contact header uses `next/link`.
+- **Verification:** `npm.cmd run build` completed successfully, including the new `/prayer-request` route. Targeted ESLint completed with zero errors and two existing `no-img-element` warnings in `channel-manager.tsx`. `git diff --check` passed.
+
 ## 2026-10-04: Footer animation and link alignment
 
 - **Major changes:** Updated the Advent Nurutech credit to type in blue on a continuous loop. Footer links now stay aligned in a centered side-by-side row on larger screens and wrap cleanly on narrow screens.
@@ -142,3 +150,9 @@ Record verified errors and fixes, plus major changes, here. Review this file bef
 - **Major changes:** Admin meeting creation now supports online and onsite events. Online links are optional and appear on the public meeting schedule only during the hour before start and while the event is ongoing; onsite events require a venue. Public meeting cards show Upcoming, Ongoing, or Completed status, and the mobile Zoom tab shows a red count for upcoming and ongoing events.
 - **Errors and fixes:** Targeted ESLint initially flagged impure Date.now() state initialization and synchronous state updates inside effects. Clock state now starts at a stable value and updates from scheduled callbacks. The initial page lint also found a raw internal home link, changed to Next Link.
 - **Verification:** Targeted ESLint completed with zero errors and existing image element warnings; git diff --check passed. No build/runtime errors encountered.
+
+## 2026-10-04: Shareable event links and previews
+
+- **Major changes:** Added a Share action to each public event card using the native share sheet or copying the direct /meetings/{eventId} URL. Added a direct event page and server-generated Open Graph/Twitter metadata from the public Firestore record, including its description and poster image when available; the share payload includes only the URL.
+- **Errors and fixes:** No build/runtime errors encountered.
+- **Verification:** Targeted ESLint completed with zero errors and two existing image element warnings; git diff --check passed. Build not run.
