@@ -1,5 +1,11 @@
 # Project Memory
 
+## 2026-10-04: Playlist archive order and footer credit
+
+- **Major changes:** Kept the original Featured Playlists section and added a second playlist listing after Most Viewed. Older-video archive cards now show the description below the title, falling back to the channel name when the description is empty. Added a Fundamental Principles footer link and a restrained typing animation for the “Powered by Advent Nurutech” credit, with reduced-motion support.
+- **Errors and fixes:** No build/runtime errors encountered during this change.
+- **Verification:** Not run.
+
 ## 2026-10-04: Most-viewed homepage archive
 
 - **Major changes:** Added a “Most Viewed” homepage section after the four-year archive, selecting up to 12 loaded videos by YouTube view count and using the same alternating wide/small layout. “Faith of the Pioneers” remains a description fallback only when a video has no description.
