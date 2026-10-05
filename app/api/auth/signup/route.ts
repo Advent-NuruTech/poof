@@ -24,7 +24,7 @@ export async function POST(request: Request) {
   let invitePath = "";
   if (invite) {
     if (invite.length < 16 || invite.length > 128 || !/^[A-Za-z0-9_-]+$/.test(invite)) return NextResponse.json({ error: "This invitation link is invalid." }, { status: 400 });
-    invitePath = `https://firestore.googleapis.com/v1/projects/${encodeURIComponent(projectId)}/databases/(default)/documents/adminInvites/${encodeURIComponent(invite)}`;
+    invitePath = `https://firestore.googleapis.com/v1/projects/${encodeURIComponent(projectId)}/databases/(default)/documents/adminInvites/${encodeURIComponent(invite)}?key=${encodeURIComponent(apiKey)}`;
     const inviteResponse = await fetch(invitePath, { cache: "no-store" });
     if (!inviteResponse.ok) return NextResponse.json({ error: "This invitation has expired or was already used." }, { status: 403 });
     const invitation = await inviteResponse.json() as { fields?: { email?: { stringValue?: string }; used?: { booleanValue?: boolean }; expiresAt?: { timestampValue?: string } } };
@@ -52,7 +52,7 @@ export async function POST(request: Request) {
     }
     const created = await response.json() as { idToken?: string };
     if (invite && created.idToken) {
-      const acceptResponse = await fetch(`${invitePath}?updateMask.fieldPaths=used`, {
+      const acceptResponse = await fetch(`${invitePath}&updateMask.fieldPaths=used`, {
         method: "PATCH",
         headers: { Authorization: `Bearer ${created.idToken}`, "Content-Type": "application/json" },
         body: JSON.stringify({ fields: { used: { booleanValue: true } } }),

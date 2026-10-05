@@ -1,5 +1,11 @@
 # Project Memory
 
+## 2026-10-04: Mobile video archive layout
+
+- **Major changes:** On mobile, each older-video group now stacks the wide video across the content width, followed by two smaller portrait cards side by side, matching the supplied YouTube mobile reference.
+- **Errors and fixes:** No build/runtime errors encountered during this change.
+- **Verification:** Not run.
+
 ## 2026-10-04: Archive row alternation
 
 - **Major changes:** Alternated older-video archive rows so every other wide video appears on the right, removed the archive video-count labels, and hide the four-year section when its videos have loaded and none are available.

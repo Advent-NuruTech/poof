@@ -46,7 +46,7 @@ export default function SigninPage() {
       <button className="primary-button" disabled={busy}>{busy ? "Signing in…" : "Sign in"}</button>
     </form>
     <div className="auth-divider">or</div>
-    <button className="outline-button auth-google" onClick={() => { setError(""); void signInWithGoogle().then(async (credential) => { if ("user" in credential) { await startAdminSession(credential.user); router.replace("/admin"); } }).catch((reason) => setError(reason instanceof Error ? reason.message : "Google sign-in failed.")); }}>Continue with Google</button>
+    <button className="outline-button auth-google" onClick={() => { setError(""); void signInWithGoogle().then(async (credential) => { if (credential && "user" in credential) { await startAdminSession(credential.user); router.replace("/admin"); } }).catch((reason) => setError(reason instanceof Error ? reason.message : "Google sign-in failed.")); }}>Continue with Google</button>
     <p className="auth-switch">Need an account? <Link href="/signup">Sign up with a code</Link></p>
   </section></main>;
 }
