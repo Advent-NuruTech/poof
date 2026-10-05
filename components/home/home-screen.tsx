@@ -5,10 +5,12 @@ import { useEffect, useState } from "react";
 import type { ReactNode } from "react";
 import { db } from "@/lib/firebase";
 import { formatDate, formatDuration, type Channel, type Playlist, type Video } from "@/lib/catalog";
+import { eventGroups, formatMeetingDay, formatMeetingTime, meetingJoinVisible, type EventStatus, type Meeting } from "@/lib/meetings";
+import MeetingCountdown from "@/components/home/meeting-countdown";
 import MobileBottomNav from "@/components/home/mobile-bottom-nav";
-import { CardGridSkeleton, VideoListSkeleton } from "@/components/home/skeleton";
+import { CardGridSkeleton, MeetingListSkeleton, VideoListSkeleton } from "@/components/home/skeleton";
 
-function Icon({ name, size = 22 }: { name: "search" | "user" | "play" | "list" | "grid" | "home" | "camera" | "menu" | "chevron" | "close"; size?: number }) {
+function Icon({ name, size = 22 }: { name: "search" | "user" | "play" | "list" | "grid" | "home" | "camera" | "menu" | "chevron" | "close" | "calendar"; size?: number }) {
   const common = { width: size, height: size, viewBox: "0 0 24 24", fill: "none", stroke: "currentColor", strokeWidth: 2, strokeLinecap: "round" as const, strokeLinejoin: "round" as const, "aria-hidden": true as const };
   const paths: Record<string, ReactNode> = {
     search: <><circle cx="11" cy="11" r="7.5"/><path d="m16.5 16.5 4 4"/></>,
@@ -19,13 +21,24 @@ function Icon({ name, size = 22 }: { name: "search" | "user" | "play" | "list" |
     home: <><path d="m3 10 9-7 9 7v10a1 1 0 0 1-1 1h-5v-7H9v7H4a1 1 0 0 1-1-1V10Z" fill="currentColor" stroke="none"/></>,
     camera: <><rect x="3" y="7" width="18" height="13" rx="3"/><path d="m8 7 1.5-3h5L16 7M12 11v5m-2.5-2.5h5"/><circle cx="17.5" cy="10.5" r=".5" fill="currentColor"/></>,
     menu: <><circle cx="5" cy="12" r="1" fill="currentColor"/><circle cx="12" cy="12" r="1" fill="currentColor"/><circle cx="19" cy="12" r="1" fill="currentColor"/></>,
+    calendar: <><rect x="3" y="5" width="18" height="16" rx="2"/><path d="M16 3v4M8 3v4M3 10h18"/></>,
     chevron: <path d="m9 18 6-6-6-6"/>, close: <><path d="m18 6-12 12M6 6l12 12"/></>,
   };
   return <svg {...common}>{paths[name]}</svg>;
 }
 
-function SectionTitle({ icon, title, href = "#library", onViewAll }: { icon: "list" | "grid"; title: string; href?: string; onViewAll?: () => void }) {
+function SectionTitle({ icon, title, href = "#library", onViewAll }: { icon: "list" | "grid" | "calendar"; title: string; href?: string; onViewAll?: () => void }) {
   return <div className="home-section-title"><h2><Icon name={icon} size={23}/>{title}</h2>{onViewAll ? <button onClick={onViewAll}>View all <Icon name="chevron" size={16}/></button> : <a href={href}>View all <Icon name="chevron" size={16}/></a>}</div>;
+}
+
+function EventRow({ meeting, status, now }: { meeting: Meeting; status: EventStatus; now: number }) {
+  return <article className="event-row">
+    <span className={`meeting-status status-${status}`}>{status}</span>
+    <div className="event-row-copy"><strong>{meeting.title}</strong><small>{formatMeetingDay(meeting.startsAt)} · {formatMeetingTime(meeting)}</small><MeetingCountdown meeting={meeting}/></div>
+    {meetingJoinVisible(meeting, now)
+      ? <a className="event-row-link event-row-join" href={meeting.meetingUrl} target="_blank" rel="noreferrer">Join now <Icon name="chevron" size={15}/></a>
+      : <a className="event-row-link" href={`/meetings/${encodeURIComponent(meeting.id)}`}>Details <Icon name="chevron" size={15}/></a>}
+  </article>;
 }
 
 function chunks<T>(items: T[], size: number) {
@@ -46,7 +59,9 @@ export default function HomeScreen() {
   const [watching, setWatching] = useState<Video | null>(null);
   const [selectedPlaylist, setSelectedPlaylist] = useState<Playlist | null>(null);
   const [showAllVideos, setShowAllVideos] = useState(false);
-  const [showAllMeetings, setShowAllMeetings] = useState(false);
+  const [meetings, setMeetings] = useState<Meeting[]>([]);
+  const [meetingsLoaded, setMeetingsLoaded] = useState(false);
+  const [now, setNow] = useState(0);
   const [heroIndex, setHeroIndex] = useState(0);
   const [shareNotice, setShareNotice] = useState("");
 
@@ -94,6 +109,12 @@ export default function HomeScreen() {
     return () => subscriptions.forEach((unsubscribe) => unsubscribe());
   }, [activeChannelKey, channelsLoaded]);
 
+  useEffect(() => onSnapshot(collection(db, "meetings"), (snapshot) => {
+    setMeetings(snapshot.docs.map((entry) => ({ ...entry.data(), id: entry.id }) as Meeting));
+    setMeetingsLoaded(true);
+  }, () => { setMeetings([]); setMeetingsLoaded(true); }), []);
+  useEffect(() => { const initial = window.setTimeout(() => setNow(Date.now()), 0); const timer = window.setInterval(() => setNow(Date.now()), 30_000); return () => { window.clearTimeout(initial); window.clearInterval(timer); }; }, []);
+
   const channelIds = new Set(channels.map((channel) => channel.id));
   const activeVideos = videos.filter((video) => video.catalogChannelIds?.some((id) => channelIds.has(id)));
   const currentYear = new Date().getFullYear();
@@ -115,8 +136,7 @@ export default function HomeScreen() {
   }, [heroItems.length]);
   const allTopPlaylists = activePlaylists.filter((playlist) => playlist.website?.featured).concat(activePlaylists.filter((playlist) => !playlist.website?.featured));
   const topPlaylists = allTopPlaylists.slice(0, 8);
-  const allPastPlaylists = activePlaylists.filter((playlist) => /meeting|rally|workshop|camp|conference|retreat/i.test(playlist.title));
-  const pastPlaylists = showAllMeetings ? allPastPlaylists : allPastPlaylists.slice(0, 8);
+  const eventGroupsShown = eventGroups(meetings, now).map((group) => ({ ...group, meetings: group.meetings.slice(0, group.status === "ongoing" ? 4 : 3) })).filter((group) => group.meetings.length);
   const visibleVideos = showAllVideos ? latest : latest.slice(0, 6);
 
   async function shareVideo(video: Video) {
@@ -154,8 +174,11 @@ export default function HomeScreen() {
     <div className="home-content">
       <section className="home-section latest-section" id="latest"><SectionTitle icon="list" title={search ? "Search results" : "Latest Videos"} onViewAll={() => setShowAllVideos(!showAllVideos)}/>
         {!videosLoaded ? <VideoListSkeleton/> : visibleVideos.length ? <div className="latest-list">{visibleVideos.map((video) => <article className="latest-card" key={video.id}><button className="video-thumb" onClick={() => setWatching(video)} aria-label={`Watch ${video.title}`}><img src={video.thumbnail} alt=""/><span className="duration-tag">{formatDuration(video.duration)}</span><span className="thumb-play"><Icon name="play" size={17}/></span></button><button className="video-copy" onClick={() => setWatching(video)}><strong>{video.website?.displayTitle || video.title}</strong><time>{formatDate(video.publishedAt)}</time><span className="video-description">{video.description?.trim() || video.channelTitle}</span></button><button className="more-button" aria-label={`Share ${video.title}`} title="Share video" onClick={() => void shareVideo(video)}><Icon name="menu"/></button></article>)}</div> : <div className="empty-home"><span className="empty-video-icon"><Icon name="play" size={19}/></span><div><strong>{search ? "No videos found" : "Videos will appear here soon"}</strong><p>{search ? "Try another title, topic, or channel." : "New videos and messages will be added to the library as they become available."}</p></div></div>}</section>
+      <section className="home-section events-section" id="events"><SectionTitle icon="calendar" title="Events" href="/meetings"/>{!meetingsLoaded ? <MeetingListSkeleton/> : eventGroupsShown.length ? <div className="event-groups">{eventGroupsShown.map((group) => <div className="event-group" key={group.status}>
+        <h3 className="event-group-title">{group.label}<span>{group.meetings.length}</span></h3>
+        <div className="event-list">{group.meetings.map((meeting) => <EventRow key={meeting.id} meeting={meeting} status={group.status} now={now}/>)}</div>
+      </div>)}</div> : <div className="playlist-empty"><Icon name="calendar" size={20}/><span>Events will appear here as they become available.</span></div>}</section>
       <section className="home-section" id="featured-playlists"><SectionTitle icon="list" title="Featured Playlists" href="/playlists"/>{!playlistsLoaded ? <CardGridSkeleton/> : topPlaylists.length ? <div className="playlist-strip">{topPlaylists.map((playlist) => <a className="playlist-card" href={`/playlists/${encodeURIComponent(playlist.id)}`} key={playlist.id}><span className="playlist-art"><img src={playlist.thumbnail} alt=""/><span>{playlist.itemCount} videos</span></span><strong>{playlist.title}</strong><small>{playlist.channelTitle}</small></a>)}</div> : <div className="playlist-empty"><Icon name="list" size={20}/><span>Playlists will appear here as they become available.</span></div>}</section>
-      <section className="home-section past-section" id="library"><SectionTitle icon="grid" title="Past Meetings" onViewAll={() => setShowAllMeetings(!showAllMeetings)}/>{!playlistsLoaded ? <CardGridSkeleton/> : pastPlaylists.length ? <div className="meeting-grid">{pastPlaylists.map((playlist) => <a className="meeting-card" href={`/playlists/${encodeURIComponent(playlist.id)}`} key={playlist.id}><img src={playlist.thumbnail} alt=""/><span className="meeting-gradient"/><span className="meeting-copy"><strong>{playlist.title}</strong><small>{playlist.itemCount} videos · {playlist.channelTitle}</small></span></a>)}</div> : <div className="playlist-empty"><Icon name="grid" size={20}/><span>Meeting series will appear here as they become available.</span></div>}</section>
       {[{ label: "2 years ago", items: twoYearVideos }, { label: "4 years ago", items: fourYearVideos }, { label: "Most Viewed", items: mostViewedVideos }].map(({ label, items }, archiveIndex) => ((archiveIndex > 0) && videosLoaded && !items.length) ? null : <section className="home-section archive-section" key={label}>
         <div className="archive-heading"><h2>{label}</h2></div>
         {!videosLoaded ? <VideoListSkeleton/> : items.length ? <div className="archive-list">{chunks(items, 3).map((row, rowIndex) => <div className={`archive-row${rowIndex % 2 ? " archive-row-reverse" : ""}`} key={`${label}-${rowIndex}`}>

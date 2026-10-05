@@ -6,6 +6,7 @@ import { useEffect, useState } from "react";
 import MobileBottomNav from "@/components/home/mobile-bottom-nav";
 import { db } from "@/lib/firebase";
 import { formatMeetingDate, formatMeetingTime, meetingJoinVisible, meetingStatus, type Meeting } from "@/lib/meetings";
+import MeetingCountdown from "@/components/home/meeting-countdown";
 
 export default function MeetingDetail({ id }: { id: string }) {
   const [meeting, setMeeting] = useState<Meeting | null>(null);
@@ -22,6 +23,7 @@ export default function MeetingDetail({ id }: { id: string }) {
       <div className="zoom-meeting-copy"><span className={`meeting-status status-${meetingStatus(meeting, now)}`}>{meetingStatus(meeting, now)}</span><h2>{meeting.title}</h2>
         {meeting.description && <p>{meeting.description}</p>}
         <div className="zoom-meeting-meta"><span>{formatMeetingDate(meeting.startsAt)}</span><span>{formatMeetingTime(meeting)}</span></div>
+        <MeetingCountdown meeting={meeting}/>
         <p className="meeting-format">{meeting.meetingType === "onsite" ? `Onsite · ${meeting.venue ?? "Venue to be announced"}` : "Online"}</p>
         {meetingJoinVisible(meeting, now) && <a className="zoom-join-button" href={meeting.meetingUrl} target="_blank" rel="noreferrer">Join meeting</a>}
       </div>
