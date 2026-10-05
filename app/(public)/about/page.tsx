@@ -29,6 +29,7 @@ export default function AboutPage() {
       <h2 style={{ fontSize: 24, marginTop: 32 }}>How to Join</h2>
       <p>To protect our meetings and keep our fellowship peaceful, we share the meeting link privately. <strong>To join our online meetings, please request the link:</strong></p>
       <p style={{ marginTop: 16 }}><Link href="/meeting-link-request" style={{ color: "#c51c31", fontWeight: 600 }}>Request the next Zoom meeting link</Link></p>
+      <p><a href="mailto:birdmanjo@gmail.com" style={{ color: "#c51c31", fontWeight: 600 }}>birdmanjo@gmail.com</a></p>
       <p>Tell us your name and country, and our team will review your request.</p>
 
       <div style={{ marginTop: 48, paddingTop: 24, borderTop: "1px solid #e8e9e6" }}><Link href="/" style={{ color: "#666", fontSize: 14 }}>← Back to home</Link></div>

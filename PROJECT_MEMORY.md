@@ -1,5 +1,12 @@
 # Project Memory
 
+## 2026-10-05: Desktop navigation parity with mobile
+
+- **Major changes:** Updated the homepage desktop navigation from a plain text row to a compact, icon-led pill navigation. It now uses the same destination language as the mobile tab bar (Home, Playlists, Channels, Zoom, and Contact), clearly marks the current page, has keyboard-visible focus treatment, and keeps route transitions on internal destinations using `next/link`.
+- **Design guideline:** Keep desktop and mobile navigation behavior, destinations, active states, and accessibility practices in parity. As mobile navigation best practices improve, review and apply the relevant improvements to the desktop navigation as well (and vice versa) so both views stay current.
+- **Errors and fixes:** No build or runtime errors encountered during this change.
+- **Verification:** `npx.cmd tsc --noEmit`, `npm.cmd run build`, and `git diff --check` pass.
+
 ## 2026-10-05: Professional footer layout (white background, typing animation kept)
 
 - **Major changes:** Rebuilt the homepage footer markup in `components/home/home-screen.tsx` as `.site-footer > .footer-inner`, holding a real `<nav className="footer-links" aria-label="Footer navigation">`, the existing `.powered-by` typing-animation span, then the copyright `<p className="footer-copyright">`. Rendered order is links → typing animation → copyright, so the copyright sits below the "Powered by Advent Nurutech" line. Copyright text is now "© Faith of the Pioneers. All rights reserved."
@@ -113,6 +120,13 @@ Record verified errors and fixes, plus major changes, here. Review this file bef
 - **Major changes:** Converted homepage internal navigation and footer navigation to `next/link`. The Advent Nurutech credit is now a mailto link with a prefilled request message for website and YouTube-channel services.
 - **Major changes:** Added a live Most Viewed Videos section to `/about`, ranking available Firestore videos by `statistics.viewCount`.
 - **Errors and fixes:** Fixed the homepage hook lint errors by removing synchronous loading-state writes from effects and letting Firestore callbacks/empty-state callbacks update them asynchronously. Targeted ESLint now reports zero errors; remaining findings are image optimization warnings only. TypeScript, production build, and `git diff --check` pass.
+
+## 2026-10-05: Flat About library, WhatsApp CTA, and Zoom email handoff
+
+- **Major changes:** Removed the boxed-card treatment from About-page Most Viewed videos so the rows sit directly on the page with the same quiet background treatment as homepage latest-video rows.
+- **Major changes:** Changed the Powered by Advent Nurutech CTA to WhatsApp number `254142225233` with a prefilled service message.
+- **Major changes:** Zoom-link requests now label the phone field as WhatsApp number and require it. After the request is saved to Firestore, the browser opens a prefilled email to `birdmanjo@gmail.com` containing the requester details and Zoom-link request.
+- **Verification:** `npx.cmd tsc --noEmit` and `npm.cmd run build` pass with 24 routes. Targeted ESLint has zero errors and only existing `no-img-element` warnings. `git diff --check` passes.
 
 ## 2026-10-04: Signup code and protected admin routes
 
