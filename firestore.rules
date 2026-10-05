@@ -126,7 +126,7 @@ service cloud.firestore {
 
     match /contacts/{contactId} {
       allow create: if request.resource.data.keys().hasOnly(['category', 'name', 'email', 'phone', 'message', 'createdAt'])
-        && request.resource.data.category in ['contact', 'prayer']
+        && request.resource.data.category in ['contact', 'prayer', 'meeting-link']
         && request.resource.data.name is string
         && request.resource.data.name.size() > 0
         && request.resource.data.name.size() <= 120

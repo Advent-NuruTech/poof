@@ -11,7 +11,7 @@ export default function TermsOfUsePage() {
       <section style={{ maxWidth: 760, margin: "32px auto 0", lineHeight: 1.7, fontSize: 15, color: "#333" }}>
         <h2 style={{ fontSize: 22, marginTop: 32 }}>1. Acceptance of Terms</h2>
         <p>
-          By accessing and using this website ("Pioneers of Our Faith"), you accept and agree to be bound by the
+          By accessing and using this website ("Faith of the Pioneers"), you accept and agree to be bound by the
           terms and provisions of this agreement. If you do not agree to these terms, please do not use this website.
         </p>
 

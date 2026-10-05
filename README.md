@@ -1,4 +1,4 @@
-# Pioneers of Our Faith
+# Faith of the Pioneers
 
 A responsive YouTube catalog. YouTube owns source video and playlist metadata; the website stores a synchronized presentation catalog and website-only editorial fields in Cloud Firestore.
 

@@ -11,7 +11,7 @@ export default function PrivacyPolicyPage() {
       <section style={{ maxWidth: 760, margin: "32px auto 0", lineHeight: 1.7, fontSize: 15, color: "#333" }}>
         <h2 style={{ fontSize: 22, marginTop: 32 }}>1. Introduction</h2>
         <p>
-          This website ("Pioneers of Our Faith") is a video catalog that displays content from YouTube channels.
+          This website ("Faith of the Pioneers") is a video catalog that displays content from YouTube channels.
           We respect your privacy and are committed to protecting it. This Privacy Policy explains how we collect,
           use, and safeguard your information when you visit our website.
         </p>

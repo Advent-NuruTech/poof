@@ -1,5 +1,22 @@
 # Project Memory
 
+## 2026-10-05: Professional footer layout (white background, typing animation kept)
+
+- **Major changes:** Rebuilt the homepage footer markup in `components/home/home-screen.tsx` as `.site-footer > .footer-inner`, holding a real `<nav className="footer-links" aria-label="Footer navigation">`, the existing `.powered-by` typing-animation span, then the copyright `<p className="footer-copyright">`. Rendered order is links → typing animation → copyright, so the copyright sits below the "Powered by Advent Nurutech" line. Copyright text is now "© Faith of the Pioneers. All rights reserved."
+- **Styling (`app/globals.css`):** `.site-footer` gained an explicit `background:#fff`, more vertical padding, and its own font size. `.footer-inner` is a new centered flex column (`max-width:1180px`) so the footer is no longer a single `justify-content:space-between` row. `.powered-by` is now centered instead of right-aligned with a `min-height:18px` so the line does not jump vertically while `max-width` animates. The `powered-type` / `powered-caret` keyframes and the `prefers-reduced-motion` override are unchanged, so the typing effect still behaves exactly as before. A stale `.site-footer{padding-bottom:4px}` mobile override was removed so it could not squash the taller footer.
+- **Errors and fixes:**
+  - **UTF-8 corruption (important, recurring).** Editing these files through PowerShell 5.1 (`Get-Content` → `Set-Content`) or through `py` scripts that read with `errors='replace'` and rewrite mojibake every non-ASCII character (`…` → `â€¦`, `“ ”` → `â€œ â€`, `‹ ›` → `â€¹ â€º`, `—` → `â€`, `©` → `Ac`). Only the `edit` tool round-trips these files safely. **Rule: never rewrite `components/home/*.tsx` or `app/globals.css` with shell string replacement; use the `edit` tool.** If a rewrite already happened, `git checkout --` the file and redo the change with `edit`.
+  - **`"use client"` lost from `components/home/contact-page.tsx`.** The same mangling dropped the directive, leaving a blank first line. `npx tsc --noEmit` then reported `TS1192: ... has no default export` and `TS2304: Cannot find name 'Link' / 'isPrayer'`, and `next build` failed with *"You're importing a module that depends on `useState` into a React Server Component module."* Fixed by restoring `"use client";` on line 1.
+  - **`git checkout --` clobbered uncommitted work.** The 2026-10-04 "Faith of the Pioneers" rename had never been committed, so reverting `home-screen.tsx` to fix the mojibake also discarded the brand wordmark, brand `aria-label`, and hero kicker rename. Those were manually re-applied; the rename is now split across two separate commits' worth of uncommitted work, so avoid blanket reverts of these files.
+- **Verification:** `npx tsc --noEmit` clean. `npm run lint` unchanged at the pre-existing 36 errors / 22 warnings. `npm run build` succeeds, 21 routes prerendered.
+
+## 2026-10-04: Site renamed to Faith of the Pioneers
+
+- **Major changes:** Renamed the website from "Pioneers of Our Faith" to "Faith of the Pioneers" in every user-facing string: `metadata.title`/`metadata.description` in `app/layout.tsx`, the header brand wordmark and its `aria-label`, the hero kicker fallback text, the footer copyright, the Terms of Use and Privacy Policy definitions of the site, the Fundamental Principles placeholder copy, and the `README.md` title.
+- **Note:** `PROJECT.md` still uses "Pioneers of Our Faith" as an example *YouTube channel* name in its sample channel lists and channel-page mockups; those were intentionally left unchanged because they describe channel data, not the site name.
+- **Errors and fixes:** No build or runtime errors. Only string literals changed, so no behavior or styling was affected.
+- **Verification:** `npx tsc --noEmit` reported no errors. `npm run lint` reports the same 36 pre-existing errors and 22 warnings as before the change (raw `<a>` internal links, `no-img-element`, `react-hooks/set-state-in-effect`); no new findings were introduced.
+
 ## 2026-10-04: Homepage meetings section, live countdowns, and Zoom search/filter
 
 - **Major changes:** The homepage "Past Meetings" block was driven by a playlist-title regex (`/meeting|rally|workshop|camp|conference|retreat/i`) instead of real meeting records, so it showed nothing useful. It is now a "Meetings" section fed by the `meetings` collection, ordered Ongoing → Upcoming → Completed, and placed above the playlist sections, which are unchanged. The playlist page component and `/playlists` routes were not touched.
@@ -82,6 +99,20 @@
 - **Verification:** `git diff --check` completed without whitespace errors. Build and lint not run.
 
 Record verified errors and fixes, plus major changes, here. Review this file before related work to avoid repeating known issues in future versions.
+
+## 2026-10-05: Homepage ministry card and Zoom link requests
+
+- **Major changes:** Added a responsive About the Ministry card beside Latest Videos on desktop and directly below Latest Videos on mobile. The card links to the full About page and to a new Zoom meeting link request form.
+- **Major changes:** Added `/meeting-link-request`, stored submissions as `contacts.category = "meeting-link"`, expanded Firestore validation, and added `/admin/link-requests` plus dashboard and notification links for administrators.
+- **Repair:** `components/home/contact-page.tsx` was an empty file in the working tree even though the public contact and prayer routes imported it. Restored the existing contact/prayer form behavior and added the meeting-link mode.
+- **Errors and fixes:** `npx tsc --noEmit` was blocked by the Windows PowerShell execution policy for `npx.ps1`; reran the same check with `npx.cmd tsc --noEmit`, which passed. `npm.cmd run build` passed with 24 routes, including the new public and admin routes.
+
+## 2026-10-05: Homepage readability, channel fallbacks, and About library
+
+- **Major changes:** Increased homepage and About-page typography, removed the About-card forced full-height behavior that created a long empty desktop panel, and added a YouTube play-mark fallback when a connected channel has no usable profile image.
+- **Major changes:** Converted homepage internal navigation and footer navigation to `next/link`. The Advent Nurutech credit is now a mailto link with a prefilled request message for website and YouTube-channel services.
+- **Major changes:** Added a live Most Viewed Videos section to `/about`, ranking available Firestore videos by `statistics.viewCount`.
+- **Errors and fixes:** Fixed the homepage hook lint errors by removing synchronous loading-state writes from effects and letting Firestore callbacks/empty-state callbacks update them asynchronously. Targeted ESLint now reports zero errors; remaining findings are image optimization warnings only. TypeScript, production build, and `git diff --check` pass.
 
 ## 2026-10-04: Signup code and protected admin routes
 
