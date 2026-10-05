@@ -23,9 +23,9 @@ export default function MeetingsManager() {
   const [error, setError] = useState("");
   const [notice, setNotice] = useState("");
 
-  useEffect(() => onAuthStateChanged(auth, (current) => { setUser(current); setReady(true); }), []);
+  useEffect(() => onAuthStateChanged(auth, (current) => { setUser(current); setReady(true); if (!current) setIsAdmin(false); }), []);
   useEffect(() => {
-    if (!user) { setIsAdmin(false); return; }
+    if (!user) return;
     let active = true;
     const adminRef = doc(db, "admins", user.uid);
     getDoc(adminRef).then(async (snapshot) => {

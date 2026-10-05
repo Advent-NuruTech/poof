@@ -1,5 +1,11 @@
 # Project Memory
 
+## 2026-10-04: Most-viewed homepage archive
+
+- **Major changes:** Added a “Most Viewed” homepage section after the four-year archive, selecting up to 12 loaded videos by YouTube view count and using the same alternating wide/small layout. “Faith of the Pioneers” remains a description fallback only when a video has no description.
+- **Errors and fixes:** No build/runtime errors encountered during this change.
+- **Verification:** Not run.
+
 ## 2026-10-04: Mobile video archive layout
 
 - **Major changes:** On mobile, each older-video group now stacks the wide video across the content width, followed by two smaller portrait cards side by side, matching the supplied YouTube mobile reference.
@@ -46,7 +52,7 @@ Record verified errors and fixes, plus major changes, here. Review this file bef
 
 ## 2026-10-04: Signup code and protected admin routes
 
-- **Major changes:** Added `/signup` with server-side `SIGN_UP_CODE` validation before creating Firebase email/password accounts, and added `/signin` with email/password and Google options. The shared admin layout now withholds all admin page children until Firebase auth and the enabled admin record are verified; it also provisions the existing initial admin UID when needed. Added an owner-scoped `userProfiles` Firestore rule and documented `SIGN_UP_CODE` in `.env.example`.
+- **Major changes:** Added `/signup` with server-side `SIGN_UP_CODE` validation before creating Firebase email/password accounts, and added `/signin` with email/password and Google options. The shared admin layout withholds all admin page children until Firebase auth and the enabled admin record are verified. Added an owner-scoped `userProfiles` Firestore rule and documented `SIGN_UP_CODE` in `.env.example`.
 - **Security note:** Firestore rules cannot securely read a server `.env` value. The signup code is checked by `/api/auth/signup` and must not be copied into rules. Rules continue to restrict administrator data to enabled admins.
 - **Lint issue and fix:** The first lint pass flagged a synchronous `setState` in the admin layout effect. Initial readiness is now set from the Firebase auth listener callback, and the auth routes use `Link` and router navigation for internal routes.
 - **Verification:** `npm.cmd run build` completed successfully. ESLint passed for the admin layout, signup/signin pages, and signup API route. The full repo lint still reports 40 errors and 23 warnings in other existing/modified pages; those findings are outside the auth files changed here. `git diff --check` reported no whitespace errors.
@@ -54,8 +60,15 @@ Record verified errors and fixes, plus major changes, here. Review this file bef
 ## 2026-10-04: Admin auth navigation follow-up
 
 - **Major changes:** Removed the Channel administration link from the homepage footer. Successful email/password signup and sign-in now navigate to `/admin`.
-- **Access issue identified:** New Firebase accounts are not automatically administrators. The deployed Firestore rules only permit the initial allowlisted UID to create an `admins/{uid}` record, so a newly created user correctly remains denied. No Firebase Admin SDK or service-account credential is configured in `.env.local`; the server cannot securely grant admin role records until a trusted Firebase server credential is configured. Do not enable user self-promotion in Firestore rules, since that bypasses the signup-code gate.
+- **Access issue identified at the time:** New Firebase accounts were not administrators because the deployed rules permitted only one hard-coded UID to create an `admins/{uid}` record. This was superseded by the dynamic one-time bootstrap and invite rules below, which require no hard-coded account identity or service-account credential.
 - **Verification:** Pending after navigation change.
+
+## 2026-10-04: Dynamic admin bootstrap, invites, and expiring sessions
+
+- **Major changes:** Removed hard-coded initial administrator UIDs. The first account can atomically claim bootstrap admin access using the server-validated signup code; Firestore rules permit exactly one bootstrap claim. Existing admins can create email-bound, single-use invitation links that expire after two hours. Invite acceptance and admin creation are committed atomically. Admin roles expire after one hour, and `/admin` server-rendering requires a Firebase-verified `HttpOnly`, `SameSite=Lax` session cookie with a matching expiry. Sign-out clears the cookie. Signup invites can replace the general signup code.
+- **Access model:** After bootstrap, new administrator accounts must present an unexpired invite. A normal signup code alone does not grant an admin role. No account UID or email is hard-coded.
+- **Errors and fixes:** Targeted lint initially reported render-time ref writes and synchronous effect state updates in admin managers; refs now update in effects and auth state resets from the Firebase listener. No build errors after the fixes.
+- **Verification:** Production build passed. Targeted ESLint passed with four existing `no-img-element` warnings. Firestore rules were reviewed against the official `existsAfter`/`getAfter` and duration APIs; no Firebase emulator/CLI is installed to compile or exercise rules locally. `git diff --check` passed.
 
 ## 2026-10-04: Shared homepage branding and doctrine build fix
 

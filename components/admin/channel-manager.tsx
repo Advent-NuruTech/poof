@@ -1,6 +1,7 @@
 "use client";
 
 import { onAuthStateChanged, signOut, type User } from "firebase/auth";
+import Link from "next/link";
 import { collection, deleteDoc, doc, documentId, getCountFromServer, getDoc, getDocs, onSnapshot, query, runTransaction, serverTimestamp, setDoc, Timestamp, where, writeBatch } from "firebase/firestore";
 import { useCallback, useEffect, useRef, useState } from "react";
 import type { FormEvent } from "react";
@@ -28,12 +29,11 @@ export default function AdminPage() {
   const [catalogCounts, setCatalogCounts] = useState({ videos: 0, playlists: 0 });
   const channelsRef = useRef(channels);
   const busyRef = useRef(busy);
-  channelsRef.current = channels;
-  busyRef.current = busy;
-
-  useEffect(() => onAuthStateChanged(auth, (current) => { setUser(current); setAuthReady(true); }), []);
+  useEffect(() => { channelsRef.current = channels; }, [channels]);
+  useEffect(() => { busyRef.current = busy; }, [busy]);
+  useEffect(() => onAuthStateChanged(auth, (current) => { setUser(current); setAuthReady(true); if (!current) setIsAdmin(false); }), []);
   useEffect(() => {
-    if (!user) { setIsAdmin(false); return; }
+    if (!user) return;
     let active = true;
     const adminRef = doc(db, "admins", user.uid);
     getDoc(adminRef).then(async (snapshot) => {
@@ -205,7 +205,7 @@ export default function AdminPage() {
   if (!authReady) return <main className="admin-shell"><div className="loading-card">Loading administrator access…</div></main>;
   return (
     <main className="admin-shell">
-      <header className="admin-top"><a className="back-link" href="/">← <span>Home</span></a><div className="admin-mark">POF <span>STUDIO</span></div>{user ? <button className="text-button" onClick={() => void endAdminSession().finally(() => signOut(auth))}>Sign out</button> : <span />}</header>
+      <header className="admin-top"><Link className="back-link" href="/">← <span>Home</span></Link><div className="admin-mark">POF <span>STUDIO</span></div>{user ? <button className="text-button" onClick={() => void endAdminSession().finally(() => signOut(auth))}>Sign out</button> : <span />}</header>
       <div className="admin-content">
         <div className="admin-heading"><span className="eyebrow">CONTENT CONTROL</span><h1>YouTube channels</h1><p>Connect your channels once. Videos and playlists stay in sync automatically.</p><a className="outline-button meeting-admin-link" href="/admin/meetings">Manage Zoom meetings</a> <a className="outline-button meeting-admin-link" href="/admin/contacts">View contact messages</a></div>
         {!user ? <section className="admin-panel sign-in-panel"><div className="panel-icon">◉</div><h2>Administrator sign in</h2><p>Sign in with your account to manage YouTube sources.</p>{error && <p className="inline-error">{error}</p>}<button className="primary-button" onClick={() => void signInWithGoogle().catch((reason) => setError(reason instanceof Error ? reason.message : "Google sign-in failed."))}>Continue with Google</button></section> : !isAdmin ? <section className="admin-panel sign-in-panel"><div className="panel-icon">⌑</div><h2>Admin session expired</h2><p>Sign in again to renew your one-hour administrator session.</p>{error && <p className="inline-error">{error}</p>}<button className="outline-button" onClick={() => signOut(auth)}>Sign out</button></section> : <>

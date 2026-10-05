@@ -12,18 +12,33 @@ service cloud.firestore {
         && get(/databases/$(database)/documents/admins/$(request.auth.uid)).data.expiresAt > request.time;
     }
 
+    function validAdminInvite(inviteId) {
+      return inviteId is string
+        && exists(/databases/$(database)/documents/adminInvites/$(inviteId))
+        && get(/databases/$(database)/documents/adminInvites/$(inviteId)).data.email == request.auth.token.email.lower()
+        && get(/databases/$(database)/documents/adminInvites/$(inviteId)).data.used == false
+        && get(/databases/$(database)/documents/adminInvites/$(inviteId)).data.expiresAt > request.time;
+    }
+
+    function isBootstrapAdmin(uid) {
+      return !exists(/databases/$(database)/documents/adminBootstrap/claimed)
+        && existsAfter(/databases/$(database)/documents/adminBootstrap/claimed)
+        && getAfter(/databases/$(database)/documents/adminBootstrap/claimed).data.ownerUid == uid;
+    }
+
     match /admins/{uid} {
       allow get: if signedIn() && request.auth.uid == uid;
       allow create: if signedIn()
         && uid == request.auth.uid
-        && request.resource.data.keys().hasOnly(['enabled', 'expiresAt'])
+        && request.resource.data.keys().hasOnly(['enabled', 'expiresAt', 'inviteId'])
         && request.resource.data.enabled == true
         && request.resource.data.expiresAt > request.time
-        && request.resource.data.expiresAt <= request.time + duration.value(1, 'h');
+        && request.resource.data.expiresAt <= request.time + duration.value(1, 'h')
+        && (isBootstrapAdmin(uid) || validAdminInvite(request.resource.data.inviteId));
       allow update: if signedIn()
         && uid == request.auth.uid
         && (!('expiresAt' in resource.data) || resource.data.expiresAt <= request.time)
-        && request.resource.data.keys().hasOnly(['enabled', 'expiresAt'])
+        && request.resource.data.keys().hasOnly(['enabled', 'expiresAt', 'inviteId'])
         && request.resource.data.enabled == true
         && request.resource.data.expiresAt > request.time
         && request.resource.data.expiresAt <= request.time + duration.value(1, 'h');
@@ -44,12 +59,22 @@ service cloud.firestore {
         && request.resource.data.expiresAt > request.time
         && request.resource.data.expiresAt <= request.time + duration.value(2, 'h');
       allow update: if signedIn()
-        && resource.data.email == request.auth.token.email
+        && resource.data.email == request.auth.token.email.lower()
         && resource.data.used == false
         && resource.data.expiresAt > request.time
         && request.resource.data.diff(resource.data).affectedKeys().hasOnly(['used'])
         && request.resource.data.used == true;
       allow delete: if isAdmin();
+    }
+
+    match /adminBootstrap/claimed {
+      allow get: if signedIn() && resource.data.ownerUid == request.auth.uid;
+      allow create: if signedIn()
+        && !exists(/databases/$(database)/documents/adminBootstrap/claimed)
+        && request.resource.data.keys().hasOnly(['ownerUid'])
+        && request.resource.data.ownerUid == request.auth.uid
+        && getAfter(/databases/$(database)/documents/admins/$(request.auth.uid)).data.enabled == true;
+      allow list, update, delete: if false;
     }
 
     // Signed-in accounts can maintain only their own basic profile.

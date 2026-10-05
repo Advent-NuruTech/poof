@@ -29,7 +29,7 @@ export default function SignupPage() {
       const result = await response.json() as { error?: string };
       if (!response.ok) throw new Error(result.error ?? "Could not create your account.");
       const credential = await signInWithEmailAndPassword(auth, email, password);
-      await startAdminSession(credential.user);
+      await startAdminSession(credential.user, { bootstrapCode: String(form.get("code") ?? ""), ...(invite ? { invite } : {}) });
       router.replace("/admin");
     } catch (reason) {
       setError(reason instanceof Error ? reason.message : "Could not create your account.");
@@ -46,6 +46,6 @@ export default function SignupPage() {
       {error && <p className="auth-error" role="alert">{error}</p>}
       <button className="primary-button" disabled={busy}>{busy ? "Creating account…" : "Create account"}</button>
     </form>
-    <p className="auth-switch">Already have an account? <Link href="/signin">Sign in</Link></p>
+    <p className="auth-switch">Already have an account? <Link href="/signin" onClick={() => { const invite = new URLSearchParams(window.location.search).get("invite"); if (invite) sessionStorage.setItem("adminInvite", invite); }}>Sign in</Link></p>
   </section></main>;
 }

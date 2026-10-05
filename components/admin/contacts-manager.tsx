@@ -16,9 +16,9 @@ export default function ContactsManager() {
   const [contacts, setContacts] = useState<Contact[]>([]);
   const [error, setError] = useState("");
 
-  useEffect(() => onAuthStateChanged(auth, (current) => { setUser(current); setReady(true); }), []);
+  useEffect(() => onAuthStateChanged(auth, (current) => { setUser(current); setReady(true); if (!current) setIsAdmin(false); }), []);
   useEffect(() => {
-    if (!user) { setIsAdmin(false); return; }
+    if (!user) return;
     let active = true;
     const adminRef = doc(db, "admins", user.uid);
     getDoc(adminRef).then(async (snapshot) => {
