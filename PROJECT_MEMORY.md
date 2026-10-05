@@ -1,6 +1,19 @@
 # Project Memory
 
+## 2026-10-04: Homepage meetings section, live countdowns, and Zoom search/filter
+
+- **Major changes:** The homepage "Past Meetings" block was driven by a playlist-title regex (`/meeting|rally|workshop|camp|conference|retreat/i`) instead of real meeting records, so it showed nothing useful. It is now a "Meetings" section fed by the `meetings` collection, ordered Ongoing → Upcoming → Completed, and placed above the playlist sections, which are unchanged. The playlist page component and `/playlists` routes were not touched.
+- **Major changes:** Extracted the Zoom meeting card into `components/home/meeting-card.tsx` so the homepage and `/meetings` render the identical card: poster, status badge, title, description, date/time metadata, countdown, format line, and actions. On mobile the existing `.zoom-meeting-card` single-column rule already stacks the poster above the copy, so the description, metadata, and buttons fall below the image. Added a "Details" link to `/meetings/{id}`, which the card previously lacked.
+- **Major changes:** Added live countdowns to ongoing meetings ("Ends in") and upcoming meetings ("Starts in") on the homepage, the Zoom page, and the event detail page. `MeetingCountdown` owns its own one-second interval so page trees do not re-render every second; grouping still uses the existing 30-second clock.
+- **Major changes:** Added search and status filtering to the Zoom page. Search matches title, description, venue, and format; status pills show live per-status counts and default to All. The prior empty-state behavior is preserved: Ongoing is hidden when empty, while Upcoming and Completed keep their messages.
+- **Naming:** Replaced user-facing "event" wording with "meetings" throughout, including the homepage heading, search placeholder and labels, result counts, empty states, the share button title, and the admin "Event format" field. Internal `EventStatus`/`eventGroups` were renamed to `MeetingStatus`/`meetingGroups`.
+- **Design rule:** Countdown pills use the site red accent background with white text and a tabular monospace clock.
+- **Errors and fixes:** No build or runtime errors. An early version derived the Zoom page's per-status counts by index (`matched[0]`, `matched[1]`, `matched[2]`), which was fragile; counts are now accumulated into a keyed record. The first compact homepage row was replaced by the shared card so both pages stay in sync.
+- **Pre-existing lint debt (not introduced here):** `react-hooks/set-state-in-effect` in the `channelsLoaded`/`ids.length` guards in `home-screen.tsx` and in `playlists-page.tsx`, plus `@next/next/no-html-link-for-pages` on the homepage header links. Targeted ESLint on every touched file reports zero new errors.
+- **Verification:** `npm.cmd run build` completed successfully with all 21 routes. A production server smoke test returned 200 for `/`, `/meetings`, `/playlists`, and `/contact`. Server-rendered HTML confirmed the Meetings section sits above both playlist sections and that the old Past Meetings markup is gone. The built stylesheet contains the new countdown, details-button, and filter rules and no longer contains the removed event-row rules.
+
 ## 2026-10-04: Prayer request inbox and admin notifications
+
 
 - **Major changes:** Reused the public contact form component for a new `/prayer-request` page with prayer-specific copy and submission labeling. Contact and prayer submissions share the `contacts` Firestore collection through a bounded `category` field, and the admin inbox now displays both types.
 - **Major changes:** Added a real-time admin notification bell to the channel dashboard and contact inbox. It watches new inbox records, shows contact/prayer labels and a count, links to the inbox, and stores the per-admin read timestamp in local storage.

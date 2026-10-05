@@ -1,4 +1,4 @@
-export type EventStatus = "ongoing" | "upcoming" | "completed";
+export type MeetingStatus = "ongoing" | "upcoming" | "completed";
 
 export type Meeting = {
   id: string;
@@ -12,13 +12,13 @@ export type Meeting = {
   venue?: string;
 };
 
-export function meetingStatus(meeting: Meeting, now = Date.now()): EventStatus {
+export function meetingStatus(meeting: Meeting, now = Date.now()): MeetingStatus {
   const start = new Date(meeting.startsAt).getTime();
   const end = new Date(meeting.endsAt).getTime();
   return now >= end ? "completed" : now >= start ? "ongoing" : "upcoming";
 }
 
-export function eventGroups(meetings: Meeting[], now: number): { status: EventStatus; label: string; meetings: Meeting[] }[] {
+export function meetingGroups(meetings: Meeting[], now: number): { status: MeetingStatus; label: string; meetings: Meeting[] }[] {
   return [
     { status: "ongoing", label: "Ongoing", meetings: meetings.filter((item) => meetingStatus(item, now) === "ongoing").sort((a, b) => a.endsAt.localeCompare(b.endsAt)) },
     { status: "upcoming", label: "Upcoming", meetings: meetings.filter((item) => meetingStatus(item, now) === "upcoming").sort((a, b) => a.startsAt.localeCompare(b.startsAt)) },
