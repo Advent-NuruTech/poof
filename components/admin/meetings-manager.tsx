@@ -9,7 +9,7 @@ import { signInWithGoogle } from "@/lib/sign-in";
 import { endAdminSession } from "@/lib/admin-session";
 import { formatMeetingDate, formatMeetingTime, type Meeting } from "@/lib/meetings";
 
-const blank = { title: "", description: "", posterUrl: "", date: "", start: "", end: "", meetingUrl: "" };
+const blank = { title: "", description: "", posterUrl: "", date: "", start: "", end: "", meetingType: "online" as "online" | "onsite", meetingUrl: "", venue: "" };
 function localDateTime(date: string, time: string) { return new Date(`${date}T${time}`).toISOString(); }
 
 export default function MeetingsManager() {
@@ -46,7 +46,8 @@ export default function MeetingsManager() {
       const endsAt = localDateTime(form.date, form.end);
       if (new Date(endsAt) <= new Date(startsAt)) throw new Error("The end time must be later than the start time.");
       setBusy(true);
-      await addDoc(collection(db, "meetings"), { title: form.title.trim(), description: form.description.trim(), posterUrl: form.posterUrl.trim(), startsAt, endsAt, meetingUrl: form.meetingUrl.trim() });
+      if (form.meetingType === "onsite" && !form.venue.trim()) throw new Error("Enter the meeting venue.");
+      await addDoc(collection(db, "meetings"), { title: form.title.trim(), description: form.description.trim(), posterUrl: form.posterUrl.trim(), startsAt, endsAt, meetingType: form.meetingType, meetingUrl: form.meetingType === "online" ? form.meetingUrl.trim() : "", venue: form.meetingType === "onsite" ? form.venue.trim() : "" });
       setForm(blank); setNotice("Meeting published.");
     } catch (reason) { setError(reason instanceof Error ? reason.message : "Could not save this meeting."); }
     finally { setBusy(false); }
@@ -77,7 +78,8 @@ export default function MeetingsManager() {
             <label>Description <span>Optional</span><textarea rows={3} maxLength={1200} value={form.description} onChange={(event) => setForm({ ...form, description: event.target.value })} placeholder="A few details about the meeting"/></label>
             <label>Poster image <span>Optional · upload to Cloudinary</span><input type="file" accept="image/*" disabled={uploadingPoster} onChange={(event) => void uploadPoster(event.target.files?.[0])}/></label>
             {form.posterUrl && <div className="meeting-poster-preview"><img src={form.posterUrl} alt="Meeting poster preview"/><button type="button" className="outline-button" onClick={() => setForm({ ...form, posterUrl: "" })}>Remove poster</button></div>}
-            <label>Meeting link<input type="url" required value={form.meetingUrl} onChange={(event) => setForm({ ...form, meetingUrl: event.target.value })} placeholder="https://zoom.us/j/…"/></label>
+            <label>Event format<select value={form.meetingType} onChange={(event) => setForm({ ...form, meetingType: event.target.value as "online" | "onsite" })}><option value="online">Online</option><option value="onsite">Onsite</option></select></label>
+            {form.meetingType === "online" ? <label>Meeting link <span>Optional · visible one hour before start</span><input type="url" value={form.meetingUrl} onChange={(event) => setForm({ ...form, meetingUrl: event.target.value })} placeholder="https://zoom.us/j/…"/></label> : <label>Venue<input required value={form.venue} onChange={(event) => setForm({ ...form, venue: event.target.value })} placeholder="Address or venue name"/></label>}
             <div className="meeting-time-fields"><label>Date<input required type="date" value={form.date} onChange={(event) => setForm({ ...form, date: event.target.value })}/></label><label>Starts at<input required type="time" value={form.start} onChange={(event) => setForm({ ...form, start: event.target.value })}/></label><label>Ends at<input required type="time" value={form.end} onChange={(event) => setForm({ ...form, end: event.target.value })}/></label></div>
             {error && <p className="notice error-notice">{error}</p>}{notice && <p className="notice">{notice}</p>}
             <button className="primary-button" disabled={busy}>{busy ? "Publishing…" : "Publish meeting"}</button>

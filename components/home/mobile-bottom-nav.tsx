@@ -1,4 +1,10 @@
+"use client";
+
 import type { ReactNode } from "react";
+import { collection, onSnapshot } from "firebase/firestore";
+import { useEffect, useState } from "react";
+import { db } from "@/lib/firebase";
+import { meetingStatus, type Meeting } from "@/lib/meetings";
 
 type Section = "home" | "playlists" | "meetings" | "contact";
 
@@ -10,9 +16,16 @@ const tabs: { section: Section; label: string; href: string; icon: ReactNode }[]
 ];
 
 export default function MobileBottomNav({ current }: { current: Section }) {
+  const [meetings, setMeetings] = useState<Meeting[]>([]);
+  const [now, setNow] = useState(0);
+  useEffect(() => onSnapshot(collection(db, "meetings"), (snapshot) => {
+    setMeetings(snapshot.docs.map((item) => ({ ...item.data(), id: item.id }) as Meeting));
+  }, () => setMeetings([])), []);
+  useEffect(() => { const initial = window.setTimeout(() => setNow(Date.now()), 0); const timer = window.setInterval(() => setNow(Date.now()), 30_000); return () => { window.clearTimeout(initial); window.clearInterval(timer); }; }, []);
+  const meetingCount = meetings.filter((meeting) => meetingStatus(meeting, now) !== "completed").length;
   return <nav className="mobile-tabbar" aria-label="Main navigation">
     {tabs.map((tab) => <a key={tab.section} className={current === tab.section ? "tab-active" : ""} href={tab.href} aria-current={current === tab.section ? "page" : undefined}>
-      <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">{tab.icon}</svg>
+      <span className="tab-icon-wrap"><svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">{tab.icon}</svg>{tab.section === "meetings" && meetingCount > 0 && <span className="tab-count" aria-label={`${meetingCount} upcoming or ongoing meetings`}>{meetingCount > 9 ? "9+" : meetingCount}</span>}</span>
       <span>{tab.label}</span>
     </a>)}
   </nav>;

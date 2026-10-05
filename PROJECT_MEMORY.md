@@ -1,5 +1,11 @@
 # Project Memory
 
+## 2026-10-04: Footer animation and link alignment
+
+- **Major changes:** Updated the Advent Nurutech credit to type in blue on a continuous loop. Footer links now stay aligned in a centered side-by-side row on larger screens and wrap cleanly on narrow screens.
+- **Errors and fixes:** No build/runtime errors encountered during this change.
+- **Verification:** Not run.
+
 ## 2026-10-04: Playlist archive order and footer credit
 
 - **Major changes:** Kept the original Featured Playlists section and added a second playlist listing after Most Viewed. Older-video archive cards now show the description below the title, falling back to the channel name when the description is empty. Added a Fundamental Principles footer link and a restrained typing animation for the “Powered by Advent Nurutech” credit, with reduced-motion support.
@@ -130,3 +136,9 @@ Record verified errors and fixes, plus major changes, here. Review this file bef
 - **Major changes:** Removed the white card treatment from playlist detail, restyled playlist entries like featured video cards, added suggested playlists, and added fixed mobile navigation.
 - **Errors and fixes:** No build/runtime errors encountered.
 - **Verification:** `npm.cmd run build` completed successfully, including TypeScript checks and page generation.
+
+## 2026-10-04: Meeting event types, status, and navigation indicator
+
+- **Major changes:** Admin meeting creation now supports online and onsite events. Online links are optional and appear on the public meeting schedule only during the hour before start and while the event is ongoing; onsite events require a venue. Public meeting cards show Upcoming, Ongoing, or Completed status, and the mobile Zoom tab shows a red count for upcoming and ongoing events.
+- **Errors and fixes:** Targeted ESLint initially flagged impure Date.now() state initialization and synchronous state updates inside effects. Clock state now starts at a stable value and updates from scheduled callbacks. The initial page lint also found a raw internal home link, changed to Next Link.
+- **Verification:** Targeted ESLint completed with zero errors and existing image element warnings; git diff --check passed. No build/runtime errors encountered.

@@ -5,13 +5,19 @@ export type Meeting = {
   posterUrl?: string;
   startsAt: string;
   endsAt: string;
-  meetingUrl: string;
+  meetingType?: "online" | "onsite";
+  meetingUrl?: string;
+  venue?: string;
 };
 
 export function meetingStatus(meeting: Meeting, now = Date.now()) {
   const start = new Date(meeting.startsAt).getTime();
   const end = new Date(meeting.endsAt).getTime();
-  return now >= start && now < end ? "live" : now < start ? "upcoming" : "past";
+  return now >= end ? "completed" : now >= start ? "ongoing" : "upcoming";
+}
+
+export function meetingJoinVisible(meeting: Meeting, now = Date.now()) {
+  return meeting.meetingType !== "onsite" && Boolean(meeting.meetingUrl) && now >= new Date(meeting.startsAt).getTime() - 60 * 60 * 1000 && now < new Date(meeting.endsAt).getTime();
 }
 
 export function formatMeetingDate(value: string) {
