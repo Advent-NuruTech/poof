@@ -27,7 +27,7 @@ export default function SignupPage() {
       const result = await response.json() as { error?: string };
       if (!response.ok) throw new Error(result.error ?? "Could not create your account.");
       await signInWithEmailAndPassword(auth, email, password);
-      router.replace("/");
+      router.replace("/admin");
     } catch (reason) {
       setError(reason instanceof Error ? reason.message : "Could not create your account.");
     } finally {

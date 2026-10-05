@@ -19,7 +19,7 @@ export default function SigninPage() {
     const form = new FormData(event.currentTarget);
     try {
       await signInWithEmailAndPassword(auth, String(form.get("email") ?? "").trim(), String(form.get("password") ?? ""));
-      router.replace("/");
+      router.replace("/admin");
     } catch (reason) {
       setError(reason instanceof Error ? reason.message : "Could not sign in.");
     } finally {

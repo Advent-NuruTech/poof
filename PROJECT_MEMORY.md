@@ -21,6 +21,12 @@ Record verified errors and fixes, plus major changes, here. Review this file bef
 - **Lint issue and fix:** The first lint pass flagged a synchronous `setState` in the admin layout effect. Initial readiness is now set from the Firebase auth listener callback, and the auth routes use `Link` and router navigation for internal routes.
 - **Verification:** `npm.cmd run build` completed successfully. ESLint passed for the admin layout, signup/signin pages, and signup API route. The full repo lint still reports 40 errors and 23 warnings in other existing/modified pages; those findings are outside the auth files changed here. `git diff --check` reported no whitespace errors.
 
+## 2026-10-04: Admin auth navigation follow-up
+
+- **Major changes:** Removed the Channel administration link from the homepage footer. Successful email/password signup and sign-in now navigate to `/admin`.
+- **Access issue identified:** New Firebase accounts are not automatically administrators. The deployed Firestore rules only permit the initial allowlisted UID to create an `admins/{uid}` record, so a newly created user correctly remains denied. No Firebase Admin SDK or service-account credential is configured in `.env.local`; the server cannot securely grant admin role records until a trusted Firebase server credential is configured. Do not enable user self-promotion in Firestore rules, since that bypasses the signup-code gate.
+- **Verification:** Pending after navigation change.
+
 ## 2026-10-04: Shared homepage branding and doctrine build fix
 
 - **Major changes:** Recorded the homepage typography and color palette as the shared site branding. Public meeting and contact pages now use shared theme colors for their page surfaces, dividers, and secondary text. Added a branded placeholder page for the empty `/doctrine/fundermentalprinciples` route.
