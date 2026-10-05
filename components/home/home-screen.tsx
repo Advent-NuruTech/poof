@@ -1,13 +1,12 @@
 "use client";
 
-import { onAuthStateChanged, signOut, type User } from "firebase/auth";
 import { collection, limit, onSnapshot, query, where } from "firebase/firestore";
 import { useEffect, useState } from "react";
 import type { ReactNode } from "react";
-import { auth, db } from "@/lib/firebase";
-import { signInWithGoogle } from "@/lib/sign-in";
+import { db } from "@/lib/firebase";
 import { formatDate, formatDuration, type Channel, type Playlist, type Video } from "@/lib/catalog";
 import MobileBottomNav from "@/components/home/mobile-bottom-nav";
+import { CardGridSkeleton, VideoListSkeleton } from "@/components/home/skeleton";
 
 function Icon({ name, size = 22 }: { name: "search" | "user" | "play" | "list" | "grid" | "home" | "camera" | "menu" | "chevron" | "close"; size?: number }) {
   const common = { width: size, height: size, viewBox: "0 0 24 24", fill: "none", stroke: "currentColor", strokeWidth: 2, strokeLinecap: "round" as const, strokeLinejoin: "round" as const, "aria-hidden": true as const };
@@ -39,53 +38,61 @@ export default function HomeScreen() {
   const [videos, setVideos] = useState<Video[]>([]);
   const [playlists, setPlaylists] = useState<Playlist[]>([]);
   const [channels, setChannels] = useState<Channel[]>([]);
-  const [user, setUser] = useState<User | null>(null);
+  const [channelsLoaded, setChannelsLoaded] = useState(false);
+  const [videosLoaded, setVideosLoaded] = useState(false);
+  const [playlistsLoaded, setPlaylistsLoaded] = useState(false);
   const [searchOpen, setSearchOpen] = useState(false);
   const [search, setSearch] = useState("");
-  const [authError, setAuthError] = useState("");
   const [watching, setWatching] = useState<Video | null>(null);
   const [selectedPlaylist, setSelectedPlaylist] = useState<Playlist | null>(null);
   const [showAllVideos, setShowAllVideos] = useState(false);
   const [showAllMeetings, setShowAllMeetings] = useState(false);
-  const [accountOpen, setAccountOpen] = useState(false);
   const [heroIndex, setHeroIndex] = useState(0);
   const [shareNotice, setShareNotice] = useState("");
 
-  useEffect(() => onAuthStateChanged(auth, setUser), []);
   const activeChannelKey = JSON.stringify(channels.map((channel) => channel.id).sort());
   useEffect(() => onSnapshot(collection(db, "channels"), (snapshot) => {
     setChannels(snapshot.docs.map((entry) => ({ ...entry.data(), id: entry.id }) as Channel).filter((item) => item.enabled));
-  }, () => setChannels([])), []);
+    setChannelsLoaded(true);
+  }, () => { setChannels([]); setChannelsLoaded(true); }), []);
   useEffect(() => {
+    if (!channelsLoaded) return;
     const ids = JSON.parse(activeChannelKey) as string[];
-    if (!ids.length) { setVideos([]); return; }
+    if (!ids.length) { setVideos([]); setVideosLoaded(true); return; }
+    setVideosLoaded(false);
     const groupRows = new Map<number, Map<string, Video>>();
-    const subscriptions = chunks(ids, 30).map((group, groupIndex) => onSnapshot(
+    const groups = chunks(ids, 30);
+    const subscriptions = groups.map((group, groupIndex) => onSnapshot(
       query(collection(db, "videos"), where("catalogChannelIds", "array-contains-any", group), limit(300)),
       (snapshot) => {
         groupRows.set(groupIndex, new Map(snapshot.docs.map((entry) => [entry.id, { ...entry.data(), id: entry.id } as Video])));
         const merged = new Map<string, Video>();
         for (const rows of groupRows.values()) for (const [id, video] of rows) merged.set(id, video);
         setVideos([...merged.values()].filter((video) => !video.website?.hidden && video.availability !== "unavailable").sort((a, b) => (b.publishedAt ?? "").localeCompare(a.publishedAt ?? "")).slice(0, 300));
-      }, () => setVideos([]),
+        if (groupRows.size === groups.length) setVideosLoaded(true);
+      }, () => { setVideos([]); setVideosLoaded(true); },
     ));
     return () => subscriptions.forEach((unsubscribe) => unsubscribe());
-  }, [activeChannelKey]);
+  }, [activeChannelKey, channelsLoaded]);
   useEffect(() => {
+    if (!channelsLoaded) return;
     const ids = JSON.parse(activeChannelKey) as string[];
-    if (!ids.length) { setPlaylists([]); return; }
+    if (!ids.length) { setPlaylists([]); setPlaylistsLoaded(true); return; }
+    setPlaylistsLoaded(false);
     const groupRows = new Map<number, Map<string, Playlist>>();
-    const subscriptions = chunks(ids, 30).map((group, groupIndex) => onSnapshot(
+    const groups = chunks(ids, 30);
+    const subscriptions = groups.map((group, groupIndex) => onSnapshot(
       query(collection(db, "playlists"), where("channelId", "in", group), limit(80)),
       (snapshot) => {
         groupRows.set(groupIndex, new Map(snapshot.docs.map((entry) => [entry.id, { ...entry.data(), id: entry.id } as Playlist])));
         const merged = new Map<string, Playlist>();
         for (const rows of groupRows.values()) for (const [id, playlist] of rows) merged.set(id, playlist);
         setPlaylists([...merged.values()].filter((playlist) => !playlist.website?.hidden));
-      }, () => setPlaylists([]),
+        if (groupRows.size === groups.length) setPlaylistsLoaded(true);
+      }, () => { setPlaylists([]); setPlaylistsLoaded(true); },
     ));
     return () => subscriptions.forEach((unsubscribe) => unsubscribe());
-  }, [activeChannelKey]);
+  }, [activeChannelKey, channelsLoaded]);
 
   const channelIds = new Set(channels.map((channel) => channel.id));
   const activeVideos = videos.filter((video) => video.catalogChannelIds?.some((id) => channelIds.has(id)));
@@ -127,13 +134,12 @@ export default function HomeScreen() {
   }
 
   return <main className="home-app">
-    <header className="site-header">
-      <a className="brand" href="/" aria-label="Pioneers of Our Faith home"><img src="/images/logo.jpeg" alt=""/><span>Pioneers <b>of Our Faith</b></span></a>
-      <nav className="desktop-nav"><a className="nav-current" href="#home">Home</a><a href="/playlists">Playlists</a><a href="#channels">Channels</a><a href="/meetings">Zoom</a><a href="/admin">Manage videos</a></nav>
-      <div className={`header-actions${searchOpen ? " search-active" : ""}`}>{searchOpen && <input autoFocus className="header-search" aria-label="Search videos" placeholder="Search videos…" value={search} onChange={(event) => setSearch(event.target.value)} onKeyDown={(event) => { if (event.key === "Escape") { setSearchOpen(false); setSearch(""); } }}/>}<button className="header-icon" aria-label={searchOpen ? "Close search" : "Search videos"} onClick={() => { setSearchOpen(!searchOpen); setSearch(""); }}><Icon name={searchOpen ? "close" : "search"} size={27}/></button><button className="header-icon account-trigger" aria-label="Account" onClick={() => setAccountOpen(!accountOpen)}>{user?.photoURL ? <img src={user.photoURL} alt=""/> : <Icon name="user" size={25}/>}</button>
-        {accountOpen && <div className="account-menu">{user ? <><strong>{user.displayName ?? "Signed in"}</strong><span>{user.email}</span><a href="/admin">Channel dashboard</a><button onClick={() => signOut(auth)}>Sign out</button></> : <><strong>Welcome</strong><span>Sign in with Google to manage channels.</span>{authError && <span className="auth-error">{authError}</span>}<button onClick={() => void signInWithGoogle().catch((reason) => setAuthError(reason instanceof Error ? reason.message : "Google sign-in failed."))}>Continue with Google</button><a href="/admin">Administrator tools</a></>}</div>}</div>
+    <header className={`site-header${searchOpen ? " site-header-search" : ""}`}>
+      <a className={`brand${searchOpen ? " brand-search-hidden" : ""}`} href="/" aria-label="Pioneers of Our Faith home"><img src="/images/logo.jpeg" alt=""/><span>Pioneers <b>of Our Faith</b></span></a>
+      {!searchOpen && <nav className="desktop-nav"><a className="nav-current" href="#home">Home</a><a href="/playlists">Playlists</a><a href="#channels">Channels</a><a href="/meetings">Zoom</a></nav>}
+      <div className={`header-actions${searchOpen ? " search-active" : ""}`}>{searchOpen && <input autoFocus className="header-search" aria-label="Search videos" placeholder="Search videos…" value={search} onChange={(event) => setSearch(event.target.value)} onKeyDown={(event) => { if (event.key === "Escape") { setSearchOpen(false); setSearch(""); } }}/>}<button className="header-icon" aria-label={searchOpen ? "Close search" : "Search videos"} onClick={() => { setSearchOpen(!searchOpen); setSearch(""); }}><Icon name={searchOpen ? "close" : "search"} size={27}/></button></div>
     </header>
-    {searchOpen && <div className="search-overlay" onClick={() => { setSearchOpen(false); setSearch(""); }}><section className="search-panel" role="dialog" aria-label="Video search results" onClick={(event) => event.stopPropagation()}><div className="search-panel-heading"><strong>{term ? `Results for “${search.trim()}”` : "Search videos"}</strong><span>{term ? `${latest.length} ${latest.length === 1 ? "video" : "videos"}` : "Search titles, topics, and channels"}</span></div>{!term ? <p className="search-prompt">Start typing to find a video.</p> : latest.length ? <div className="search-results">{latest.map((video) => <article className="latest-card" key={video.id}><button className="video-thumb" onClick={() => { setWatching(video); setSearchOpen(false); }} aria-label={`Watch ${video.title}`}><img src={video.thumbnail} alt=""/><span className="duration-tag">{formatDuration(video.duration)}</span><span className="thumb-play"><Icon name="play" size={17}/></span></button><button className="video-copy" onClick={() => { setWatching(video); setSearchOpen(false); }}><strong>{video.website?.displayTitle || video.title}</strong><time>{formatDate(video.publishedAt)}</time><span className="video-description">{video.description?.trim() || video.channelTitle}</span></button><button className="more-button" aria-label={`Share ${video.title}`} title="Share video" onClick={() => void shareVideo(video)}><Icon name="menu"/></button></article>)}</div> : <div className="search-empty"><strong>No videos found</strong><span>Try another title, topic, or channel.</span></div>}</section></div>}
+    {searchOpen && <div className="search-overlay" onClick={() => { setSearchOpen(false); setSearch(""); }}><section className="search-panel" role="dialog" aria-label="Video search results" onClick={(event) => event.stopPropagation()}><div className="search-panel-heading"><strong>{term ? `Results for “${search.trim()}”` : "Search videos"}</strong><span>{term ? `${latest.length} ${latest.length === 1 ? "video" : "videos"}` : "Search titles, topics, and channels"}</span></div>{!term ? <p className="search-prompt">Start typing to find a video.</p> : !videosLoaded ? <VideoListSkeleton/> : latest.length ? <div className="search-results">{latest.map((video) => <article className="latest-card" key={video.id}><button className="video-thumb" onClick={() => { setWatching(video); setSearchOpen(false); }} aria-label={`Watch ${video.title}`}><img src={video.thumbnail} alt=""/><span className="duration-tag">{formatDuration(video.duration)}</span><span className="thumb-play"><Icon name="play" size={17}/></span></button><button className="video-copy" onClick={() => { setWatching(video); setSearchOpen(false); }}><strong>{video.website?.displayTitle || video.title}</strong><time>{formatDate(video.publishedAt)}</time><span className="video-description">{video.description?.trim() || video.channelTitle}</span></button><button className="more-button" aria-label={`Share ${video.title}`} title="Share video" onClick={() => void shareVideo(video)}><Icon name="menu"/></button></article>)}</div> : <div className="search-empty"><strong>No videos found</strong><span>Try another title, topic, or channel.</span></div>}</section></div>}
     <section className="hero" id="home" style={{ backgroundImage: heroVideo?.thumbnail ? `linear-gradient(90deg, rgba(5,13,18,.88) 0%, rgba(5,13,18,.48) 42%, rgba(5,13,18,.02) 100%), url("${heroVideo.thumbnail}")` : "radial-gradient(ellipse at 74% 45%, #bd9154 0%, #654c37 17%, transparent 38%), linear-gradient(110deg, #111e24, #293b3f 58%, #11191d)" }}>
       <button className="hero-arrow hero-arrow-left" aria-label="Previous featured video" onClick={() => setHeroIndex((index) => (index + Math.max(heroItems.length, 1) - 1) % Math.max(heroItems.length, 1))}>‹</button>
       <div className="hero-copy"><span className="hero-kicker">{live ? <><i/> LIVE NOW</> : heroVideo ? "FEATURED MESSAGE" : "PIONEERS OF OUR FAITH"}</span><h1>{heroVideo?.title ?? <>Faith for<br/>every season.</>}</h1><p>{heroVideo?.channelTitle ?? "A home for uplifting messages, worship, and Bible study."}</p>{heroVideo ? <button className="watch-button" onClick={() => setWatching(heroVideo)}><Icon name="play" size={16}/> Watch now</button> : <a className="watch-button" href="#latest"><Icon name="play" size={16}/> Explore videos</a>}</div>
@@ -142,11 +148,11 @@ export default function HomeScreen() {
     </section>
     <div className="home-content">
       <section className="home-section latest-section" id="latest"><SectionTitle icon="list" title={search ? "Search results" : "Latest Videos"} onViewAll={() => setShowAllVideos(!showAllVideos)}/>
-        {visibleVideos.length ? <div className="latest-list">{visibleVideos.map((video) => <article className="latest-card" key={video.id}><button className="video-thumb" onClick={() => setWatching(video)} aria-label={`Watch ${video.title}`}><img src={video.thumbnail} alt=""/><span className="duration-tag">{formatDuration(video.duration)}</span><span className="thumb-play"><Icon name="play" size={17}/></span></button><button className="video-copy" onClick={() => setWatching(video)}><strong>{video.website?.displayTitle || video.title}</strong><time>{formatDate(video.publishedAt)}</time><span className="video-description">{video.description?.trim() || video.channelTitle}</span></button><button className="more-button" aria-label={`Share ${video.title}`} title="Share video" onClick={() => void shareVideo(video)}><Icon name="menu"/></button></article>)}</div> : <div className="empty-home"><span className="empty-video-icon"><Icon name="play" size={19}/></span><div><strong>{search ? "No videos found" : channels.length ? "Your videos are syncing" : "Your next favorite video is on its way"}</strong><p>{search ? "Try another title, topic, or channel." : channels.length ? "New videos will appear here as soon as the channel sync finishes." : "Connect a YouTube channel and its latest videos will appear here."}</p>{!channels.length && <a href="/admin">Connect a channel <Icon name="chevron" size={15}/></a>}</div></div>}</section>
-      <section className="home-section" id="featured-playlists"><SectionTitle icon="list" title="Featured Playlists" href="/playlists"/>{topPlaylists.length ? <div className="playlist-strip">{topPlaylists.map((playlist) => <a className="playlist-card" href={`/playlists/${encodeURIComponent(playlist.id)}`} key={playlist.id}><span className="playlist-art"><img src={playlist.thumbnail} alt=""/><span>{playlist.itemCount} videos</span></span><strong>{playlist.title}</strong><small>{playlist.channelTitle}</small></a>)}</div> : <div className="playlist-empty"><Icon name="list" size={20}/><span>Playlists from your connected channels will show up here.</span></div>}</section>
-      <section className="home-section past-section" id="library"><SectionTitle icon="grid" title="Past Meetings" onViewAll={() => setShowAllMeetings(!showAllMeetings)}/>{pastPlaylists.length ? <div className="meeting-grid">{pastPlaylists.map((playlist) => <a className="meeting-card" href={`/playlists/${encodeURIComponent(playlist.id)}`} key={playlist.id}><img src={playlist.thumbnail} alt=""/><span className="meeting-gradient"/><span className="meeting-copy"><strong>{playlist.title}</strong><small>{playlist.itemCount} videos · {playlist.channelTitle}</small></span></a>)}</div> : <div className="playlist-empty"><Icon name="grid" size={20}/><span>Meeting series and events will appear here when they are found in your playlists.</span></div>}</section>
-      <section className="home-section channels-section" id="channels"><SectionTitle icon="grid" title="Our Channels" href="#channels"/>{channels.length ? <div className="channel-strip">{channels.map((channel) => <a className="public-channel" href={channel.customUrl ? `https://www.youtube.com/${channel.customUrl}` : `https://www.youtube.com/channel/${channel.id}`} target="_blank" rel="noreferrer" key={channel.id}><img src={channel.thumbnail} alt=""/><span><strong>{channel.title}</strong><small>Explore channel</small></span><Icon name="chevron" size={16}/></a>)}</div> : <p className="channel-empty">A growing collection of messages, ministries, and music.</p>}</section>
-    <footer className="site-footer"><span>© Pioneers Of Our Faith</span><a href="/contact">Contact us</a><a href="/admin">Channel administration</a></footer>
+        {!videosLoaded ? <VideoListSkeleton/> : visibleVideos.length ? <div className="latest-list">{visibleVideos.map((video) => <article className="latest-card" key={video.id}><button className="video-thumb" onClick={() => setWatching(video)} aria-label={`Watch ${video.title}`}><img src={video.thumbnail} alt=""/><span className="duration-tag">{formatDuration(video.duration)}</span><span className="thumb-play"><Icon name="play" size={17}/></span></button><button className="video-copy" onClick={() => setWatching(video)}><strong>{video.website?.displayTitle || video.title}</strong><time>{formatDate(video.publishedAt)}</time><span className="video-description">{video.description?.trim() || video.channelTitle}</span></button><button className="more-button" aria-label={`Share ${video.title}`} title="Share video" onClick={() => void shareVideo(video)}><Icon name="menu"/></button></article>)}</div> : <div className="empty-home"><span className="empty-video-icon"><Icon name="play" size={19}/></span><div><strong>{search ? "No videos found" : "Videos will appear here soon"}</strong><p>{search ? "Try another title, topic, or channel." : "New videos and messages will be added to the library as they become available."}</p></div></div>}</section>
+      <section className="home-section" id="featured-playlists"><SectionTitle icon="list" title="Featured Playlists" href="/playlists"/>{!playlistsLoaded ? <CardGridSkeleton/> : topPlaylists.length ? <div className="playlist-strip">{topPlaylists.map((playlist) => <a className="playlist-card" href={`/playlists/${encodeURIComponent(playlist.id)}`} key={playlist.id}><span className="playlist-art"><img src={playlist.thumbnail} alt=""/><span>{playlist.itemCount} videos</span></span><strong>{playlist.title}</strong><small>{playlist.channelTitle}</small></a>)}</div> : <div className="playlist-empty"><Icon name="list" size={20}/><span>Playlists will appear here as they become available.</span></div>}</section>
+      <section className="home-section past-section" id="library"><SectionTitle icon="grid" title="Past Meetings" onViewAll={() => setShowAllMeetings(!showAllMeetings)}/>{!playlistsLoaded ? <CardGridSkeleton/> : pastPlaylists.length ? <div className="meeting-grid">{pastPlaylists.map((playlist) => <a className="meeting-card" href={`/playlists/${encodeURIComponent(playlist.id)}`} key={playlist.id}><img src={playlist.thumbnail} alt=""/><span className="meeting-gradient"/><span className="meeting-copy"><strong>{playlist.title}</strong><small>{playlist.itemCount} videos · {playlist.channelTitle}</small></span></a>)}</div> : <div className="playlist-empty"><Icon name="grid" size={20}/><span>Meeting series will appear here as they become available.</span></div>}</section>
+      <section className="home-section channels-section" id="channels"><SectionTitle icon="grid" title="Our Channels" href="#channels"/>{!channelsLoaded ? <CardGridSkeleton/> : channels.length ? <div className="channel-strip">{channels.map((channel) => <a className="public-channel" href={channel.customUrl ? `https://www.youtube.com/${channel.customUrl}` : `https://www.youtube.com/channel/${channel.id}`} target="_blank" rel="noreferrer" key={channel.id}><img src={channel.thumbnail} alt=""/><span><strong>{channel.title}</strong><small>Explore channel</small></span><Icon name="chevron" size={16}/></a>)}</div> : <p className="channel-empty">A growing collection of messages, ministries, and music.</p>}</section>
+    <footer className="site-footer"><span>© Pioneers Of Our Faith</span><a href="/contact">Contact us</a></footer>
     {shareNotice && <div className="share-notice" role="status">{shareNotice}</div>}
     </div>
     <MobileBottomNav current="home"/>

@@ -1,5 +1,11 @@
 # Project Memory
 
+## 2026-10-04: Public search, empty states, and shared loading UI
+
+- **Major changes:** Search mode now uses the full public header row on desktop and mobile. Removed public links to administrator tools and removed the YouTube channel connection prompt from the public video empty state. Added reusable skeleton loading components and used them for homepage videos, playlists, and channels, playlist data, and Zoom meetings. Updated the Zoom page header to use a plain meeting schedule label and corrected its broken arrows and apostrophe; added visible calendar, clock, and join icons to meeting details and actions.
+- **Errors and fixes:** No build/runtime errors encountered during this change.
+- **Verification:** `git diff --check` completed without whitespace errors. Build and lint not run.
+
 ## 2026-10-04: Search results overlay
 
 - **Major changes:** Homepage search now opens a scrollable results panel beneath the header with a blurred backdrop. Matching videos appear immediately over the hero, including an empty-query prompt and a no-results state. On mobile the panel leaves room for the fixed bottom navigation, and the search field takes priority in the header.
@@ -7,6 +13,13 @@
 - **Verification:** `git diff --check` completed without whitespace errors. Build and lint not run.
 
 Record verified errors and fixes, plus major changes, here. Review this file before related work to avoid repeating known issues in future versions.
+
+## 2026-10-04: Signup code and protected admin routes
+
+- **Major changes:** Added `/signup` with server-side `SIGN_UP_CODE` validation before creating Firebase email/password accounts, and added `/signin` with email/password and Google options. The shared admin layout now withholds all admin page children until Firebase auth and the enabled admin record are verified; it also provisions the existing initial admin UID when needed. Added an owner-scoped `userProfiles` Firestore rule and documented `SIGN_UP_CODE` in `.env.example`.
+- **Security note:** Firestore rules cannot securely read a server `.env` value. The signup code is checked by `/api/auth/signup` and must not be copied into rules. Rules continue to restrict administrator data to enabled admins.
+- **Lint issue and fix:** The first lint pass flagged a synchronous `setState` in the admin layout effect. Initial readiness is now set from the Firebase auth listener callback, and the auth routes use `Link` and router navigation for internal routes.
+- **Verification:** `npm.cmd run build` completed successfully. ESLint passed for the admin layout, signup/signin pages, and signup API route. The full repo lint still reports 40 errors and 23 warnings in other existing/modified pages; those findings are outside the auth files changed here. `git diff --check` reported no whitespace errors.
 
 ## 2026-10-04: Shared homepage branding and doctrine build fix
 

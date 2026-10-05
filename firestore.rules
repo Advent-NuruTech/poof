@@ -28,6 +28,12 @@ service cloud.firestore {
       allow list, delete: if false;
     }
 
+    // Signed-in accounts can maintain only their own basic profile.
+    // Signup codes are validated by the server and must not be published in rules.
+    match /userProfiles/{uid} {
+      allow read, create, update, delete: if signedIn() && request.auth.uid == uid;
+    }
+
     match /syncLeases/{channelId} {
       allow read, create, update, delete: if isAdmin();
     }
