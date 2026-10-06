@@ -51,7 +51,14 @@ export async function POST(request: Request) {
   const codeHash = signupCode ? await hashSignupCode(signupCode) : "";
 
   const priorResponse = await fetch(adminUrl, { headers: { Authorization: `Bearer ${idToken}` }, cache: "no-store" });
-  if (!priorResponse.ok && priorResponse.status !== 404) return NextResponse.json({ error: "Could not check administrator access." }, { status: 403 });
+  // A missing document is a normal 404. A denied read (403) is also expected on
+  // the very first sign in: the rules only grant `get` on admins/{uid} to a
+  // signed-in user, and some deployments return PERMISSION_DENIED before the
+  // document exists. Treat it as "no admin record yet" and let the write below
+  // decide, rather than failing with a misleading message.
+  if (!priorResponse.ok && priorResponse.status !== 404 && priorResponse.status !== 403) {
+    return NextResponse.json({ error: "Could not check administrator access." }, { status: 403 });
+  }
   const prior = priorResponse.ok ? await priorResponse.json() as { fields?: DocumentFields } : null;
   const priorExpiresAt = Date.parse(prior?.fields?.expiresAt?.timestampValue ?? "");
   const priorActive = prior?.fields?.enabled?.booleanValue === true && priorExpiresAt > now;
@@ -75,7 +82,15 @@ export async function POST(request: Request) {
     body: JSON.stringify({ fields: { enabled: { booleanValue: true }, expiresAt: { timestampValue: new Date(expiresAt).toISOString() }, codeHash: { stringValue: codeHash } } }),
     cache: "no-store",
   });
-  if (!writeResponse.ok) return NextResponse.json({ error: "Could not activate this admin session." }, { status: 403 });
+  if (!writeResponse.ok) {
+    const detail = await writeResponse.json().catch(() => ({})) as { error?: { status?: string; message?: string } };
+    console.error("Admin session write failed", writeResponse.status, detail.error?.message ?? "");
+    return NextResponse.json({
+      error: detail.error?.status === "PERMISSION_DENIED"
+        ? "Firestore rules rejected the admin record. Deploy the current firestore.rules (firebase deploy --only firestore:rules) and try again."
+        : "Could not activate this admin session.",
+    }, { status: 403 });
+  }
 
   return setSessionCookie(idToken, SESSION_MS);
 }
