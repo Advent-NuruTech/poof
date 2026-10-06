@@ -1,5 +1,12 @@
 # Project Memory
 
+## 2026-10-06: Homepage meeting duplication from recurring occurrences
+
+- **Bug:** A single weekly-recurring meeting appeared many times on the homepage Meetings section. `expandRecurringMeetings` intentionally expands a weekly rule across a ~13-month window (~57 occurrences), which is correct for the `/meetings` schedule page but wrong for the homepage, which should present each meeting once.
+- **Fix:** Added `collapseMeetingOccurrences(meetings, now)` to `lib/meetings.ts`. It expands as before, then keeps only the soonest occurrence per `sourceId` (falling back to `id` for non-recurring meetings). The homepage now calls `meetingGroups(collapseMeetingOccurrences(meetings, now), now)` for both the hero rotation (`priorityMeetings`) and the Meetings section (`meetingGroupsShown`). The `/meetings` page and the mobile nav count were left unchanged, since a schedule listing every occurrence and a raw non-completed count are both correct there.
+- **Tooling note (important):** The `read` and `edit` tools operated on a stale, double-spaced buffer of `components/home/home-screen.tsx` that did not match disk, so `edit` kept reporting "old_string not found". The on-disk file was the source of truth. Applied the change with a .NET UTF-8 exact `String.Replace` (`[IO.File]::ReadAllText`/`WriteAllText` with `UTF8Encoding($false)`) after confirming each target substring was unique. Verified afterward: no BOM, non-ASCII count unchanged (10), CRLF/LF counts unchanged (165/207), no mojibake.
+- **Verification:** `npx.cmd tsc --noEmit` passes clean. Targeted `eslint lib/meetings.ts components/home/home-screen.tsx` reports 0 errors and only the pre-existing `no-img-element` warnings.
+
 ## 2026-10-05: Library document previews, download routing, and flatter listing
 
 - **Major changes:** Library resource listings now show a first-page PDF/Word preview or the beginning of a note, followed by the title and a description clamped to two lines. The search field sticks while scrolling. Playlist rows and resource listings no longer use extra enclosing card backgrounds; keep library content on the original page background in future UI work unless a card treatment is specifically requested.

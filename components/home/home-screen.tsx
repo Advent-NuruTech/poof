@@ -6,7 +6,7 @@ import type { ReactNode } from "react";
 import Link from "next/link";
 import { db } from "@/lib/firebase";
 import { formatDate, formatDuration, type Channel, type Playlist, type Video } from "@/lib/catalog";
-import { formatMeetingDate, formatMeetingTime, meetingGroups, meetingHref, meetingJoinVisible, meetingStatus, type Meeting } from "@/lib/meetings";
+import { collapseMeetingOccurrences, formatMeetingDate, formatMeetingTime, meetingGroups, meetingHref, meetingJoinVisible, meetingStatus, type Meeting } from "@/lib/meetings";
 import MeetingCard from "@/components/home/meeting-card";
 import MobileBottomNav from "@/components/home/mobile-bottom-nav";
 import { CardGridSkeleton, MeetingListSkeleton, VideoListSkeleton } from "@/components/home/skeleton";
@@ -121,7 +121,7 @@ export default function HomeScreen() {
   const activePlaylists = playlists.filter((playlist) => channelIds.has(playlist.channelId));
   const live = activeVideos.find((video) => video.liveStatus === "live");
   const heroVideos = [...activeVideos.filter((video) => video.liveStatus === "live"), ...activeVideos.filter((video) => video.website?.featured && video.liveStatus !== "live"), ...activeVideos.filter((video) => video.liveStatus !== "live" && !video.website?.featured)].map((video) => ({ kind: "video" as const, video }));
-  const priorityMeetings = meetingGroups(meetings, now).filter((group) => group.status !== "completed").flatMap((group) => group.meetings).map((meeting) => ({ kind: "meeting" as const, meeting }));
+  const priorityMeetings = meetingGroups(collapseMeetingOccurrences(meetings, now), now).filter((group) => group.status !== "completed").flatMap((group) => group.meetings).map((meeting) => ({ kind: "meeting" as const, meeting }));
   const heroItems = [...priorityMeetings, ...heroVideos].slice(0, 4);
   const heroItem = heroItems[heroItems.length ? heroIndex % heroItems.length : 0];
   const heroVideo = heroItem?.kind === "video" ? heroItem.video : undefined;
@@ -136,7 +136,7 @@ export default function HomeScreen() {
   }, [heroItems.length, heroSlideDuration, heroSlideKey]);
   const allTopPlaylists = activePlaylists.filter((playlist) => playlist.website?.featured).concat(activePlaylists.filter((playlist) => !playlist.website?.featured));
   const topPlaylists = allTopPlaylists.slice(0, 8);
-  const meetingGroupsShown = meetingGroups(meetings, now).filter((group) => group.status !== "completed").map((group) => ({ ...group, meetings: group.meetings.slice(0, 2) })).filter((group) => group.meetings.length);
+  const meetingGroupsShown = meetingGroups(collapseMeetingOccurrences(meetings, now), now).filter((group) => group.status !== "completed").map((group) => ({ ...group, meetings: group.meetings.slice(0, 2) })).filter((group) => group.meetings.length);
   const visibleVideos = showAllVideos ? latest : latest.slice(0, 6);
 
   async function shareVideo(video: Video) {

@@ -80,6 +80,18 @@ export function expandRecurringMeetings(meetings: Meeting[], now = Date.now()) {
   });
 }
 
+/** Collapses expanded recurring occurrences back to one entry per meeting, keeping the soonest occurrence of each. */
+export function collapseMeetingOccurrences(meetings: Meeting[], now = Date.now()) {
+  const expanded = expandRecurringMeetings(meetings, now);
+  const bySource = new Map<string, Meeting>();
+  for (const meeting of expanded) {
+    const key = meeting.sourceId ?? meeting.id;
+    const current = bySource.get(key);
+    if (!current || meeting.startsAt.localeCompare(current.startsAt) < 0) bySource.set(key, meeting);
+  }
+  return [...bySource.values()];
+}
+
 export function meetingHref(meeting: Meeting) {
   const occurrence = meeting.occurrenceDate ? `?occurrence=${encodeURIComponent(meeting.occurrenceDate)}` : "";
   return `/meetings/${encodeURIComponent(meeting.sourceId ?? meeting.id)}${occurrence}`;
