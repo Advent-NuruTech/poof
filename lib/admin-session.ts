@@ -1,6 +1,6 @@
 import type { User } from "firebase/auth";
 
-export async function startAdminSession(user: User, options: { bootstrapCode?: string; invite?: string } = {}) {
+export async function startAdminSession(user: User, options: { code?: string } = {}) {
   const idToken = await user.getIdToken(true);
   const response = await fetch("/api/auth/session", {
     method: "POST",

@@ -5,6 +5,10 @@ service cloud.firestore {
       return request.auth != null;
     }
 
+    // Any signed-up account that presented the signup code at sign in has an
+    // enabled, unexpired admin document and can open the admin pages. The
+    // session endpoint writes this document with the Admin SDK-level access
+    // the account already has, so no invite or bootstrap flow is required.
     function isAdmin() {
       return signedIn()
         && exists(/databases/$(database)/documents/admins/$(request.auth.uid))
@@ -12,69 +16,28 @@ service cloud.firestore {
         && get(/databases/$(database)/documents/admins/$(request.auth.uid)).data.expiresAt > request.time;
     }
 
-    function validAdminInvite(inviteId) {
-      return inviteId is string
-        && exists(/databases/$(database)/documents/adminInvites/$(inviteId))
-        && get(/databases/$(database)/documents/adminInvites/$(inviteId)).data.email == request.auth.token.email.lower()
-        && get(/databases/$(database)/documents/adminInvites/$(inviteId)).data.used == false
-        && get(/databases/$(database)/documents/adminInvites/$(inviteId)).data.expiresAt > request.time;
-    }
-
-    function isBootstrapAdmin(uid) {
-      return !exists(/databases/$(database)/documents/adminBootstrap/claimed)
-        && existsAfter(/databases/$(database)/documents/adminBootstrap/claimed)
-        && getAfter(/databases/$(database)/documents/adminBootstrap/claimed).data.ownerUid == uid;
-    }
-
     match /admins/{uid} {
+      // The signup code is verified by the server before this document is
+      // written, so signed-in accounts may maintain only their own record and
+      // cannot publish the code (only its hash) or grant access to others.
       allow get: if signedIn() && request.auth.uid == uid;
       allow create: if signedIn()
         && uid == request.auth.uid
-        && request.resource.data.keys().hasOnly(['enabled', 'expiresAt', 'inviteId'])
+        && request.resource.data.keys().hasOnly(['enabled', 'expiresAt', 'codeHash'])
         && request.resource.data.enabled == true
+        && request.resource.data.codeHash is string
+        && request.resource.data.codeHash.size() > 0
         && request.resource.data.expiresAt > request.time
-        && request.resource.data.expiresAt <= request.time + duration.value(1, 'h')
-        && (isBootstrapAdmin(uid) || validAdminInvite(request.resource.data.inviteId));
+        && request.resource.data.expiresAt <= request.time + duration.value(24, 'h');
       allow update: if signedIn()
         && uid == request.auth.uid
-        && (!('expiresAt' in resource.data) || resource.data.expiresAt <= request.time)
-        && request.resource.data.keys().hasOnly(['enabled', 'expiresAt', 'inviteId'])
+        && request.resource.data.keys().hasOnly(['enabled', 'expiresAt', 'codeHash'])
         && request.resource.data.enabled == true
+        && request.resource.data.codeHash is string
+        && request.resource.data.codeHash.size() > 0
         && request.resource.data.expiresAt > request.time
-        && request.resource.data.expiresAt <= request.time + duration.value(1, 'h');
+        && request.resource.data.expiresAt <= request.time + duration.value(24, 'h');
       allow list, delete: if false;
-    }
-
-    // Invite URLs are single-use bearer tokens. Public access is limited to
-    // reading one known, unexpired invite so an invite can authorize signup.
-    match /adminInvites/{inviteId} {
-      allow get: if resource.data.used == false && resource.data.expiresAt > request.time;
-      allow list: if isAdmin();
-      allow create: if isAdmin()
-        && request.resource.data.keys().hasOnly(['email', 'createdAt', 'expiresAt', 'used'])
-        && request.resource.data.email is string
-        && request.resource.data.email.size() > 0
-        && request.resource.data.used == false
-        && request.resource.data.createdAt == request.time
-        && request.resource.data.expiresAt > request.time
-        && request.resource.data.expiresAt <= request.time + duration.value(2, 'h');
-      allow update: if signedIn()
-        && resource.data.email == request.auth.token.email.lower()
-        && resource.data.used == false
-        && resource.data.expiresAt > request.time
-        && request.resource.data.diff(resource.data).affectedKeys().hasOnly(['used'])
-        && request.resource.data.used == true;
-      allow delete: if isAdmin();
-    }
-
-    match /adminBootstrap/claimed {
-      allow get: if signedIn() && resource.data.ownerUid == request.auth.uid;
-      allow create: if signedIn()
-        && !exists(/databases/$(database)/documents/adminBootstrap/claimed)
-        && request.resource.data.keys().hasOnly(['ownerUid'])
-        && request.resource.data.ownerUid == request.auth.uid
-        && getAfter(/databases/$(database)/documents/admins/$(request.auth.uid)).data.enabled == true;
-      allow list, update, delete: if false;
     }
 
     // Signed-in accounts can maintain only their own basic profile.
