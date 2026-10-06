@@ -22,13 +22,14 @@ export async function POST(request: Request) {
     const file = (await request.formData()).get("file");
     if (!(file instanceof File) || !["application/pdf", "application/msword", "application/vnd.openxmlformats-officedocument.wordprocessingml.document"].includes(file.type) && !/\.docx?$/i.test(file.name)) return Response.json({ error: "Choose a PDF, DOC, or DOCX file." }, { status: 400 });
     if (file.size > 25 * 1024 * 1024) return Response.json({ error: "Files must be 25 MB or smaller." }, { status: 413 });
+    const isPdf = file.type === "application/pdf";
     const timestamp = Math.floor(Date.now() / 1000).toString();
     const params = `folder=library&timestamp=${timestamp}`;
     const signature = createHash("sha1").update(`${params}${apiSecret}`).digest("hex");
     const body = new FormData(); body.set("file", file); body.set("api_key", apiKey); body.set("timestamp", timestamp); body.set("folder", "library"); body.set("signature", signature);
-    const cloudinaryResponse = await fetch(`https://api.cloudinary.com/v1_1/${encodeURIComponent(cloudName)}/raw/upload`, { method: "POST", body, cache: "no-store" });
+    const cloudinaryResponse = await fetch(`https://api.cloudinary.com/v1_1/${encodeURIComponent(cloudName)}/${isPdf ? "image" : "raw"}/upload`, { method: "POST", body, cache: "no-store" });
     const result = await cloudinaryResponse.json() as { secure_url?: string; error?: { message?: string } };
     if (!cloudinaryResponse.ok || !result.secure_url) return Response.json({ error: result.error?.message ?? "Cloudinary could not upload this file." }, { status: 502 });
-    return Response.json({ secureUrl: result.secure_url });
+    return Response.json({ secureUrl: result.secure_url, ...(isPdf ? { previewUrl: result.secure_url.replace(/\.pdf($|\?)/i, ".jpg$1") } : {}) });
   } catch (reason) { return Response.json({ error: reason instanceof Error ? reason.message : "Could not upload file." }, { status: 500 }); }
 }

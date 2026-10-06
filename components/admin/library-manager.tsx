@@ -86,10 +86,10 @@ export default function LibraryManager() {
       if (!token) throw new Error("Sign in again to upload library files.");
       const form = new FormData(); form.set("file", file);
       const response = await fetch("/api/library/upload", { method: "POST", headers: { Authorization: `Bearer ${token}` }, body: form });
-      const result = await response.json() as { secureUrl?: string; error?: string };
+      const result = await response.json() as { secureUrl?: string; previewUrl?: string; error?: string };
       if (!response.ok || !result.secureUrl) throw new Error(result.error ?? "Upload failed.");
       const selected = categories.find((item) => item.id === categoryId);
-      await addDoc(collection(db, "libraryDocuments"), { title: title.trim(), description: description.trim(), categoryId, categoryName: selected?.name ?? "Library", kind, fileUrl: result.secureUrl, fileName: file.name, createdAt: new Date().toISOString(), updatedAt: new Date().toISOString() });
+      await addDoc(collection(db, "libraryDocuments"), { title: title.trim(), description: description.trim(), categoryId, categoryName: selected?.name ?? "Library", kind, fileUrl: result.secureUrl, ...(result.previewUrl ? { previewUrl: result.previewUrl } : {}), fileName: file.name, createdAt: new Date().toISOString(), updatedAt: new Date().toISOString() });
       setTitle(""); setDescription(""); setNotice("File uploaded and published.");
     } catch (reason) { setError(reason instanceof Error ? reason.message : "Could not upload file."); }
     finally { setBusy(false); }
