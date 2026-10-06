@@ -4,6 +4,12 @@ import AdminSidebar from "@/components/admin/admin-sidebar";
 
 const SESSION_COOKIE = "poof_admin_session";
 
+// The admin workspace is authenticated per request (session cookie + Firestore
+// admin record), so it can never have a static shell. `instant = false` is the
+// documented Cache Components opt-out for such a route; without it the build
+// fails static-shell validation for every /admin page.
+export const instant = false;
+
 async function getAdminSession() {
   const token = (await cookies()).get(SESSION_COOKIE)?.value;
   const apiKey = process.env.NEXT_PUBLIC_FIREBASE_API_KEY;

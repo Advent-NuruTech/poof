@@ -1,10 +1,9 @@
 ﻿"use client";
 
-import { collection, onSnapshot } from "firebase/firestore";
 import Link from "next/link";
 import { useEffect, useState } from "react";
-import { db } from "@/lib/firebase";
-import { meetingGroups, meetingSearchText, type Meeting, type MeetingStatus } from "@/lib/meetings";
+import { feedMeetings, usePublicCatalog } from "@/lib/use-catalog";
+import { meetingGroups, meetingSearchText, type MeetingStatus } from "@/lib/meetings";
 import MeetingCard, { MeetingIcon } from "@/components/home/meeting-card";
 import MobileBottomNav from "@/components/home/mobile-bottom-nav";
 import { MeetingListSkeleton } from "@/components/home/skeleton";
@@ -25,15 +24,14 @@ const emptyMessages: Record<MeetingStatus, string> = {
 };
 
 export default function MeetingsPage() {
-  const [meetings, setMeetings] = useState<Meeting[]>([]);
   const [now, setNow] = useState(0);
-  const [loaded, setLoaded] = useState(false);
   const [search, setSearch] = useState("");
   const [statusFilter, setStatusFilter] = useState<StatusFilter>("all");
-  useEffect(() => onSnapshot(collection(db, "meetings"), (snapshot) => {
-    setMeetings(snapshot.docs.map((item) => ({ ...item.data(), id: item.id }) as Meeting));
-    setLoaded(true);
-  }, () => setLoaded(true)), []);
+  // Reads the shared 24-hour snapshot rather than opening its own live
+  // listener on the meetings collection on every visit to the schedule page.
+  const { feed } = usePublicCatalog();
+  const meetings = feedMeetings(feed);
+  const loaded = feed.fetchedAt !== "";
   useEffect(() => { const initial = window.setTimeout(() => setNow(Date.now()), 0); const timer = window.setInterval(() => setNow(Date.now()), 30_000); return () => { window.clearTimeout(initial); window.clearInterval(timer); }; }, []);
 
   const term = search.trim().toLowerCase();

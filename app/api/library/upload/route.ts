@@ -1,6 +1,7 @@
 import { createHash } from "node:crypto";
 
-export const runtime = "nodejs";
+// Route segment config (`runtime`, `dynamic`, `revalidate`) is not allowed while
+// `nextConfig.cacheComponents` is enabled. Node is the default runtime here.
 
 export async function POST(request: Request) {
   const token = request.headers.get("authorization")?.replace(/^Bearer\s+/i, "");

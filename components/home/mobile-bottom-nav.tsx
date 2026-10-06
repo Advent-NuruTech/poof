@@ -1,10 +1,9 @@
 "use client";
 
 import type { ReactNode } from "react";
-import { collection, onSnapshot } from "firebase/firestore";
 import { useEffect, useState } from "react";
-import { db } from "@/lib/firebase";
-import { meetingStatus, type Meeting } from "@/lib/meetings";
+import { feedMeetings, usePublicCatalog } from "@/lib/use-catalog";
+import { meetingStatus } from "@/lib/meetings";
 
 type Section = "home" | "library" | "meetings" | "contact";
 
@@ -16,11 +15,12 @@ const tabs: { section: Section; label: string; href: string; icon: ReactNode }[]
 ];
 
 export default function MobileBottomNav({ current }: { current: Section }) {
-  const [meetings, setMeetings] = useState<Meeting[]>([]);
   const [now, setNow] = useState(0);
-  useEffect(() => onSnapshot(collection(db, "meetings"), (snapshot) => {
-    setMeetings(snapshot.docs.map((item) => ({ ...item.data(), id: item.id }) as Meeting));
-  }, () => setMeetings([])), []);
+  // The bottom tab bar previously opened its own live meetings listener on every
+  // public page, duplicating the listener the page itself already had. It now
+  // reads the shared 24-hour snapshot (no extra reads, no extra connections).
+  const { feed } = usePublicCatalog();
+  const meetings = feedMeetings(feed);
   useEffect(() => { const initial = window.setTimeout(() => setNow(Date.now()), 0); const timer = window.setInterval(() => setNow(Date.now()), 30_000); return () => { window.clearTimeout(initial); window.clearInterval(timer); }; }, []);
   const meetingCount = meetings.filter((meeting) => meetingStatus(meeting, now) !== "completed").length;
   return <nav className="mobile-tabbar" aria-label="Main navigation">

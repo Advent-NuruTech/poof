@@ -1,6 +1,8 @@
 import { NextResponse } from "next/server";
 
-export const runtime = "nodejs";
+// Route segment config (`runtime`, `dynamic`, `revalidate`) is not allowed while
+// `nextConfig.cacheComponents` is enabled. Node is the default runtime here, so
+// removing the export changes nothing.
 
 const COOKIE_NAME = "poof_admin_session";
 const SESSION_MS = 24 * 60 * 60 * 1000;
@@ -50,16 +52,21 @@ export async function POST(request: Request) {
   const now = Date.now();
   const codeHash = signupCode ? await hashSignupCode(signupCode) : "";
 
-  const priorResponse = await fetch(adminUrl, { headers: { Authorization: `Bearer ${idToken}` }, cache: "no-store" });
+  const priorResponse = await readAdminDocument(idToken, adminUrl);
   // A missing document is a normal 404. A denied read (403) is also expected on
   // the very first sign in: the rules only grant `get` on admins/{uid} to a
   // signed-in user, and some deployments return PERMISSION_DENIED before the
   // document exists. Treat it as "no admin record yet" and let the write below
-  // decide, rather than failing with a misleading message.
+  // decide, rather than failing with a misleading message. A 429 is a transient
+  // quota/rate limit, so it is retried rather than reported as an access error.
   if (!priorResponse.ok && priorResponse.status !== 404 && priorResponse.status !== 403) {
-    return NextResponse.json({ error: "Could not check administrator access." }, { status: 403 });
+    return NextResponse.json({
+      error: priorResponse.status === 429
+        ? "Firestore is temporarily rate-limited (quota exceeded). Please try again in a moment."
+        : "Could not check administrator access.",
+    }, { status: 429 });
   }
-  const prior = priorResponse.ok ? await priorResponse.json() as { fields?: DocumentFields } : null;
+  const prior = priorResponse.ok ? await priorResponse.json().catch(() => null) as { fields?: DocumentFields } | null : null;
   const priorExpiresAt = Date.parse(prior?.fields?.expiresAt?.timestampValue ?? "");
   const priorActive = prior?.fields?.enabled?.booleanValue === true && priorExpiresAt > now;
   const priorMatchesCode = prior?.fields?.codeHash?.stringValue === codeHash;
@@ -98,6 +105,19 @@ export async function POST(request: Request) {
 function setSessionCookie(idToken: string, maxAgeMs: number) {
   const response = NextResponse.json({ ok: true });
   response.cookies.set(COOKIE_NAME, idToken, { httpOnly: true, secure: process.env.NODE_ENV === "production", sameSite: "lax", path: "/", maxAge: Math.max(1, Math.floor(maxAgeMs / 1000)) });
+  return response;
+}
+
+// Firestore returns 429 RESOURCE_EXHAUSTED when the project's read quota is hit.
+// That is transient and retryable, so back off a few times before giving up.
+async function readAdminDocument(idToken: string, adminUrl: string) {
+  const delays = [0, 400, 1200];
+  let response = await fetch(adminUrl, { headers: { Authorization: `Bearer ${idToken}` }, cache: "no-store" });
+  for (const delay of delays) {
+    if (response.status !== 429) return response;
+    if (delay) await new Promise((resolve) => setTimeout(resolve, delay));
+    response = await fetch(adminUrl, { headers: { Authorization: `Bearer ${idToken}` }, cache: "no-store" });
+  }
   return response;
 }
 

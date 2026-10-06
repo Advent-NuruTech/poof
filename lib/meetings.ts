@@ -53,8 +53,14 @@ function zonedDateTimeToIso(parts: ReturnType<typeof localDateParts>, timeZone: 
 }
 
 /** Expands recurring meetings only for the current calendar week in the viewer's timezone. */
-export function expandRecurringMeetings(meetings: Meeting[], now = Date.now()) {
-  const reference = now || Date.now();
+export function expandRecurringMeetings(meetings: Meeting[], now: number) {
+  // `now` is always supplied by the caller. Do NOT default it to `Date.now()`
+  // here: these helpers run inside Client Components during prerender, and
+  // Next.js rejects an unstable `Date.now()` read in that position
+  // (blocking-prerender-current-time-client). Callers pass clock state that
+  // starts at 0 and is filled in from a `useEffect`, so time is only read on
+  // the client, never while prerendering.
+  const reference = now;
   const today = new Date(reference);
   const weekStart = new Date(today.getFullYear(), today.getMonth(), today.getDate() - today.getDay());
   const weekEnd = new Date(today.getFullYear(), today.getMonth(), today.getDate() - today.getDay() + 7);
@@ -84,7 +90,7 @@ export function expandRecurringMeetings(meetings: Meeting[], now = Date.now()) {
 }
 
 /** Collapses expanded recurring occurrences back to one entry per meeting, keeping the soonest occurrence of each. */
-export function collapseMeetingOccurrences(meetings: Meeting[], now = Date.now()) {
+export function collapseMeetingOccurrences(meetings: Meeting[], now: number) {
   const expanded = expandRecurringMeetings(meetings, now);
   const bySource = new Map<string, Meeting>();
   for (const meeting of expanded) {
@@ -100,7 +106,7 @@ export function meetingHref(meeting: Meeting) {
   return `/meetings/${encodeURIComponent(meeting.sourceId ?? meeting.id)}${occurrence}`;
 }
 
-export function meetingStatus(meeting: Meeting, now = Date.now()): MeetingStatus {
+export function meetingStatus(meeting: Meeting, now: number): MeetingStatus {
   const start = new Date(meeting.startsAt).getTime();
   const end = new Date(meeting.endsAt).getTime();
   return now >= end ? "completed" : now >= start ? "ongoing" : "upcoming";
@@ -131,7 +137,7 @@ export function meetingCountdown(meeting: Meeting, now: number) {
   return meetingStatus(meeting, now) === "ongoing" ? formatCountdown(meeting.endsAt, now) : formatCountdown(meeting.startsAt, now);
 }
 
-export function meetingJoinVisible(meeting: Meeting, now = Date.now()) {
+export function meetingJoinVisible(meeting: Meeting, now: number) {
   return meeting.meetingType !== "onsite" && Boolean(meeting.meetingUrl) && now >= new Date(meeting.startsAt).getTime() - 60 * 60 * 1000 && now < new Date(meeting.endsAt).getTime();
 }
 

@@ -15,7 +15,32 @@ import AdminInvites from "./admin-invites";
 import NotificationBell from "./notification-bell";
 
 type DraftChannel = Channel & { playlistCount?: number; videoCount?: number };
-const AUTO_SYNC_INTERVAL_MS = 6 * 60 * 60 * 1000;
+const AUTO_SYNC_INTERVAL_MS = 24 * 60 * 60 * 1000;
+
+// Deep value comparison used to skip Firestore writes that would not change a
+// document. A manifest field that changes on every sync is not a reason to
+// rewrite the row, so it is excluded.
+function isSameValue(left: unknown, right: unknown): boolean {
+  if (left === right) return true;
+  if (Array.isArray(left) && Array.isArray(right)) return left.length === right.length && left.every((item, index) => isSameValue(item, right[index]));
+  if (left && right && typeof left === "object" && typeof right === "object") {
+    const a = left as Record<string, unknown>;
+    const b = right as Record<string, unknown>;
+    const keys = new Set([...Object.keys(a), ...Object.keys(b)]);
+    for (const key of keys) {
+      if (key === "lastSyncedAt") continue;
+      if (!isSameValue(a[key], b[key])) return false;
+    }
+    return true;
+  }
+  return false;
+}
+
+/** True when writing `next` over `previous` would not change the stored document. */
+function isUnchanged(previous: Record<string, unknown> | undefined, next: Record<string, unknown>): boolean {
+  if (!previous) return false;
+  return Object.entries(next).every(([key, value]) => key === "lastSyncedAt" || isSameValue(previous[key], value));
+}
 
 export default function AdminPage() {
   const [user, setUser] = useState<User | null>(null);
@@ -86,20 +111,24 @@ export default function AdminPage() {
         getDocs(query(collection(db, "videos"), where("catalogChannelIds", "array-contains", channel.id))),
         getDocs(query(collection(db, "playlists"), where("channelId", "==", channel.id))),
       ]);
+      // `priorSnapshot` already contains every video whose catalogChannelIds
+      // includes this channel, which is exactly the set the per-id re-read used
+      // to fetch. Re-reading those documents by id billed one extra read each on
+      // every sync for data already in hand, so the loop is gone.
       const priorVideos = new Map(priorSnapshot.docs.map((entry) => [entry.id, entry.data()]));
-      const idsToRead = [...new Set([...videos.map((video) => video.id), ...unavailableVideoIds])];
-      const idChunks: string[][] = [];
-      for (let offset = 0; offset < idsToRead.length; offset += 30) idChunks.push(idsToRead.slice(offset, offset + 30));
-      for (let offset = 0; offset < idChunks.length; offset += 5) {
-        const existingChunks = await Promise.all(idChunks.slice(offset, offset + 5).map((ids) => getDocs(query(collection(db, "videos"), where(documentId(), "in", ids)))));
-        for (const chunk of existingChunks) for (const entry of chunk.docs) priorVideos.set(entry.id, entry.data());
-      }
       const currentIds = new Set(videos.map((video) => video.id));
       const currentPlaylistIds = new Set(playlists.map((playlist) => playlist.id));
       const newVideoCount = videos.filter((video) => !priorVideos.has(video.id)).length;
       let batch = writeBatch(db);
       const operations: Array<() => void> = [];
-      for (const playlist of playlists) operations.push(() => batch.set(doc(db, "playlists", playlist.id), { ...playlist, lastSyncedAt: serverTimestamp() }, { merge: true }));
+      for (const playlist of playlists) {
+        // Only write playlists whose stored data actually differs. A sync that
+        // changes nothing must not rewrite the catalog: each rewrite burns a
+        // write and re-delivers the document to every open listener.
+        const next = { ...playlist, lastSyncedAt: serverTimestamp() };
+        const previous = priorPlaylistSnapshot.docs.find((entry) => entry.id === playlist.id)?.data();
+        if (!isUnchanged(previous, playlist as unknown as Record<string, unknown>)) operations.push(() => batch.set(doc(db, "playlists", playlist.id), next, { merge: true }));
+      }
       for (const entry of priorPlaylistSnapshot.docs) {
         if (!currentPlaylistIds.has(entry.id)) operations.push(() => batch.delete(doc(db, "playlists", entry.id)));
       }
@@ -108,7 +137,9 @@ export default function AdminPage() {
         const channelPlaylistIds = { ...(previous?.channelPlaylistIds ?? {}), [channel.id]: video.playlistIds ?? [] };
         const playlistIds = [...new Set(Object.values(channelPlaylistIds).flat())];
         const catalogChannelIds = [...new Set([...(previous?.catalogChannelIds ?? []), channel.id])];
-        operations.push(() => batch.set(doc(db, "videos", video.id), { ...video, playlistIds, channelPlaylistIds, catalogChannelIds, availability: "available", lastSyncedAt: serverTimestamp() }, { merge: true }));
+        const next = { ...video, playlistIds, channelPlaylistIds, catalogChannelIds, availability: "available", lastSyncedAt: serverTimestamp() };
+        if (isUnchanged(previous, { ...video, playlistIds, channelPlaylistIds, catalogChannelIds, availability: "available" })) continue;
+        operations.push(() => batch.set(doc(db, "videos", video.id), next, { merge: true }));
       }
       for (const entry of priorSnapshot.docs) {
         if (currentIds.has(entry.id) || unavailableVideoIds.includes(entry.id)) continue;
@@ -117,7 +148,9 @@ export default function AdminPage() {
         const channelPlaylistIds = { ...(previous.channelPlaylistIds ?? {}) };
         delete channelPlaylistIds[channel.id];
         const playlistIds = [...new Set(Object.values(channelPlaylistIds).flat() as string[])];
-        operations.push(() => batch.set(doc(db, "videos", entry.id), { catalogChannelIds, channelPlaylistIds, playlistIds, lastSyncedAt: serverTimestamp() }, { merge: true }));
+        const next = { catalogChannelIds, channelPlaylistIds, playlistIds, lastSyncedAt: serverTimestamp() };
+        if (isUnchanged(previous, { catalogChannelIds, channelPlaylistIds, playlistIds })) continue;
+        operations.push(() => batch.set(doc(db, "videos", entry.id), next, { merge: true }));
       }
       for (const videoId of unavailableVideoIds) {
         if (priorVideos.has(videoId)) operations.push(() => batch.set(doc(db, "videos", videoId), { availability: "unavailable", lastSyncedAt: serverTimestamp() }, { merge: true }));
@@ -213,7 +246,7 @@ export default function AdminPage() {
           <section className="admin-panel add-panel"><div className="section-heading"><div><span className="eyebrow">SOURCES</span><h2>Add a YouTube channel</h2></div><span className="secure-label">● Private admin access</span></div><form className="channel-form" onSubmit={lookupChannel}><input value={queryText} onChange={(event) => setQueryText(event.target.value)} placeholder="Paste a channel URL, @handle, or channel ID" aria-label="YouTube channel URL, handle, or ID"/><button className="primary-button" disabled={busy === "lookup" || !queryText}>{busy === "lookup" ? "Checking…" : "Find channel"}</button></form>{preview && <div className="channel-preview"><img src={preview.thumbnail} alt=""/><div className="preview-copy"><strong>{preview.title}</strong><span>{preview.customUrl || preview.id}</span><small>{preview.playlistCount} playlists · {preview.videoCount} videos</small></div><button className="primary-button" onClick={addChannel}>Add & sync</button></div>}</section>
           <section className="catalog-summary" aria-label="Catalog totals"><div><span>CHANNELS</span><strong>{channels.length}</strong></div><div><span>PLAYLISTS</span><strong>{catalogCounts.playlists.toLocaleString()}</strong></div><div><span>VIDEOS</span><strong>{catalogCounts.videos.toLocaleString()}</strong></div><div><span>SYNC STATE</span><strong>{busy && busy !== "lookup" ? "Syncing" : error ? "Attention" : "Ready"}</strong></div></section>
           {(notice || error) && <div className={error ? "notice error-notice" : "notice"}>{error || notice}</div>}
-          <div className="channel-list-heading"><h2>Your channels <span>{channels.length}</span></h2><span>Auto sync every 6 hours while this page is open</span></div>
+          <div className="channel-list-heading"><h2>Your channels <span>{channels.length}</span></h2><span>Auto sync once every 24 hours while this page is open</span></div>
           {channels.length === 0 ? <section className="admin-panel empty-state"><span className="empty-plus">＋</span><h3>No channels connected yet</h3><p>Add your first YouTube channel above to start building the video catalog.</p></section> : <div className="admin-channel-list">{channels.map((channel) => <article className="admin-channel" key={channel.id}><img className="channel-avatar" src={channel.thumbnail} alt=""/><div className="channel-details"><div className="channel-title-row"><h3>{channel.title}</h3><span className={`status-pill ${channel.syncStatus === "error" ? "status-error" : channel.enabled ? "" : "status-paused"}`}>{channel.syncStatus === "error" ? "Needs attention" : channel.enabled ? channel.syncStatus === "syncing" ? "Syncing" : "Connected" : "Paused"}</span></div><p>{channel.customUrl || channel.id}</p><small>{channel.lastSyncedAt ? `Last synced ${formatDate(((channel.lastSyncedAt as { toDate?: () => Date }).toDate?.() ?? new Date()).toISOString())}` : "Waiting for first sync"}{channel.lastSyncNewVideoCount ? ` · ${channel.lastSyncNewVideoCount} new videos` : ""}{channel.lastSyncError ? ` · ${channel.lastSyncError}` : ""}</small></div><div className="channel-actions"><button className="outline-button" disabled={Boolean(busy)} onClick={() => void syncChannel(channel)}>{busy === channel.id ? "Syncing…" : "Sync now"}</button><button className="icon-action" title={channel.enabled ? "Pause channel" : "Enable channel"} onClick={() => void toggleChannel(channel)}>{channel.enabled ? "Ⅱ" : "▶"}</button><button className="icon-action remove-action" title="Remove channel" onClick={() => void removeChannel(channel)}>×</button></div></article>)}</div>}
           <ContentEditor />
           <AdminInvites />

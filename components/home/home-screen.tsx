@@ -1,15 +1,24 @@
 "use client";
-
-import { collection, limit, onSnapshot, query, where } from "firebase/firestore";
 import { useEffect, useState } from "react";
 import type { ReactNode } from "react";
 import Link from "next/link";
-import { db } from "@/lib/firebase";
 import { formatDate, formatDuration, type Channel, type Playlist, type Video } from "@/lib/catalog";
-import { collapseMeetingOccurrences, formatMeetingDate, formatMeetingTime, meetingGroups, meetingHref, meetingJoinVisible, meetingStatus, type Meeting } from "@/lib/meetings";
+import { collapseMeetingOccurrences, formatMeetingDate, formatMeetingTime, meetingGroups, meetingHref, meetingJoinVisible } from "@/lib/meetings";
+import { feedChannels, feedMeetings, feedPlaylists, feedVideos, refreshCatalogFeed, usePublicCatalog } from "@/lib/use-catalog";
+import { FEED_CACHE_MS } from "@/lib/catalog-feed-types";
 import MeetingCard from "@/components/home/meeting-card";
 import MobileBottomNav from "@/components/home/mobile-bottom-nav";
 import { CardGridSkeleton, MeetingListSkeleton, VideoListSkeleton } from "@/components/home/skeleton";
+
+// How many cards each homepage section renders. These caps, not the size of the
+// Firestore catalog, decide what a visitor downloads, and everything comes from
+// the shared snapshot cached for 24 hours by lib/catalog-feed.ts.
+const HOME_SECTION_LIMIT = 12;
+const ARCHIVE_VIDEO_LIMIT = 15;
+const HERO_ITEM_LIMIT = 4;
+const LATEST_PAGE_SIZE = 6;
+const HERO_MEETING_MS = 15_000;
+const HERO_VIDEO_MS = 5_000;
 
 function Icon({ name, size = 22 }: { name: "search" | "user" | "play" | "list" | "grid" | "home" | "camera" | "menu" | "chevron" | "close" | "calendar"; size?: number }) {
   const common = { width: size, height: size, viewBox: "0 0 24 24", fill: "none", stroke: "currentColor", strokeWidth: 2, strokeLinecap: "round" as const, strokeLinejoin: "round" as const, "aria-hidden": true as const };
@@ -32,10 +41,10 @@ function SectionTitle({ icon, title, href = "#library", onViewAll }: { icon: "li
   return <div className="home-section-title"><h2><Icon name={icon} size={23}/>{title}</h2>{onViewAll ? <button onClick={onViewAll}>View all <Icon name="chevron" size={16}/></button> : <a href={href}>View all <Icon name="chevron" size={16}/></a>}</div>;
 }
 
-function chunks<T>(items: T[], size: number) {
-  const result: T[][] = [];
-  for (let index = 0; index < items.length; index += size) result.push(items.slice(index, index + size));
-  return result;
+function archiveRows<T>(items: T[], size: number) {
+  const rows: T[][] = [];
+  for (let index = 0; index < items.length; index += size) rows.push(items.slice(index, index + size));
+  return rows;
 }
 
 function ChannelAvatar({ channel }: { channel: Channel }) {
@@ -44,90 +53,74 @@ function ChannelAvatar({ channel }: { channel: Channel }) {
 }
 
 export default function HomeScreen() {
-  const [videos, setVideos] = useState<Video[]>([]);
-  const [playlists, setPlaylists] = useState<Playlist[]>([]);
-  const [channels, setChannels] = useState<Channel[]>([]);
-  const [channelsLoaded, setChannelsLoaded] = useState(false);
-  const [videosLoaded, setVideosLoaded] = useState(false);
-  const [playlistsLoaded, setPlaylistsLoaded] = useState(false);
   const [searchOpen, setSearchOpen] = useState(false);
   const [search, setSearch] = useState("");
   const [watching, setWatching] = useState<Video | null>(null);
   const [selectedPlaylist, setSelectedPlaylist] = useState<Playlist | null>(null);
   const [showAllVideos, setShowAllVideos] = useState(false);
-  const [meetings, setMeetings] = useState<Meeting[]>([]);
-  const [meetingsLoaded, setMeetingsLoaded] = useState(false);
   const [now, setNow] = useState(0);
   const [heroIndex, setHeroIndex] = useState(0);
   const [shareNotice, setShareNotice] = useState("");
 
-  const activeChannelKey = JSON.stringify(channels.map((channel) => channel.id).sort());
-  useEffect(() => onSnapshot(collection(db, "channels"), (snapshot) => {
-    setChannels(snapshot.docs.map((entry) => ({ ...entry.data(), id: entry.id }) as Channel).filter((item) => item.enabled));
-    setChannelsLoaded(true);
-  }, () => { setChannels([]); setChannelsLoaded(true); }), []);
-  useEffect(() => {
-    if (!channelsLoaded) return;
-    const ids = JSON.parse(activeChannelKey) as string[];
-    if (!ids.length) { const timer = window.setTimeout(() => { setVideos([]); setVideosLoaded(true); }, 0); return () => window.clearTimeout(timer); }
-    const groupRows = new Map<number, Map<string, Video>>();
-    const groups = chunks(ids, 30);
-    const subscriptions = groups.map((group, groupIndex) => onSnapshot(
-      query(collection(db, "videos"), where("catalogChannelIds", "array-contains-any", group), limit(1000)),
-      (snapshot) => {
-        groupRows.set(groupIndex, new Map(snapshot.docs.map((entry) => [entry.id, { ...entry.data(), id: entry.id } as Video])));
-        const merged = new Map<string, Video>();
-        for (const rows of groupRows.values()) for (const [id, video] of rows) merged.set(id, video);
-        setVideos([...merged.values()].filter((video) => !video.website?.hidden && video.availability !== "unavailable").sort((a, b) => (b.publishedAt ?? "").localeCompare(a.publishedAt ?? "")).slice(0, 300));
-        if (groupRows.size === groups.length) setVideosLoaded(true);
-      }, () => { setVideos([]); setVideosLoaded(true); },
-    ));
-    return () => subscriptions.forEach((unsubscribe) => unsubscribe());
-  }, [activeChannelKey, channelsLoaded]);
-  useEffect(() => {
-    if (!channelsLoaded) return;
-    const ids = JSON.parse(activeChannelKey) as string[];
-    if (!ids.length) { const timer = window.setTimeout(() => { setPlaylists([]); setPlaylistsLoaded(true); }, 0); return () => window.clearTimeout(timer); }
-    const groupRows = new Map<number, Map<string, Playlist>>();
-    const groups = chunks(ids, 30);
-    const subscriptions = groups.map((group, groupIndex) => onSnapshot(
-      query(collection(db, "playlists"), where("channelId", "in", group), limit(80)),
-      (snapshot) => {
-        groupRows.set(groupIndex, new Map(snapshot.docs.map((entry) => [entry.id, { ...entry.data(), id: entry.id } as Playlist])));
-        const merged = new Map<string, Playlist>();
-        for (const rows of groupRows.values()) for (const [id, playlist] of rows) merged.set(id, playlist);
-        setPlaylists([...merged.values()].filter((playlist) => !playlist.website?.hidden));
-        if (groupRows.size === groups.length) setPlaylistsLoaded(true);
-      }, () => { setPlaylists([]); setPlaylistsLoaded(true); },
-    ));
-    return () => subscriptions.forEach((unsubscribe) => unsubscribe());
-  }, [activeChannelKey, channelsLoaded]);
+  // Every public page reads the shared server snapshot cached for 24 hours. No
+  // page opens an onSnapshot listener on videos, playlists, channels, or
+  // meetings; see lib/catalog-feed.ts for the quota rules behind this.
+  const { feed } = usePublicCatalog();
+  const [pageVideos, setPageVideos] = useState<Video[] | null>(null);
+  const channels = feedChannels(feed);
+  const feedVideoRows = feedVideos(feed);
+  const playlists = feedPlaylists(feed);
+  const meetings = feedMeetings(feed);
+  const videos = pageVideos ?? feedVideoRows.slice(0, LATEST_PAGE_SIZE);
+  const feedLoaded = feed.fetchedAt !== "";
+  const channelsLoaded = feedLoaded || pageVideos !== null;
+  const videosLoaded = channelsLoaded;
+  const playlistsLoaded = channelsLoaded;
+  const meetingsLoaded = channelsLoaded;
 
-  useEffect(() => onSnapshot(collection(db, "meetings"), (snapshot) => {
-    setMeetings(snapshot.docs.map((entry) => ({ ...entry.data(), id: entry.id }) as Meeting));
-    setMeetingsLoaded(true);
-  }, () => { setMeetings([]); setMeetingsLoaded(true); }), []);
+  // Keeps a long-lived tab at most one cache window behind without ever forcing
+  // an uncached Firestore read: the refresh reads the cached snapshot again.
+  useEffect(() => {
+    if (!feed.fetchedAt) return;
+    if (Date.now() - new Date(feed.fetchedAt).getTime() < FEED_CACHE_MS) return;
+    const timer = window.setTimeout(() => { void refreshCatalogFeed(); }, 0);
+    return () => window.clearTimeout(timer);
+  }, [feed.fetchedAt]);
+  useEffect(() => {
+    if (!showAllVideos || pageVideos !== null || feed.videos.length <= LATEST_PAGE_SIZE) return;
+    let active = true;
+    const timer = window.setTimeout(() => {
+      void refreshCatalogFeed().then((next) => { if (active && next) setPageVideos(feedVideos(next)); });
+    }, 0);
+    return () => { active = false; window.clearTimeout(timer); };
+  }, [showAllVideos, pageVideos, feed.videos.length]);
   useEffect(() => { const initial = window.setTimeout(() => setNow(Date.now()), 0); const timer = window.setInterval(() => setNow(Date.now()), 30_000); return () => { window.clearTimeout(initial); window.clearInterval(timer); }; }, []);
 
   const channelIds = new Set(channels.map((channel) => channel.id));
   const activeVideos = videos.filter((video) => video.catalogChannelIds?.some((id) => channelIds.has(id)));
-  const currentYear = new Date().getFullYear();
-  const videosFromYear = (year: number) => activeVideos.filter((video) => video.publishedAt && new Date(video.publishedAt).getFullYear() === year).slice(0, 15);
+  // Derive the archive years from the same `now` clock the meeting sections use
+  // instead of calling `new Date()` during render. `now` starts at 0 and is set
+  // from a `useEffect`, so this read only happens on the client; calling
+  // `new Date()` here would make Next.js reject the prerender with
+  // `blocking-prerender-current-time-client`. While `now` is 0 the archive
+  // years resolve to 1970, so those sections stay hidden until the clock lands.
+  const currentYear = now ? new Date(now).getFullYear() : 0;
+  const videosFromYear = (year: number) => year ? activeVideos.filter((video) => video.publishedAt && new Date(video.publishedAt).getFullYear() === year).slice(0, ARCHIVE_VIDEO_LIMIT) : [];
   const twoYearVideos = videosFromYear(currentYear - 2);
   const fourYearVideos = videosFromYear(currentYear - 4);
-  const mostViewedVideos = [...activeVideos].filter((video) => video.statistics?.viewCount !== undefined).sort((a, b) => Number(b.statistics?.viewCount ?? 0) - Number(a.statistics?.viewCount ?? 0)).slice(0, 12);
+  const mostViewedVideos = [...activeVideos].filter((video) => video.statistics?.viewCount !== undefined).sort((a, b) => Number(b.statistics?.viewCount ?? 0) - Number(a.statistics?.viewCount ?? 0)).slice(0, HOME_SECTION_LIMIT);
   const term = search.trim().toLowerCase();
   const latest = term ? activeVideos.filter((video) => `${video.title} ${video.description} ${video.channelTitle}`.toLowerCase().includes(term)) : activeVideos;
   const activePlaylists = playlists.filter((playlist) => channelIds.has(playlist.channelId));
   const live = activeVideos.find((video) => video.liveStatus === "live");
   const heroVideos = [...activeVideos.filter((video) => video.liveStatus === "live"), ...activeVideos.filter((video) => video.website?.featured && video.liveStatus !== "live"), ...activeVideos.filter((video) => video.liveStatus !== "live" && !video.website?.featured)].map((video) => ({ kind: "video" as const, video }));
   const priorityMeetings = meetingGroups(collapseMeetingOccurrences(meetings, now), now).filter((group) => group.status !== "completed").flatMap((group) => group.meetings).map((meeting) => ({ kind: "meeting" as const, meeting }));
-  const heroItems = [...priorityMeetings, ...heroVideos].slice(0, 4);
+  const heroItems = [...priorityMeetings, ...heroVideos].slice(0, HERO_ITEM_LIMIT);
   const heroItem = heroItems[heroItems.length ? heroIndex % heroItems.length : 0];
   const heroVideo = heroItem?.kind === "video" ? heroItem.video : undefined;
   const heroMeeting = heroItem?.kind === "meeting" ? heroItem.meeting : undefined;
   const heroSlideKey = heroMeeting ? `meeting:${heroMeeting.id}` : heroVideo ? `video:${heroVideo.id}` : "empty";
-  const heroSlideDuration = heroMeeting ? 15_000 : 5_000;
+  const heroSlideDuration = heroMeeting ? HERO_MEETING_MS : HERO_VIDEO_MS;
 
   useEffect(() => {
     if (heroItems.length < 2) return;
@@ -136,8 +129,11 @@ export default function HomeScreen() {
   }, [heroItems.length, heroSlideDuration, heroSlideKey]);
   const allTopPlaylists = activePlaylists.filter((playlist) => playlist.website?.featured).concat(activePlaylists.filter((playlist) => !playlist.website?.featured));
   const topPlaylists = allTopPlaylists.slice(0, 8);
-  const meetingGroupsShown = meetingGroups(collapseMeetingOccurrences(meetings, now), now).filter((group) => group.status !== "completed").map((group) => ({ ...group, meetings: group.meetings.slice(0, 2) })).filter((group) => group.meetings.length);
-  const visibleVideos = showAllVideos ? latest : latest.slice(0, 6);
+  // Each section is capped before render. The catalog itself may hold thousands
+  // of videos; that size must never translate into per-visitor DOM, and nothing
+  // below ever re-reads Firestore.
+  const meetingGroupsShown = meetingGroups(collapseMeetingOccurrences(meetings, now), now).filter((group) => group.status !== "completed").slice(0, 2).map((group) => ({ ...group, meetings: group.meetings.slice(0, 2) })).filter((group) => group.meetings.length);
+  const visibleVideos = showAllVideos ? latest.slice(0, HOME_SECTION_LIMIT) : latest.slice(0, LATEST_PAGE_SIZE);
 
   async function shareVideo(video: Video) {
     const url = `https://www.youtube.com/watch?v=${encodeURIComponent(video.id)}`;
@@ -158,33 +154,54 @@ export default function HomeScreen() {
     }
   }
 
+  function renderSearchCard(video: Video) {
+    return <article className="latest-card" key={video.id}>
+      <button className="video-thumb" onClick={() => { setWatching(video); setSearchOpen(false); }} aria-label={`Watch ${video.title}`}><img src={video.thumbnail} alt=""/><span className="duration-tag">{formatDuration(video.duration)}</span><span className="thumb-play"><Icon name="play" size={17}/></span></button>
+      <button className="video-copy" onClick={() => { setWatching(video); setSearchOpen(false); }}><strong>{video.website?.displayTitle || video.title}</strong><time>{formatDate(video.publishedAt)}</time><span className="video-description">{video.description?.trim() || video.channelTitle}</span></button>
+      <button className="more-button" aria-label={`Share ${video.title}`} title="Share video" onClick={() => void shareVideo(video)}><Icon name="menu"/></button>
+    </article>;
+  }
+
+  function renderMeetingSlideBody(meeting: (typeof priorityMeetings)[number]["meeting"]) {
+    return <>
+      <span className="hero-kicker"><i/> MEETING</span>
+      <h1>{meeting.title}</h1>
+      <p>{formatMeetingDate(meeting.startsAt)} · {formatMeetingTime(meeting)}</p>
+      <div className="hero-actions">
+        {meetingJoinVisible(meeting, now) ? <a className="watch-button" href={meeting.meetingUrl} target="_blank" rel="noreferrer"><Icon name="play" size={16}/> Join now</a>
+          : meeting.meetingType === "onsite" ? <a className="watch-button" href={`/meeting-link-request`}><Icon name="calendar" size={16}/> Request details</a>
+          : <a className="watch-button" href={`/meeting-link-request`}><Icon name="calendar" size={16}/> Request meeting link</a>}
+        <a className="hero-secondary-button" href={meetingHref(meeting)}>See details</a>
+      </div>
+    </>;
+  }
+
   return <main className="home-app">
     <header className={`site-header${searchOpen ? " site-header-search" : ""}`}>
-      <Link className={`brand${searchOpen ? " brand-search-hidden" : ""}`} href="/" aria-label="Faith of the Pioneers home"><img src="/images/logo.jpeg" alt=""/><span>Faith of the <b>Pioneers</b></span></Link>
-      {!searchOpen && <nav className="desktop-nav" aria-label="Main navigation"><a className="nav-current" href="#home" aria-current="page"><Icon name="home" size={17}/><span>Home</span></a><Link href="/library"><Icon name="grid" size={17}/><span>Library</span></Link><a href="#channels"><Icon name="camera" size={17}/><span>Channels</span></a><Link href="/meetings"><Icon name="calendar" size={17}/><span>Zoom</span></Link><Link href="/contact"><Icon name="user" size={17}/><span>Contact</span></Link></nav>}
-      <div className={`header-actions${searchOpen ? " search-active" : ""}`}>{searchOpen && <input autoFocus className="header-search" aria-label="Search videos" placeholder="Search videos…" value={search} onChange={(event) => setSearch(event.target.value)} onKeyDown={(event) => { if (event.key === "Escape") { setSearchOpen(false); setSearch(""); } }}/>}<button className="header-icon" aria-label={searchOpen ? "Close search" : "Search videos"} onClick={() => { setSearchOpen(!searchOpen); setSearch(""); }}><Icon name={searchOpen ? "close" : "search"} size={27}/></button></div>
+      <Link className={`brand${searchOpen ? " brand-search-hidden" : ""}`} href="/" aria-label="Faith of the Pioneers home"><img src="/images/logo.jpeg" alt=""/><span>Faith <b>of the Pioneers</b></span></Link>
+      {!searchOpen && <nav className="desktop-nav"><Link className="nav-current" href="/">Home</Link><Link href="/playlists">Playlists</Link><a href="#channels">Channels</a><Link href="/meetings">Zoom</Link><Link href="/library">Library</Link></nav>}
+      <div className={`header-actions${searchOpen ? " search-active" : ""}`}>{searchOpen && <input autoFocus className="header-search" aria-label="Search videos" placeholder="Search videos" value={search} onChange={(event) => setSearch(event.target.value)} onKeyDown={(event) => { if (event.key === "Escape") { setSearchOpen(false); setSearch(""); } }}/>}<button className="header-icon" aria-label={searchOpen ? "Close search" : "Search videos"} onClick={() => { setSearchOpen(!searchOpen); setSearch(""); }}><Icon name={searchOpen ? "close" : "search"} size={27}/></button></div>
     </header>
-    {searchOpen && <div className="search-overlay" onClick={() => { setSearchOpen(false); setSearch(""); }}><section className="search-panel" role="dialog" aria-label="Video search results" onClick={(event) => event.stopPropagation()}><div className="search-panel-heading"><strong>{term ? `Results for “${search.trim()}”` : "Search videos"}</strong><span>{term ? `${latest.length} ${latest.length === 1 ? "video" : "videos"}` : "Search titles, topics, and channels"}</span></div>{!term ? <p className="search-prompt">Start typing to find a video.</p> : !videosLoaded ? <VideoListSkeleton/> : latest.length ? <div className="search-results">{latest.map((video) => <article className="latest-card" key={video.id}><button className="video-thumb" onClick={() => { setWatching(video); setSearchOpen(false); }} aria-label={`Watch ${video.title}`}><img src={video.thumbnail} alt=""/><span className="duration-tag">{formatDuration(video.duration)}</span><span className="thumb-play"><Icon name="play" size={17}/></span></button><button className="video-copy" onClick={() => { setWatching(video); setSearchOpen(false); }}><strong>{video.website?.displayTitle || video.title}</strong><time>{formatDate(video.publishedAt)}</time><span className="video-description">{video.description?.trim() || video.channelTitle}</span></button><button className="more-button" aria-label={`Share ${video.title}`} title="Share video" onClick={() => void shareVideo(video)}><Icon name="menu"/></button></article>)}</div> : <div className="search-empty"><strong>No videos found</strong><span>Try another title, topic, or channel.</span></div>}</section></div>}
-    <section className={`hero${heroMeeting ? " hero-meeting" : ""}`} id="home" style={{ backgroundImage: heroMeeting?.posterUrl ? `linear-gradient(90deg, rgba(5,13,18,.91) 0%, rgba(5,13,18,.58) 48%, rgba(5,13,18,.18) 100%), url("${heroMeeting.posterUrl}")` : heroVideo?.thumbnail ? `linear-gradient(90deg, rgba(5,13,18,.88) 0%, rgba(5,13,18,.48) 42%, rgba(5,13,18,.02) 100%), url("${heroVideo.thumbnail}")` : "radial-gradient(ellipse at 74% 45%, #bd9154 0%, #654c37 17%, transparent 38%), linear-gradient(110deg, #111e24, #293b3f 58%, #11191d)" }}>
-      <button className="hero-arrow hero-arrow-left" aria-label="Previous featured video" onClick={() => setHeroIndex((index) => (index + Math.max(heroItems.length, 1) - 1) % Math.max(heroItems.length, 1))}>‹</button>
-      <div className="hero-copy"><span className="hero-kicker">{heroMeeting ? <><i/> {meetingStatus(heroMeeting, now) === "ongoing" ? "HAPPENING NOW" : "UPCOMING EVENT"}</> : live ? <><i/> LIVE NOW</> : heroVideo ? "FEATURED MESSAGE" : "FAITH OF THE PIONEERS"}</span><h1>{heroMeeting?.title ?? heroVideo?.title ?? <>Faith for<br/>every season.</>}</h1><p>{heroMeeting ? `${formatMeetingDate(heroMeeting.startsAt)} · ${formatMeetingTime(heroMeeting)}` : heroVideo?.channelTitle ?? "A home for uplifting messages, worship, and Bible study."}</p>{heroMeeting ? <div className="hero-actions">{meetingJoinVisible(heroMeeting, now) ? <a className="watch-button" href={heroMeeting.meetingUrl} target="_blank" rel="noreferrer">Join meeting <Icon name="chevron" size={16}/></a> : heroMeeting.meetingType !== "onsite" ? <Link className="watch-button" href="/meeting-link-request">Request meeting link <Icon name="chevron" size={16}/></Link> : null}<Link className="hero-details-button" href={meetingHref(heroMeeting)}>See details</Link></div> : heroVideo ? <button className="watch-button" onClick={() => setWatching(heroVideo)}><Icon name="play" size={16}/> Watch now</button> : <a className="watch-button" href="#latest"><Icon name="play" size={16}/> Explore videos</a>}</div>
-      <button className="hero-arrow hero-arrow-right" aria-label="Next featured video" onClick={() => setHeroIndex((index) => (index + 1) % Math.max(heroItems.length, 1))}>›</button>
+    {searchOpen && <div className="search-overlay" onClick={() => { setSearchOpen(false); setSearch(""); }}><section className="search-panel" role="dialog" aria-label="Video search results" onClick={(event) => event.stopPropagation()}><div className="search-panel-heading"><strong>{term ? `Results for ${search.trim()}` : "Search videos"}</strong><span>{term ? `${latest.length} ${latest.length === 1 ? "video" : "videos"}` : "Search titles, topics, and channels"}</span></div>{!term ? <p className="search-prompt">Start typing to find a video.</p> : !videosLoaded ? <VideoListSkeleton/> : latest.length ? <div className="search-results">{latest.map(renderSearchCard)}</div> : <div className="search-empty"><strong>No videos found</strong><span>Try another title, topic, or channel.</span></div>}</section></div>}
+    <section className="hero" id="home" style={{ backgroundImage: heroVideo?.thumbnail ? `linear-gradient(90deg, rgba(5,13,18,.88) 0%, rgba(5,13,18,.48) 42%, rgba(5,13,18,.02) 100%), url("${heroVideo.thumbnail}")` : "radial-gradient(ellipse at 74% 45%, #bd9154 0%, #654c37 17%, transparent 38%), linear-gradient(110deg, #111e24, #293b3f 58%, #11191d)" }}>
+      <button className="hero-arrow hero-arrow-left" aria-label="Previous featured item" disabled={heroItems.length < 2} onClick={() => setHeroIndex((index) => (index + Math.max(heroItems.length, 1) - 1) % Math.max(heroItems.length, 1))}><Icon name="chevron" size={20}/></button>
+      <div className="hero-copy">{live && !heroMeeting ? <><span className="hero-kicker"><i/> LIVE NOW</span><h1>{live.title}</h1><p>{live.channelTitle}</p><button className="watch-button" onClick={() => setWatching(live)}><Icon name="play" size={16}/> Watch now</button></>
+        : heroMeeting ? renderMeetingSlideBody(heroMeeting)
+        : <><span className="hero-kicker">{heroVideo ? "FEATURED MESSAGE" : "FAITH OF THE PIONEERS"}</span><h1>{heroVideo?.title ?? <>Faith for<br/>every season.</>}</h1><p>{heroVideo?.channelTitle ?? "A home for uplifting messages, worship, and Bible study."}</p>{heroVideo ? <button className="watch-button" onClick={() => setWatching(heroVideo)}><Icon name="play" size={16}/> Watch now</button> : <a className="watch-button" href="#latest"><Icon name="play" size={16}/> Explore videos</a>}</>}</div>
+      <button className="hero-arrow hero-arrow-right" aria-label="Next featured item" disabled={heroItems.length < 2} onClick={() => setHeroIndex((index) => (index + 1) % Math.max(heroItems.length, 1))}><Icon name="chevron" size={20}/></button>
       <div className="hero-dots">{Array.from({ length: heroItems.length ? Math.min(heroItems.length, 4) : 4 }, (_, dot) => <button key={dot} className={dot === heroIndex % Math.max(heroItems.length, 1) ? "dot-current" : ""} aria-label={`Show featured item ${dot + 1}`} onClick={() => setHeroIndex(dot)}/>)}</div>
     </section>
     <div className="home-content">
-      <div className="latest-about-layout">
       <section className="home-section latest-section" id="latest"><SectionTitle icon="list" title={search ? "Search results" : "Latest Videos"} onViewAll={() => setShowAllVideos(!showAllVideos)}/>
         {!videosLoaded ? <VideoListSkeleton/> : visibleVideos.length ? <div className="latest-list">{visibleVideos.map((video) => <article className="latest-card" key={video.id}><button className="video-thumb" onClick={() => setWatching(video)} aria-label={`Watch ${video.title}`}><img src={video.thumbnail} alt=""/><span className="duration-tag">{formatDuration(video.duration)}</span><span className="thumb-play"><Icon name="play" size={17}/></span></button><button className="video-copy" onClick={() => setWatching(video)}><strong>{video.website?.displayTitle || video.title}</strong><time>{formatDate(video.publishedAt)}</time><span className="video-description">{video.description?.trim() || video.channelTitle}</span></button><button className="more-button" aria-label={`Share ${video.title}`} title="Share video" onClick={() => void shareVideo(video)}><Icon name="menu"/></button></article>)}</div> : <div className="empty-home"><span className="empty-video-icon"><Icon name="play" size={19}/></span><div><strong>{search ? "No videos found" : "Videos will appear here soon"}</strong><p>{search ? "Try another title, topic, or channel." : "New videos and messages will be added to the library as they become available."}</p></div></div>}</section>
-      <aside className="about-card" aria-labelledby="about-card-title"><span className="about-card-eyebrow">ABOUT THE MINISTRY</span><h2 id="about-card-title">Faith for every season.</h2><p>Faith of the Pioneers is an online fellowship devoted to Scripture, personal testimonies, and the simple, Bible-centered faith of the early Adventist pioneers.</p><p>Join believers around the world for weekly study, worship, and fellowship.</p><div className="about-card-actions"><Link className="about-card-link" href="/about">Read more about the ministry <Icon name="chevron" size={15}/></Link><Link className="about-card-cta" href="/meeting-link-request">Join the next Zoom meeting</Link></div></aside>
-      </div>
       <section className="home-section meetings-section" id="meetings"><SectionTitle icon="calendar" title="Meetings" href="/meetings"/>{!meetingsLoaded ? <MeetingListSkeleton/> : meetingGroupsShown.length ? <div className="meeting-groups">{meetingGroupsShown.map((group) => <div className="meeting-group" key={group.status}>
         <h3 className="meeting-group-title">{group.label}<span>{group.meetings.length}</span></h3>
         <div className="zoom-meeting-list">{group.meetings.map((meeting) => <MeetingCard key={meeting.id} meeting={meeting} now={now}/>)}</div>
       </div>)}</div> : <div className="playlist-empty"><Icon name="calendar" size={20}/><span>Meetings will appear here as they become available.</span></div>}</section>
       <section className="home-section" id="featured-playlists"><SectionTitle icon="list" title="Featured Playlists" href="/playlists"/>{!playlistsLoaded ? <CardGridSkeleton/> : topPlaylists.length ? <div className="playlist-strip">{topPlaylists.map((playlist) => <Link className="playlist-card" href={`/playlists/${encodeURIComponent(playlist.id)}`} key={playlist.id}><span className="playlist-art"><img src={playlist.thumbnail} alt=""/><span>{playlist.itemCount} videos</span></span><strong>{playlist.title}</strong><small>{playlist.channelTitle}</small></Link>)}</div> : <div className="playlist-empty"><Icon name="list" size={20}/><span>Playlists will appear here as they become available.</span></div>}</section>
-      {[{ label: "2 years ago", items: twoYearVideos }, { label: "4 years ago", items: fourYearVideos }, { label: "Most Viewed", items: mostViewedVideos }].map(({ label, items }, archiveIndex) => ((archiveIndex > 0) && videosLoaded && !items.length) ? null : <section className="home-section archive-section" key={label}>
+      {[{ label: "2 years ago", items: twoYearVideos }, { label: "4 years ago", items: fourYearVideos }, { label: "Most Viewed", items: mostViewedVideos }].map(({ label, items }, archiveIndex) => ((archiveIndex < 2 && !currentYear) || ((archiveIndex > 0) && videosLoaded && !items.length)) ? null : <section className="home-section archive-section" key={label}>
         <div className="archive-heading"><h2>{label}</h2></div>
-        {!videosLoaded ? <VideoListSkeleton/> : items.length ? <div className="archive-list">{chunks(items, 3).map((row, rowIndex) => <div className={`archive-row${rowIndex % 2 ? " archive-row-reverse" : ""}`} key={`${label}-${rowIndex}`}>
+        {!videosLoaded || (archiveIndex < 2 && !currentYear) ? <VideoListSkeleton/> : items.length ? <div className="archive-list">{archiveRows(items, 3).map((row, rowIndex) => <div className={`archive-row${rowIndex % 2 ? " archive-row-reverse" : ""}`} key={`${label}-${rowIndex}`}>
           {row.map((video, itemIndex) => {
             const isFeature = itemIndex === 0;
             const autoPlay = archiveIndex === 0 && rowIndex === 0 && itemIndex === 0 && video.embeddable !== false;
@@ -197,7 +214,19 @@ export default function HomeScreen() {
       </section>)}
       <section className="home-section" id="playlist-listing"><SectionTitle icon="list" title="Playlists" href="/playlists"/>{!playlistsLoaded ? <CardGridSkeleton/> : topPlaylists.length ? <div className="playlist-strip">{topPlaylists.map((playlist) => <Link className="playlist-card" href={`/playlists/${encodeURIComponent(playlist.id)}`} key={`all-${playlist.id}`}><span className="playlist-art"><img src={playlist.thumbnail} alt=""/><span>{playlist.itemCount} videos</span></span><strong>{playlist.title}</strong><small>{playlist.channelTitle}</small></Link>)}</div> : <div className="playlist-empty"><Icon name="list" size={20}/><span>Playlists will appear here as they become available.</span></div>}</section>
       <section className="home-section channels-section" id="channels"><SectionTitle icon="grid" title="Our Channels" href="#channels"/>{!channelsLoaded ? <CardGridSkeleton/> : channels.length ? <div className="channel-strip">{channels.map((channel) => <a className="public-channel" href={channel.customUrl ? `https://www.youtube.com/${channel.customUrl}` : `https://www.youtube.com/channel/${channel.id}`} target="_blank" rel="noreferrer" key={channel.id}><ChannelAvatar channel={channel}/><span><strong>{channel.title}</strong><small>Explore channel</small></span><Icon name="chevron" size={16}/></a>)}</div> : <p className="channel-empty">A growing collection of messages, ministries, and music.</p>}</section>
-    <footer className="site-footer"><div className="footer-inner"><nav className="footer-links" aria-label="Footer navigation"><Link href="/doctrine/fundermentalprinciples">Fundamental Principles</Link><Link href="/privacy-policy">Privacy Policy</Link><Link href="/terms-of-use">Terms of Use</Link><Link href="/cookies-policy">Cookies Policy</Link><Link href="/contact">Contact us</Link></nav><a className="powered-by" href="https://wa.me/254142225233?text=Hello%20Advent%20Nurutech%2C%0A%0AI%20am%20from%20Faith%20of%20the%20Pioneers.%20I%20would%20like%20your%20services%20and%20would%20like%20our%20YouTube%20channels%20section%20to%20be%20improved.%0A%0AThank%20you." target="_blank" rel="noreferrer"><span className="powered-by-text">Powered by Advent Nurutech</span></a><p className="footer-copyright">© Faith of the Pioneers. All rights reserved.</p></div></footer>
+    <footer className="site-footer">
+      <div className="footer-inner">
+        <p className="footer-copyright">© 2026 Pioneers Of Our Faith. All rights reserved.</p>
+        <nav className="footer-links" aria-label="Footer navigation">
+          <Link href="/doctrine/fundermentalprinciples">Fundamental Principles</Link>
+          <Link href="/privacy-policy">Privacy Policy</Link>
+          <Link href="/terms-of-use">Terms of Use</Link>
+          <Link href="/cookies-policy">Cookies Policy</Link>
+          <Link href="/contact">Contact us</Link>
+        </nav>
+        <span className="powered-by"><span className="powered-by-text">Powered by Advent Nurutech</span></span>
+      </div>
+    </footer>
     {shareNotice && <div className="share-notice" role="status">{shareNotice}</div>}
     </div>
     <MobileBottomNav current="home"/>

@@ -1,4 +1,14 @@
 # Project Memory
+
+## 2026-10-06: Fix `/meetings` prerender failure — `Date.now()` in Client Components
+
+- **Error:** `npm run build` (Next.js 16.3.8, Turbopack, Cache Components) compiled and type-checked cleanly, then failed at page data collection with `Error occurred prerendering page "/meetings"` followed by `Export encountered an error on /(public)/meetings/page: /meetings, exiting the build.`
+- **Root cause:** The page's helpers in `lib/meetings.ts` defaulted their clock argument to `Date.now()` (and `expandRecurringMeetings` additionally fell back with `now || Date.now()`). These helpers run during render of a Client Component, and Next.js 16's Cache Components rejects an unstable current-time read in that position — the internal bailout `blocking-prerender-current-time-client`, which surfaced as the misleading `BAILOUT_TO_CLIENT_SIDE_RENDERING` symptom.
+- **Fix:** Removed every render-time clock default: `expandRecurringMeetings`, `collapseMeetingOccurrences`, `meetingStatus`, and `meetingJoinVisible` now all take a required `now: number`, so `Date.now()` is never called while prerendering. Callers already hold clock state (`const [now, setNow] = useState(0)` filled from a `useEffect`), so time is only read on the client. In `components/home/home-screen.tsx` the archive-year derivation now reads that same `now` state (`currentYear` derived from `now`, with the two archive sections gated while `currentYear` is `0`) instead of calling `new Date()` during render.
+- **Trap / lesson:** Do NOT default a helper's time argument to `Date.now()` when that helper is called during render of a Client Component under Cache Components — pass the caller's clock state instead. Also, `BAILOUT_TO_CLIENT_SIDE_RENDERING` at prerender time is a masked symptom; the real cause is reported as `blocking-prerender-current-time-client`.
+- **Reverted:** Earlier speculative workarounds (adding `instant = false`, making `app/(public)/meetings/page.tsx`/`app/(public)/page.tsx` `async`) were unnecessary and were removed; both route files match their committed versions.
+- **Verification:** `npx.cmd tsc --noEmit` exit 0. `npm.cmd run build` compiled successfully, finished TypeScript, and generated all 33/33 static pages with `/meetings` listed as static (`○`) — no prerender error, no worker exit. `git status` shows no stray `.build*.log`/`.prerender.log`/`tailwindcss-*.log` artifacts.
+
 ## 2026-10-06: Library listing previews follow the upload-time thumbnail pattern
 
 - **Major changes:** Applied the "store a first-page image when uploading, render that image in every listing" pattern to library PDFs, without touching the reader or the download route. `/api/library/upload` now sends PDFs to Cloudinary's `image/upload` endpoint (Word and other files stay on `raw/upload`) and returns `previewUrl`, the upload's `secure_url` with `.pdf` swapped for `.jpg`. `libraryDocuments` gained an optional `previewUrl` field, the admin uploader persists it, and the resource grid renders `item.previewUrl` with `loading="lazy"`.
@@ -302,3 +312,22 @@ Record verified errors and fixes, plus major changes, here. Review this file bef
 - **Required operator step:** `firebase deploy --only firestore:rules`. There is no `.firebaserc` in the repo, so choose the project explicitly (`firebase deploy --only firestore:rules --project poof-40b24`) or run `firebase use --add` first. Until the rules are deployed, the same-run code will now say exactly that instead of the misleading message.
 - **Note:** No `.firebaserc` means the CLI has no default project, and `npx firebase-tools --version` timed out (>120s) in this environment, so the deploy could not be run or verified from here.
 - **Verification:** `npx tsc --noEmit` exit 0; targeted `npx eslint app/api/auth/session/route.ts` reported no output (0 problems). Not verified: a live signup/signin after deploying the rules.
+
+## 2026-10-06: CORRECTION — "Could not check administrator access" was a Firestore 429, not rules
+
+- **Supersedes the entry directly above.** The previous diagnosis (undeployed rules / `403 PERMISSION_DENIED`) was **wrong**. Do not re-apply that fix on this symptom.
+- **Real cause:** Project `poof-40b24` has **exhausted its Firestore daily read quota**. Every Firestore *read* returns `429 RESOURCE_EXHAUSTED` / `"Quota exceeded."` — including anonymous public reads of `channels` and `meetings`, which have nothing to do with auth. The session route's prior-read hit the 429 and the old check `status !== 404 && status !== 403` let 429 fall through to the generic `"Could not check administrator access."` message.
+- **Evidence (live, throwaway test accounts against the real project):**
+  - `accounts:signUp` → **200** (Auth API unaffected)
+  - `accounts:signInWithPassword` → **200**
+  - `accounts:lookup` → **200**
+  - `GET admins/{uid}` (with user ID token) → **429 Quota exceeded**
+  - `PATCH admins/{uid}` → **200** — **the admin record write succeeds**, and stored `enabled: true`, `expiresAt`, `codeHash` correctly
+  - `runQuery` on `channels` → **429 Quota exceeded**
+  - `GET meetings` / `GET channels` with no auth at all → **429 Quota exceeded**
+  - Re-read immediately after a successful write → still **429**
+- **Consequences worth knowing:** `runQuery` being 429 means the browser `onSnapshot` listeners powering the whole admin UI and the public catalog fail too, so the app is broadly broken while the quota is exhausted, not just the login step. Writes still work, which is why `admins/{uid}` documents kept appearing.
+- **Fix applied:** the admin prior-read is now wrapped in `readAdminDocument()`, which retries up to 3 times with backoff (0/400/1200 ms) on `429`. A 429 that survives the retries returns HTTP **429** with `"Firestore is temporarily rate-limited (quota exceeded). Please try again in a moment."` instead of the misleading access error. 403/404 are still handled as "no admin record yet".
+- **Action needed by the operator:** this is a billing/quota issue, not a code issue. Check Firebase Console → Firestore → Usage. The free Spark tier's daily read allowance resets at midnight Pacific; either wait for the reset (then sign in again — the code flow itself is fine) or attach a billing account / Blaze plan. Reducing the listener fan-out (the app opens many `onSnapshot` listeners on large collections with high `pageSize` caps) is the durable mitigation.
+- **Verification:** `npx tsc --noEmit` exit 0; targeted `npx eslint app/api/auth/session/route.ts` 0 problems. Test scripts were temporary and have been deleted.
+- **Prevention:** when diagnosing Firestore REST failures from route handlers, **always print the actual status and body** rather than branching on "not 404". Branching on a single expected status hid a 429 behind an auth-sounding message for two debugging rounds. Treat 429/503 as retryable and distinct from 401/403.

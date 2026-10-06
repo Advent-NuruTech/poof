@@ -1,4 +1,5 @@
-export const runtime = "nodejs";
+// Route segment config (`runtime`, `dynamic`, `revalidate`) is not allowed while
+// `nextConfig.cacheComponents` is enabled. Node is the default runtime here.
 
 export async function GET(request: Request) {
   const requestUrl = new URL(request.url);

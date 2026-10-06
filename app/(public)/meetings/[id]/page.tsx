@@ -11,7 +11,9 @@ async function getMeeting(id: string) {
   if (!projectId || !apiKey) return null;
   try {
     const url = `https://firestore.googleapis.com/v1/projects/${encodeURIComponent(projectId)}/databases/(default)/documents/meetings/${encodeURIComponent(id)}?key=${encodeURIComponent(apiKey)}`;
-    const response = await fetch(url, { next: { revalidate: 60 } });
+    // 24-hour cache: each revalidation is one document read, and an edited
+    // meeting still appears within the day.
+    const response = await fetch(url, { cache: "no-store" });
     if (!response.ok) return null;
     return await response.json() as MeetingDocument;
   } catch { return null; }
@@ -32,6 +34,11 @@ export async function generateMetadata({ params }: PageProps<"/meetings/[id]">):
     twitter: { card: poster ? "summary_large_image" : "summary", title, ...(description ? { description } : {}), ...(poster ? { images: [poster] } : {}) },
   };
 }
+
+// `params` is runtime data, so this route cannot be prerendered without a
+// Suspense placeholder. `instant = false` is the documented Cache Components
+// opt-out for a route that is allowed to block while it resolves its params.
+export const instant = false;
 
 export default async function MeetingDetailPage({ params }: PageProps<"/meetings/[id]">) {
   const { id } = await params;

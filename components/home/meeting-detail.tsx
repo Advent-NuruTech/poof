@@ -1,20 +1,19 @@
 "use client";
 
-import { doc, onSnapshot } from "firebase/firestore";
 import Link from "next/link";
 import { useEffect, useState } from "react";
 import MobileBottomNav from "@/components/home/mobile-bottom-nav";
-import { db } from "@/lib/firebase";
+import { feedMeetings, usePublicCatalog } from "@/lib/use-catalog";
 import { formatMeetingDate, formatMeetingTime, meetingJoinVisible, meetingStatus, type Meeting } from "@/lib/meetings";
 import MeetingCountdown from "@/components/home/meeting-countdown";
 import { sharePublicUrl } from "@/lib/share";
 
 export default function MeetingDetail({ id }: { id: string }) {
-  const [meeting, setMeeting] = useState<Meeting | null>(null);
+  // Reads the shared 24-hour snapshot instead of a live per-document listener,
+  // which burned a connection and duplicate reads on every visit to this page.
+  const { feed } = usePublicCatalog();
+  const meeting: Meeting | null = feedMeetings(feed).find((item) => item.id === id) ?? null;
   const [now, setNow] = useState(0);
-  useEffect(() => onSnapshot(doc(db, "meetings", id), (snapshot) => {
-    setMeeting(snapshot.exists() ? ({ ...snapshot.data(), id: snapshot.id } as Meeting) : null);
-  }, () => setMeeting(null)), [id]);
   useEffect(() => { const initial = window.setTimeout(() => setNow(Date.now()), 0); const timer = window.setInterval(() => setNow(Date.now()), 30_000); return () => { window.clearTimeout(initial); window.clearInterval(timer); }; }, []);
   async function shareMeeting() { await sharePublicUrl(`${window.location.origin}/meetings/${encodeURIComponent(id)}`); }
 

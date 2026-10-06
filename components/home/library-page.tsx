@@ -1,27 +1,33 @@
 "use client";
 
-import { collection, doc, getDoc, onSnapshot } from "firebase/firestore";
+import { doc, getDoc } from "firebase/firestore";
+import Link from "next/link";
 import { useEffect, useMemo, useState } from "react";
 import { db } from "@/lib/firebase";
 import type { LibraryCategory, LibraryDocument } from "@/lib/library";
-import type { Playlist } from "@/lib/catalog";
+import { feedPlaylists, usePublicCatalog } from "@/lib/use-catalog";
+import { collection, onSnapshot } from "firebase/firestore";
 import MobileBottomNav from "@/components/home/mobile-bottom-nav";
 import PdfDocument from "@/components/home/pdf-document";
 import { sharePublicUrl } from "@/lib/share";
 
+// The library listing stays live for now, but it is a single small collection.
+// The previous duplicate: this page also opened a live listener on the videos
+// `playlists` collection just to render a playlist strip. That listener is gone
+// and the strip reads the shared 24-hour catalog snapshot instead.
 export default function LibraryPage({ documentId }: { documentId?: string }) {
   const [categories, setCategories] = useState<LibraryCategory[]>([]);
   const [documents, setDocuments] = useState<LibraryDocument[]>([]);
-  const [playlists, setPlaylists] = useState<Playlist[]>([]);
   const [current, setCurrent] = useState<LibraryDocument | null>(null);
   const [filter, setFilter] = useState("all");
   const [search, setSearch] = useState("");
   const [zoom, setZoom] = useState(100);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState("");
+  const { feed } = usePublicCatalog();
+  const playlists = feedPlaylists(feed).filter((item) => !item.website?.hidden);
   useEffect(() => onSnapshot(collection(db, "libraryCategories"), (s) => setCategories(s.docs.map((x) => ({ ...x.data(), id: x.id }) as LibraryCategory)), (e) => setError(e.message)), []);
   useEffect(() => onSnapshot(collection(db, "libraryDocuments"), (s) => { setDocuments(s.docs.map((x) => ({ ...x.data(), id: x.id }) as LibraryDocument)); setLoading(false); }, (e) => { setError(e.message); setLoading(false); }), []);
-  useEffect(() => onSnapshot(collection(db, "playlists"), (s) => setPlaylists(s.docs.map((x) => ({ ...x.data(), id: x.id }) as Playlist).filter((x) => !x.website?.hidden)), () => setPlaylists([])), []);
   useEffect(() => {
     if (!documentId) { setCurrent(null); return; }
     let active = true; setLoading(true);

@@ -1,18 +1,16 @@
 "use client";
 
-import { collection, limit, onSnapshot, query } from "firebase/firestore";
-import { useEffect, useMemo, useState } from "react";
-import { db } from "@/lib/firebase";
-import { formatDate, type Video } from "@/lib/catalog";
+import { useMemo } from "react";
+import { formatDate } from "@/lib/catalog";
+import { feedVideos, usePublicCatalog } from "@/lib/use-catalog";
 
 export default function AboutMostViewed() {
-  const [videos, setVideos] = useState<Video[]>([]);
-  const [loaded, setLoaded] = useState(false);
-
-  useEffect(() => onSnapshot(query(collection(db, "videos"), limit(300)), (snapshot) => {
-    setVideos(snapshot.docs.map((item) => ({ ...item.data(), id: item.id }) as Video));
-    setLoaded(true);
-  }, () => { setVideos([]); setLoaded(true); }), []);
+  // Reads the shared 24-hour snapshot instead of an independent live listener on
+  // the videos collection. The previous listener loaded up to 300 videos on
+  // every /about visit, on top of the homepage already reading the same data.
+  const { feed } = usePublicCatalog();
+  const loaded = feed.fetchedAt !== "";
+  const videos = feedVideos(feed);
 
   const mostViewed = useMemo(() => videos.filter((video) => video.availability !== "unavailable" && video.statistics?.viewCount !== undefined).sort((a, b) => Number(b.statistics?.viewCount ?? 0) - Number(a.statistics?.viewCount ?? 0)).slice(0, 6), [videos]);
 
