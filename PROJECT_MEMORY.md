@@ -1,4 +1,8 @@
 # Project Memory
+## 2026-10-06: Edit meetings and show only this week's recurring instances
+- **Major changes:** Admin scheduled-meeting rows now have an Edit action that populates the creation form with the existing title, description, poster, local date/time, format, link/venue, and weekly recurrence; Save changes updates the existing Firestore document, including removing recurrence when turned off. Cancel edit resets the form. New meeting publishing still uses `addDoc`.
+- **Major changes:** `expandRecurringMeetings` now generates only instances overlapping the current Sunday-to-Sunday calendar week in the public viewer's timezone, accounting for scheduler/viewer timezone boundaries. Annual or never-ending repeat rules remain stored on the meeting document, so the next week's occurrences appear as the week rolls over. Non-recurring meetings remain unchanged.
+- **Verification:** `npx.cmd tsc --noEmit`, targeted ESLint (0 errors, 2 existing image warnings), and `git diff --check` passed. `npm.cmd run lint` remains failing on pre-existing errors in unrelated policy/library pages and generated PDF worker output (42 errors, 1586 warnings).
 
 ## 2026-10-06: Homepage meeting duplication from recurring occurrences
 

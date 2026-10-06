@@ -52,29 +52,32 @@ function zonedDateTimeToIso(parts: ReturnType<typeof localDateParts>, timeZone: 
   return new Date(guess).toISOString();
 }
 
-/** Expands weekly rules only within the useful public window, keeping “Never” truly ongoing without writing infinite documents. */
+/** Expands recurring meetings only for the current calendar week in the viewer's timezone. */
 export function expandRecurringMeetings(meetings: Meeting[], now = Date.now()) {
   const reference = now || Date.now();
-  const windowStart = new Date(reference - 31 * 24 * 60 * 60 * 1000);
-  const windowEnd = new Date(reference + 366 * 24 * 60 * 60 * 1000);
+  const today = new Date(reference);
+  const weekStart = new Date(today.getFullYear(), today.getMonth(), today.getDate() - today.getDay());
+  const weekEnd = new Date(today.getFullYear(), today.getMonth(), today.getDate() - today.getDay() + 7);
+  const dayMs = 24 * 60 * 60 * 1000;
   return meetings.flatMap((meeting) => {
     const recurrence = meeting.recurrence;
     if (!recurrence || recurrence.frequency !== "weekly" || !recurrence.days.length) return [meeting];
     const timeZone = meeting.timeZone || "UTC";
     const initial = localDateParts(meeting.startsAt, timeZone);
-    const firstDate = new Date(Date.UTC(initial.year, initial.month - 1, initial.day));
-    const cursor = new Date(Math.max(firstDate.getTime(), Date.UTC(windowStart.getUTCFullYear(), windowStart.getUTCMonth(), windowStart.getUTCDate())));
+    const firstDate = localDateKey(initial);
     const duration = new Date(meeting.endsAt).getTime() - new Date(meeting.startsAt).getTime();
     const occurrences: Meeting[] = [];
-    while (cursor <= windowEnd) {
-      const day = cursor.getUTCDay();
+    // Scheduler-local dates can differ from the viewer's dates across time zones.
+    const cursor = new Date(Date.UTC(weekStart.getFullYear(), weekStart.getMonth(), weekStart.getDate() - Math.ceil(Math.max(duration, 0) / dayMs) - 1));
+    const lastDate = new Date(Date.UTC(weekEnd.getFullYear(), weekEnd.getMonth(), weekEnd.getDate() + 1));
+    for (; cursor <= lastDate; cursor.setUTCDate(cursor.getUTCDate() + 1)) {
       const occurrenceParts = { ...initial, year: cursor.getUTCFullYear(), month: cursor.getUTCMonth() + 1, day: cursor.getUTCDate() };
       const occurrenceDate = localDateKey(occurrenceParts);
-      if (recurrence.days.includes(day) && (!recurrence.until || occurrenceDate <= recurrence.until)) {
-        const startsAt = zonedDateTimeToIso(occurrenceParts, timeZone);
-        occurrences.push({ ...meeting, id: `${meeting.id}--${occurrenceDate}`, sourceId: meeting.id, occurrenceDate, startsAt, endsAt: new Date(new Date(startsAt).getTime() + duration).toISOString() });
-      }
-      cursor.setUTCDate(cursor.getUTCDate() + 1);
+      if (!recurrence.days.includes(cursor.getUTCDay()) || occurrenceDate < firstDate || (recurrence.until && occurrenceDate > recurrence.until)) continue;
+      const startsAt = zonedDateTimeToIso(occurrenceParts, timeZone);
+      const endsAt = new Date(new Date(startsAt).getTime() + duration).toISOString();
+      if (new Date(startsAt).getTime() >= weekEnd.getTime() || new Date(endsAt).getTime() <= weekStart.getTime()) continue;
+      occurrences.push({ ...meeting, id: `${meeting.id}--${occurrenceDate}`, sourceId: meeting.id, occurrenceDate, startsAt, endsAt });
     }
     return occurrences;
   });
