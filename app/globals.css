@@ -94,8 +94,8 @@ body{font-size:16px}.home-section-title h2{font-size:25px}.latest-card .video-co
 .search-active>.header-icon{flex:none;width:44px;height:44px}
 @media(max-width:760px){.site-header-search{padding-left:16px;padding-right:16px}.header-actions.search-active{gap:8px}.search-active .header-search{width:100%;height:46px}.search-active>.header-icon{width:40px;height:42px}.search-overlay{inset:76px 0 calc(65px + env(safe-area-inset-bottom))}}
 
-/* Desktop navigation follows the same icon-led, clearly active pattern as the mobile tab bar. */
-@media(min-width:761px){.desktop-nav{gap:4px;padding:4px;border:1px solid #e4e7e5;border-radius:999px;background:#f6f7f6;box-shadow:0 1px 2px #11111108}.desktop-nav a{min-height:38px;padding:0 13px;border-radius:999px;display:inline-flex;align-items:center;justify-content:center;gap:7px;color:#5b6268;font-weight:650;line-height:1;transition:color .18s ease,background-color .18s ease,box-shadow .18s ease}.desktop-nav a svg{flex:none}.desktop-nav a:hover{color:#15181c;background:#fff}.desktop-nav a:focus-visible{outline:3px solid #c51c3155;outline-offset:2px}.desktop-nav .nav-current{color:#11161a;background:#fff;box-shadow:0 1px 3px #11111114}}
+/* Desktop navigation stays text-first; individual links have no pill background. */
+@media(min-width:761px){.desktop-nav{gap:28px;padding:0;border:0;border-radius:0;background:transparent;box-shadow:none}.desktop-nav a{min-height:38px;padding:0;position:relative;display:inline-flex;align-items:center;justify-content:center;color:#5b6268;font-weight:650;line-height:1;transition:color .18s ease}.desktop-nav a:hover{color:#15181c;background:transparent}.desktop-nav a:focus-visible{outline:3px solid #c51c3155;outline-offset:4px}.desktop-nav .nav-current{color:#11161a;background:transparent;box-shadow:none}.desktop-nav .nav-current::after{content:"";position:absolute;right:0;bottom:-5px;left:0;height:2px;background:var(--red)}}
 @media(min-width:761px) and (max-width:980px){.site-header{padding-left:3%;padding-right:3%}.brand{min-width:205px}.desktop-nav a{padding:0 10px;gap:5px;font-size:13px}}
 
 /* Shared public loading placeholders. */

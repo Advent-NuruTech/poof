@@ -166,7 +166,8 @@ const CARD_CSS = `
   .mc-copy{padding:18px 18px 16px;gap:12px}
   .mc-title{font-size:18px}
   .mc-btn{padding:9px 13px;font-size:11.5px}
-  .mc-btn span.mc-btn-label{display:none}
+  .mc-actions{display:grid;grid-template-columns:repeat(2,minmax(0,1fr))}
+  .mc-btn{justify-content:center}
   .mc-btn-icon{width:36px;height:36px}
 }
 `;

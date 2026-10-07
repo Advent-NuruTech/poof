@@ -394,7 +394,11 @@ export default function LibraryPage({ documentId }: { documentId?: string }) {
 
   async function shareStudy() {
     if (!target) return;
-    await sharePublicUrl(`${window.location.origin}/library/${encodeURIComponent(target.id)}`);
+    await sharePublicUrl({
+      url: `${window.location.origin}/library/${encodeURIComponent(target.id)}`,
+      title: target.title,
+      text: target.description || `Read ${target.title} in the Faith of the Pioneers library.`,
+    });
   }
 
   const kindLabel = (k?: string) =>

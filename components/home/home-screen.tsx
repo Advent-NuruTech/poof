@@ -11,6 +11,8 @@ import { feedChannels, feedMeetings, feedPlaylists, feedVideos, refreshCatalogFe
 import { FEED_CACHE_MS } from "@/lib/catalog-feed-types";
 import MeetingCard from "@/components/home/meeting-card";
 import MobileBottomNav from "@/components/home/mobile-bottom-nav";
+import PublicHeader from "@/components/home/public-header";
+import SiteFooter from "@/components/home/site-footer";
 import { CardGridSkeleton, MeetingListSkeleton, VideoListSkeleton } from "@/components/home/skeleton";
 
 // How many cards each homepage section renders. These caps, not the size of the
@@ -206,11 +208,7 @@ export default function HomeScreen() {
   }
 
   return <main className="home-app">
-    <header className={`site-header${searchOpen ? " site-header-search" : ""}`}>
-      <Link className={`brand${searchOpen ? " brand-search-hidden" : ""}`} href="/" aria-label="Faith of the Pioneers home"><img src="/images/logo.jpeg" alt=""/><span>Faith <b>of the Pioneers</b></span></Link>
-      {!searchOpen && <nav className="desktop-nav"><Link className="nav-current" href="/">Home</Link><Link href="/playlists">Playlists</Link><a href="#channels">Channels</a><Link href="/meetings">Zoom</Link><Link href="/library">Library</Link></nav>}
-      <div className={`header-actions${searchOpen ? " search-active" : ""}`}>{searchOpen && <input autoFocus className="header-search" aria-label="Search videos" placeholder="Search videos" value={search} onChange={(event) => setSearch(event.target.value)} onKeyDown={(event) => { if (event.key === "Escape") { setSearchOpen(false); setSearch(""); } }}/>}<button className="header-icon" aria-label={searchOpen ? "Close search" : "Search videos"} onClick={() => { setSearchOpen(!searchOpen); setSearch(""); }}><Icon name={searchOpen ? "close" : "search"} size={27}/></button></div>
-    </header>
+    <PublicHeader searchOpen={searchOpen} search={search} onSearchOpenChange={setSearchOpen} onSearchChange={setSearch}/>
     {searchOpen && <div className="search-overlay" onClick={() => { setSearchOpen(false); setSearch(""); }}><section className="search-panel" role="dialog" aria-label="Video search results" onClick={(event) => event.stopPropagation()}><div className="search-panel-heading"><strong>{term ? `Results for ${search.trim()}` : "Search videos"}</strong><span>{term ? `${latest.length} ${latest.length === 1 ? "video" : "videos"}` : "Search titles, topics, and channels"}</span></div>{!term ? <p className="search-prompt">Start typing to find a video.</p> : !videosLoaded ? <VideoListSkeleton/> : latest.length ? <div className="search-results">{latest.map(renderSearchCard)}</div> : <div className="search-empty"><strong>No videos found</strong><span>Try another title, topic, or channel.</span></div>}</section></div>}
     <section className="hero" id="home" style={{ backgroundImage: heroVideo?.thumbnail ? `linear-gradient(90deg, rgba(5,13,18,.88) 0%, rgba(5,13,18,.48) 42%, rgba(5,13,18,.02) 100%), url("${heroVideo.thumbnail}")` : "radial-gradient(ellipse at 74% 45%, #bd9154 0%, #654c37 17%, transparent 38%), linear-gradient(110deg, #111e24, #293b3f 58%, #11191d)" }}>
       <button className="hero-arrow hero-arrow-left" aria-label="Previous featured item" disabled={heroItems.length < 2} onClick={() => setHeroIndex((index) => (index + Math.max(heroItems.length, 1) - 1) % Math.max(heroItems.length, 1))}><Icon name="chevron" size={20}/></button>
@@ -252,19 +250,7 @@ export default function HomeScreen() {
       </section>)}
       <section className="home-section studies-section" id="studies"><SectionTitle icon="list" title="Latest Studies" href="/library"/>{!studiesLoaded ? <CardGridSkeleton/> : latestStudies.length ? <div className="study-grid">{latestStudies.map((study) => <Link className="study-card" href={`/library/${encodeURIComponent(study.id)}`} key={study.id}><span className="study-card-preview"><span className="study-kind">{studyKindLabel(study.kind)}</span>{study.kind === "pdf" && study.fileUrl ? <img src={studyPreviewUrl(study)} alt={`${study.title}, page 1`} loading="lazy"/> : study.kind === "doc" && study.fileUrl ? <iframe src={`https://view.officeapps.live.com/op/embed.aspx?src=${encodeURIComponent(study.fileUrl)}`} title={`${study.title} first page`} tabIndex={-1}/> : <span className="study-note-preview" dangerouslySetInnerHTML={{ __html: study.contentHtml ?? "" }}/>}<span className="study-card-arrow" aria-hidden="true">&#8594;</span></span><span className="study-card-body"><strong>{study.title}</strong><small>{study.description?.trim() || (study.kind === "note" ? "Read this study note online" : study.fileName || study.categoryName || "Study resource")}</small></span></Link>)}</div> : <div className="playlist-empty"><Icon name="list" size={20}/><span>Study resources will appear here as they are published.</span></div>}</section>
       <section className="home-section channels-section" id="channels"><SectionTitle icon="grid" title="Our Channels" href="#channels"/>{!channelsLoaded ? <CardGridSkeleton/> : channels.length ? <div className="channel-strip">{channels.map((channel) => <a className="public-channel" href={channel.customUrl ? `https://www.youtube.com/${channel.customUrl}` : `https://www.youtube.com/channel/${channel.id}`} target="_blank" rel="noreferrer" key={channel.id}><ChannelAvatar channel={channel}/><span><strong>{channel.title}</strong><small>Explore channel</small></span><Icon name="chevron" size={16}/></a>)}</div> : <p className="channel-empty">A growing collection of messages, ministries, and music.</p>}</section>
-    <footer className="site-footer">
-      <div className="footer-inner">
-        <p className="footer-copyright">© 2026 Pioneers Of Our Faith. All rights reserved.</p>
-        <nav className="footer-links" aria-label="Footer navigation">
-          <Link href="/doctrine/fundermentalprinciples">Fundamental Principles</Link>
-          <Link href="/privacy-policy">Privacy Policy</Link>
-          <Link href="/terms-of-use">Terms of Use</Link>
-          <Link href="/cookies-policy">Cookies Policy</Link>
-          <Link href="/contact">Contact us</Link>
-        </nav>
-        <span className="powered-by"><span className="powered-by-text">Powered by Advent Nurutech</span></span>
-      </div>
-    </footer>
+    <SiteFooter />
     {shareNotice && <div className="share-notice" role="status">{shareNotice}</div>}
     </div>
     <MobileBottomNav current="home"/>

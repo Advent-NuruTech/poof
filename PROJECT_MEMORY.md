@@ -1,5 +1,11 @@
 # Project Memory
 
+## 2026-10-07: Mobile meeting actions and share-ready study links
+
+- **Major changes:** Meeting-card actions retain their labels on narrow screens and arrange into a two-column action grid, eliminating the empty mobile outlines caused by hiding both text labels. The homepage masthead and footer are now reusable `PublicHeader` and `SiteFooter` components. Desktop navigation links no longer use pill/text backgrounds; the active route uses a small red underline.
+- **Sharing:** Library readers now pass title and description to the native share sheet. Dynamic Library metadata and a generated Open Graph image give shared study URLs a preview with title, description, link, and a document thumbnail (the saved PDF first-page preview when available; a branded fallback for notes and other files).
+- **Verification:** `npx.cmd tsc --noEmit`, `npm.cmd run build`, and `git diff --check` passed. Targeted ESLint found no new errors; it retains the pre-existing `react-hooks/set-state-in-effect` error in `components/home/library-page.tsx:329` and existing `no-img-element` warnings.
+
 ## 2026-10-07: Homepage Latest Studies mirrors the Library listing
 
 - **Major changes:** The homepage Latest Studies shelf now renders the same visual material as `/library`: a first-page preview for PDFs (including the existing Cloudinary fallback), an Office preview for Word files, and a clipped note preview for authored notes. Each card retains the Library type badge, title, two-line description, and hover affordance, and links directly to its reader.
