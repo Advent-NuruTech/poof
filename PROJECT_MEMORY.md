@@ -1,4 +1,10 @@
 # Project Memory
+## 2026-10-07: Mobile public-header search and complete cached-feed results
+- **Major changes:** The public masthead search input now uses mobile search keyboard hints (`inputMode="search"`, `enterKeyHint="search"`), disables distracting auto-correction/autocomplete, has a 16px mobile font to avoid iOS zoom, and has corrected flexible sizing so the input and close button fit the full available header width. The placeholder now clarifies searchable fields.
+- **Search experience:** Homepage search now searches the full video set already included in the shared cached public catalog, not merely the six videos in the homepage shelf. It matches display title, source title, description, channel, and category, and renders at most 30 results while stating when more matches exist.
+- **Cost:** Search is entirely client-side against the existing 24-hour shared feed. It does not make a request per keystroke, open a Firestore listener, or call YouTube; the result cap also bounds rendered cards and thumbnail requests.
+- **Errors and fixes:** The initial editor path for the homepage component omitted its `home/` directory and failed without applying changes; resumed using the confirmed full path. PowerShell exact-block matching failed due to line-ending differences; located and replaced the exact block boundaries instead. No runtime or TypeScript errors remain.
+- **Verification:** `npx.cmd tsc --noEmit` passed. Targeted ESLint on both changed components had 0 errors and 10 warnings (existing unused import/image warnings). Required `npm.cmd run lint` still fails repository-wide with 37 errors and 1,597 warnings, including generated PDF worker output and unrelated public/admin files. `git diff --check` reports one trailing-whitespace line in the already-modified `components/home/site-footer.tsx`, outside this search change. No live-device/browser test was run.
 
 ## 2026-10-07: Cache public library data and bound admin snapshots
 

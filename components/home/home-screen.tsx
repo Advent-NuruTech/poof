@@ -2,8 +2,8 @@
 import { useEffect, useState } from "react";
 import type { ReactNode } from "react";
 import Link from "next/link";
+import type { LibraryCategory, LibraryDocument } from "@/lib/library";
 import { usePublicLibrary } from "@/lib/use-library-feed";
-import type { LibraryDocument } from "@/lib/library";
 import { formatDate, formatDuration, type Channel, type Playlist, type Video } from "@/lib/catalog";
 import { collapseMeetingOccurrences, formatMeetingDate, formatMeetingTime, meetingGroups, meetingHref, meetingJoinVisible } from "@/lib/meetings";
 import { feedChannels, feedMeetings, feedPlaylists, feedVideos, refreshCatalogFeed, usePublicCatalog } from "@/lib/use-catalog";
@@ -109,8 +109,14 @@ export default function HomeScreen() {
   const twoYearVideos = videosFromYear(currentYear - 2);
   const fourYearVideos = videosFromYear(currentYear - 4);
   const mostViewedVideos = [...activeVideos].filter((video) => video.statistics?.viewCount !== undefined).sort((a, b) => Number(b.statistics?.viewCount ?? 0) - Number(a.statistics?.viewCount ?? 0)).slice(0, HOME_SECTION_LIMIT);
+  // Search all videos in the shared catalog, not only the six-card homepage shelf.
+  // Matching stays local and adds no Firestore or YouTube API reads.
   const term = search.trim().toLowerCase();
-  const latest = term ? activeVideos.filter((video) => `${video.title} ${video.description} ${video.channelTitle}`.toLowerCase().includes(term)) : activeVideos;
+  const searchableVideos = feedVideoRows.filter((video) => video.catalogChannelIds?.some((id) => channelIds.has(id)));
+  const latest = term
+    ? searchableVideos.filter((video) => `${video.website?.displayTitle ?? video.title} ${video.title} ${video.description ?? ""} ${video.channelTitle} ${video.website?.category ?? ""}`.toLowerCase().includes(term))
+    : activeVideos;
+  const searchResults = latest.slice(0, 30);
   const activePlaylists = playlists.filter((playlist) => channelIds.has(playlist.channelId));
   const live = activeVideos.find((video) => video.liveStatus === "live");
   const heroVideos = [...activeVideos.filter((video) => video.liveStatus === "live"), ...activeVideos.filter((video) => video.website?.featured && video.liveStatus !== "live"), ...activeVideos.filter((video) => video.liveStatus !== "live" && !video.website?.featured)].map((video) => ({ kind: "video" as const, video }));
@@ -192,7 +198,7 @@ export default function HomeScreen() {
 
   return <main className="home-app">
     <PublicHeader searchOpen={searchOpen} search={search} onSearchOpenChange={setSearchOpen} onSearchChange={setSearch}/>
-    {searchOpen && <div className="search-overlay" onClick={() => { setSearchOpen(false); setSearch(""); }}><section className="search-panel" role="dialog" aria-label="Video search results" onClick={(event) => event.stopPropagation()}><div className="search-panel-heading"><strong>{term ? `Results for ${search.trim()}` : "Search videos"}</strong><span>{term ? `${latest.length} ${latest.length === 1 ? "video" : "videos"}` : "Search titles, topics, and channels"}</span></div>{!term ? <p className="search-prompt">Start typing to find a video.</p> : !videosLoaded ? <VideoListSkeleton/> : latest.length ? <div className="search-results">{latest.map(renderSearchCard)}</div> : <div className="search-empty"><strong>No videos found</strong><span>Try another title, topic, or channel.</span></div>}</section></div>}
+    {searchOpen && <div className="search-overlay" onClick={() => { setSearchOpen(false); setSearch(""); }}><section className="search-panel" role="dialog" aria-label="Video search results" onClick={(event) => event.stopPropagation()}><div className="search-panel-heading"><strong>{term ? `Results for ${search.trim()}` : "Search videos"}</strong><span>{term ? `${latest.length} ${latest.length === 1 ? "video" : "videos"}${latest.length > searchResults.length ? ` · showing ${searchResults.length}` : ""}` : "Search titles, topics, and channels"}</span></div>{!term ? <p className="search-prompt">Start typing to find a video.</p> : !videosLoaded ? <VideoListSkeleton/> : searchResults.length ? <div className="search-results">{searchResults.map(renderSearchCard)}</div> : <div className="search-empty"><strong>No videos found</strong><span>Try another title, topic, or channel.</span></div>}</section></div>}
     <section className="hero" id="home" style={{ backgroundImage: heroVideo?.thumbnail ? `linear-gradient(90deg, rgba(5,13,18,.88) 0%, rgba(5,13,18,.48) 42%, rgba(5,13,18,.02) 100%), url("${heroVideo.thumbnail}")` : "radial-gradient(ellipse at 74% 45%, #bd9154 0%, #654c37 17%, transparent 38%), linear-gradient(110deg, #111e24, #293b3f 58%, #11191d)" }}>
       <button className="hero-arrow hero-arrow-left" aria-label="Previous featured item" disabled={heroItems.length < 2} onClick={() => setHeroIndex((index) => (index + Math.max(heroItems.length, 1) - 1) % Math.max(heroItems.length, 1))}><Icon name="chevron" size={20}/></button>
       <div className="hero-copy">{live && !heroMeeting ? <><span className="hero-kicker"><i/> LIVE NOW</span><h1>{live.title}</h1><p>{live.channelTitle}</p><button className="watch-button" onClick={() => setWatching(live)}><Icon name="play" size={16}/> Watch now</button></>
