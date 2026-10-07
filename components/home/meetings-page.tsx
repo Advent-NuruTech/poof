@@ -229,6 +229,7 @@ const CSS = `
   .zm-status-rail{max-width:100%}
 }
 @media (max-width:720px){
+  .zm-page{padding-bottom:calc(84px + env(safe-area-inset-bottom))}
   .zm-hero{padding:44px 20px 32px}
   .zm-toolbar{flex-direction:column;align-items:stretch;gap:10px}
   .zm-status-rail{max-width:100%;padding-bottom:6px}

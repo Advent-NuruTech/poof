@@ -231,7 +231,7 @@ const CSS = `
 
 /* ===== Responsive ===== */
 @media (max-width:960px){
-  .md-wrap{grid-template-columns:1fr;gap:36px;padding:36px 20px 72px}
+  .md-wrap{grid-template-columns:1fr;gap:36px;padding:36px 20px calc(96px + env(safe-area-inset-bottom))}
   .md-aside{position:static}
   .md-hero{padding:40px 20px 28px}
 }
@@ -449,7 +449,7 @@ export default function MeetingDetail({ id }: { id: string }) {
                   )}
 
                   <div className="md-action-row">
-                    {meeting.meetingType !== "onsite" && (
+                    {status !== "completed" && meeting.meetingType !== "onsite" && (
                       <Link className="md-action md-action-ghost" href="/meeting-link-request">
                         <span>Request link</span>
                       </Link>

@@ -98,12 +98,6 @@ export default function HomeScreen() {
 
   const channelIds = new Set(channels.map((channel) => channel.id));
   const activeVideos = videos.filter((video) => video.catalogChannelIds?.some((id) => channelIds.has(id)));
-  // Derive the archive years from the same `now` clock the meeting sections use
-  // instead of calling `new Date()` during render. `now` starts at 0 and is set
-  // from a `useEffect`, so this read only happens on the client; calling
-  // `new Date()` here would make Next.js reject the prerender with
-  // `blocking-prerender-current-time-client`. While `now` is 0 the archive
-  // years resolve to 1970, so those sections stay hidden until the clock lands.
   const currentYear = now ? new Date(now).getFullYear() : 0;
   const videosFromYear = (year: number) => year ? activeVideos.filter((video) => video.publishedAt && new Date(video.publishedAt).getFullYear() === year).slice(0, ARCHIVE_VIDEO_LIMIT) : [];
   const twoYearVideos = videosFromYear(currentYear - 2);
@@ -132,7 +126,7 @@ export default function HomeScreen() {
   // Each section is capped before render. The catalog itself may hold thousands
   // of videos; that size must never translate into per-visitor DOM, and nothing
   // below ever re-reads Firestore.
-  const meetingGroupsShown = meetingGroups(collapseMeetingOccurrences(meetings, now), now).filter((group) => group.status !== "completed").slice(0, 2).map((group) => ({ ...group, meetings: group.meetings.slice(0, 2) })).filter((group) => group.meetings.length);
+  const meetingGroupsShown = meetingGroups(collapseMeetingOccurrences(meetings, now), now).filter((group) => group.status !== "completed").slice(0, 2).map((group) => ({ ...group, meetings: group.meetings.slice(0, 3) })).filter((group) => group.meetings.length);
   const visibleVideos = showAllVideos ? latest.slice(0, HOME_SECTION_LIMIT) : latest.slice(0, LATEST_PAGE_SIZE);
 
   async function shareVideo(video: Video) {
@@ -192,14 +186,23 @@ export default function HomeScreen() {
       <div className="hero-dots">{Array.from({ length: heroItems.length ? Math.min(heroItems.length, 4) : 4 }, (_, dot) => <button key={dot} className={dot === heroIndex % Math.max(heroItems.length, 1) ? "dot-current" : ""} aria-label={`Show featured item ${dot + 1}`} onClick={() => setHeroIndex(dot)}/>)}</div>
     </section>
     <div className="home-content">
+      <div className="latest-about-layout">
       <section className="home-section latest-section" id="latest"><SectionTitle icon="list" title={search ? "Search results" : "Latest Videos"} onViewAll={() => setShowAllVideos(!showAllVideos)}/>
         {!videosLoaded ? <VideoListSkeleton/> : visibleVideos.length ? <div className="latest-list">{visibleVideos.map((video) => <article className="latest-card" key={video.id}><button className="video-thumb" onClick={() => setWatching(video)} aria-label={`Watch ${video.title}`}><img src={video.thumbnail} alt=""/><span className="duration-tag">{formatDuration(video.duration)}</span><span className="thumb-play"><Icon name="play" size={17}/></span></button><button className="video-copy" onClick={() => setWatching(video)}><strong>{video.website?.displayTitle || video.title}</strong><time>{formatDate(video.publishedAt)}</time><span className="video-description">{video.description?.trim() || video.channelTitle}</span></button><button className="more-button" aria-label={`Share ${video.title}`} title="Share video" onClick={() => void shareVideo(video)}><Icon name="menu"/></button></article>)}</div> : <div className="empty-home"><span className="empty-video-icon"><Icon name="play" size={19}/></span><div><strong>{search ? "No videos found" : "Videos will appear here soon"}</strong><p>{search ? "Try another title, topic, or channel." : "New videos and messages will be added to the library as they become available."}</p></div></div>}</section>
-      <section className="home-section meetings-section" id="meetings"><SectionTitle icon="calendar" title="Meetings" href="/meetings"/>{!meetingsLoaded ? <MeetingListSkeleton/> : meetingGroupsShown.length ? <div className="meeting-groups">{meetingGroupsShown.map((group) => <div className="meeting-group" key={group.status}>
+        <aside className="about-card" aria-labelledby="about-card-title">
+          <span className="about-card-eyebrow"><i/> About the ministry</span>
+          <h2 id="about-card-title">A faith rooted in Scripture.</h2>
+          <p>Faith of the Pioneers is an online fellowship devoted to Scripture, personal testimonies, and the simple, Bible-centered faith of the early Adventist pioneers.</p>
+          <p>Join believers around the world for weekly study, worship, and fellowship.</p>
+          <div className="about-card-actions"><Link className="about-card-link" href="/about">Discover our ministry <Icon name="chevron" size={15}/></Link><Link className="about-card-cta" href="/meeting-link-request">Join the next meeting</Link></div>
+        </aside>
+      </div>
+      {(!meetingsLoaded || meetingGroupsShown.length > 0) && <section className="home-section meetings-section" id="meetings"><SectionTitle icon="calendar" title="Meetings" href="/meetings"/>{!meetingsLoaded ? <MeetingListSkeleton/> : <div className="meeting-groups">{meetingGroupsShown.map((group) => <div className="meeting-group" key={group.status}>
         <h3 className="meeting-group-title">{group.label}<span>{group.meetings.length}</span></h3>
         <div className="zoom-meeting-list">{group.meetings.map((meeting) => <MeetingCard key={meeting.id} meeting={meeting} now={now}/>)}</div>
-      </div>)}</div> : <div className="playlist-empty"><Icon name="calendar" size={20}/><span>Meetings will appear here as they become available.</span></div>}</section>
+      </div>)}</div>}</section>}
       <section className="home-section" id="featured-playlists"><SectionTitle icon="list" title="Featured Playlists" href="/playlists"/>{!playlistsLoaded ? <CardGridSkeleton/> : topPlaylists.length ? <div className="playlist-strip">{topPlaylists.map((playlist) => <Link className="playlist-card" href={`/playlists/${encodeURIComponent(playlist.id)}`} key={playlist.id}><span className="playlist-art"><img src={playlist.thumbnail} alt=""/><span>{playlist.itemCount} videos</span></span><strong>{playlist.title}</strong><small>{playlist.channelTitle}</small></Link>)}</div> : <div className="playlist-empty"><Icon name="list" size={20}/><span>Playlists will appear here as they become available.</span></div>}</section>
-      {[{ label: "2 years ago", items: twoYearVideos }, { label: "4 years ago", items: fourYearVideos }, { label: "Most Viewed", items: mostViewedVideos }].map(({ label, items }, archiveIndex) => ((archiveIndex < 2 && !currentYear) || ((archiveIndex > 0) && videosLoaded && !items.length)) ? null : <section className="home-section archive-section" key={label}>
+      {[{ label: "2 years ago", items: twoYearVideos }, { label: "4 years ago", items: fourYearVideos }, { label: "Most Viewed", items: mostViewedVideos }].map(({ label, items }, archiveIndex) => ((archiveIndex < 2 && (!currentYear || (videosLoaded && !items.length))) || (archiveIndex > 1 && videosLoaded && !items.length)) ? null : <section className="home-section archive-section" key={label}>
         <div className="archive-heading"><h2>{label}</h2></div>
         {!videosLoaded || (archiveIndex < 2 && !currentYear) ? <VideoListSkeleton/> : items.length ? <div className="archive-list">{archiveRows(items, 3).map((row, rowIndex) => <div className={`archive-row${rowIndex % 2 ? " archive-row-reverse" : ""}`} key={`${label}-${rowIndex}`}>
           {row.map((video, itemIndex) => {

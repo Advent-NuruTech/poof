@@ -230,7 +230,7 @@ export default function MeetingCard({ meeting, now }: { meeting: Meeting; now: n
               </a>
             )}
 
-            {meeting.meetingType !== "onsite" && (
+            {status !== "completed" && meeting.meetingType !== "onsite" && (
               <Link className="mc-btn mc-btn-ghost" href="/meeting-link-request">
                 <span className="mc-btn-label">Request link</span>
               </Link>

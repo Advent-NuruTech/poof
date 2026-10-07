@@ -1,5 +1,23 @@
 # Project Memory
 
+## 2026-10-07: Homepage section visibility and ministry-card height
+
+- **Major changes:** The homepage ministry feature now uses content height on desktop rather than stretching to match the adjacent Latest Videos column. Empty loaded Meetings, 2-years-ago, and 4-years-ago sections are omitted instead of showing placeholder space.
+- **Build safeguard:** Restored archive-year calculation to the client `now` state. Rendering `new Date()` directly in this Cache Components Client Component causes Next.js prerender failures; keep the year archive sections hidden until the client clock is available.
+- **Verification:** `npx.cmd tsc --noEmit` and `git diff --check` passed. Targeted ESLint had 0 errors and the same 9 existing `@next/next/no-img-element` warnings.
+
+## 2026-10-07: Homepage ministry feature and compact meeting grid
+
+- **Major changes:** Restored the homepage “About the Ministry” feature beside Latest Videos, now with a finished editorial treatment: layered dark-green surface, subtle grid and light detail, clear hierarchy, and direct paths to the About page and meeting-link request. The section collapses beneath the video list on small screens.
+- **Major changes:** Homepage meeting cards now display in a three-column grid on desktop and a single column on mobile, with up to three meetings surfaced per active status. Cards retain their full poster, event metadata, countdown, and actions while no longer expanding into oversized list rows.
+- **Verification:** `npx.cmd tsc --noEmit` passed. Targeted `npx.cmd eslint components/home/home-screen.tsx` had 0 errors and 9 pre-existing `@next/next/no-img-element` warnings.
+
+## 2026-10-07: Mobile recurring meetings and bottom-navigation overlap
+
+- **Bug:** Weekly meetings were expanded only through the end of the current calendar week. Once that week's occurrence completed, the mobile schedule could show only the completed card and no future recurring instance, even though the meeting repeats. Completed online cards also still exposed the obsolete "Request link" action. The final portion of meeting lists/details could sit behind the fixed mobile tab bar.
+- **Fix:** `expandRecurringMeetings` now includes the current and following calendar weeks, so upcoming weekly occurrences remain in the schedule after the current one ends. The request-link action is now omitted whenever a meeting is completed in both list cards and the meeting detail page. Added safe-area-aware mobile bottom padding to the meetings schedule and meeting detail content so the final controls remain scrollable above the fixed tab bar.
+- **Verification:** `npx.cmd tsc --noEmit`, targeted ESLint on the changed meeting files, `npm.cmd run build`, and `git diff --check` passed.
+
 ## 2026-10-06: Fix `/meetings` prerender failure — `Date.now()` in Client Components
 
 - **Error:** `npm run build` (Next.js 16.3.8, Turbopack, Cache Components) compiled and type-checked cleanly, then failed at page data collection with `Error occurred prerendering page "/meetings"` followed by `Export encountered an error on /(public)/meetings/page: /meetings, exiting the build.`

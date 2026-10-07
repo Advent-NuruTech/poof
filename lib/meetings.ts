@@ -52,7 +52,12 @@ function zonedDateTimeToIso(parts: ReturnType<typeof localDateParts>, timeZone: 
   return new Date(guess).toISOString();
 }
 
-/** Expands recurring meetings only for the current calendar week in the viewer's timezone. */
+/**
+ * Expands recurring meetings for this calendar week and the following week in
+ * the viewer's timezone. Keeping the next week in the schedule means a
+ * recurring meeting remains visible as Upcoming after this week's occurrence
+ * has completed.
+ */
 export function expandRecurringMeetings(meetings: Meeting[], now: number) {
   // `now` is always supplied by the caller. Do NOT default it to `Date.now()`
   // here: these helpers run inside Client Components during prerender, and
@@ -63,7 +68,7 @@ export function expandRecurringMeetings(meetings: Meeting[], now: number) {
   const reference = now;
   const today = new Date(reference);
   const weekStart = new Date(today.getFullYear(), today.getMonth(), today.getDate() - today.getDay());
-  const weekEnd = new Date(today.getFullYear(), today.getMonth(), today.getDate() - today.getDay() + 7);
+  const weekEnd = new Date(today.getFullYear(), today.getMonth(), today.getDate() - today.getDay() + 14);
   const dayMs = 24 * 60 * 60 * 1000;
   return meetings.flatMap((meeting) => {
     const recurrence = meeting.recurrence;
