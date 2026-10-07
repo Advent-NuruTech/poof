@@ -1,6 +1,6 @@
 "use client";
 
-import { addDoc, collection, deleteDoc, doc, getDocs, onSnapshot, setDoc, updateDoc } from "firebase/firestore";
+import { addDoc, collection, deleteDoc, doc, getDocs, limit, onSnapshot, orderBy, query, setDoc, updateDoc } from "firebase/firestore";
 import { onAuthStateChanged } from "firebase/auth";
 import { useEffect, useRef, useState } from "react";
 import { auth, db } from "@/lib/firebase";
@@ -47,7 +47,7 @@ export default function LibraryManager() {
     });
     return () => { stopSnapshot(); stopAuth(); };
   }, []);
-  useEffect(() => onSnapshot(collection(db, "libraryDocuments"), (snapshot) => {
+  useEffect(() => onSnapshot(query(collection(db, "libraryDocuments"), orderBy("updatedAt", "desc"), limit(200)), (snapshot) => {
     setDocuments(snapshot.docs.map((item) => ({ ...item.data(), id: item.id }) as LibraryDocument).sort((a, b) => (b.updatedAt ?? "").localeCompare(a.updatedAt ?? "")));
   }, (reason) => setError(reason.message)), []);
 

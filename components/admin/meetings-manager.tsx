@@ -1,7 +1,7 @@
 "use client";
 
 import { onAuthStateChanged, signOut, type User } from "firebase/auth";
-import { addDoc, collection, deleteDoc, doc, getDoc, onSnapshot, updateDoc, deleteField } from "firebase/firestore";
+import { addDoc, collection, deleteDoc, doc, getDoc, limit, onSnapshot, query, updateDoc, deleteField } from "firebase/firestore";
 import { useEffect, useState } from "react";
 import type { FormEvent } from "react";
 import { auth, db } from "@/lib/firebase";
@@ -51,7 +51,7 @@ export default function MeetingsManager() {
   }, [user]);
   useEffect(() => {
     if (!isAdmin) return;
-    return onSnapshot(collection(db, "meetings"), (snapshot) => setMeetings(snapshot.docs.map((item) => ({ ...item.data(), id: item.id }) as Meeting).sort((a, b) => a.startsAt.localeCompare(b.startsAt))), (reason) => setError(reason.message));
+    return onSnapshot(query(collection(db, "meetings"), limit(200)), (snapshot) => setMeetings(snapshot.docs.map((item) => ({ ...item.data(), id: item.id }) as Meeting).sort((a, b) => a.startsAt.localeCompare(b.startsAt))), (reason) => setError(reason.message));
   }, [isAdmin]);
 
   function editMeeting(meeting: Meeting) {

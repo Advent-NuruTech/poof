@@ -2,9 +2,8 @@
 import { useEffect, useState } from "react";
 import type { ReactNode } from "react";
 import Link from "next/link";
-import { collection, onSnapshot } from "firebase/firestore";
-import { db } from "@/lib/firebase";
-import type { LibraryCategory, LibraryDocument } from "@/lib/library";
+import { usePublicLibrary } from "@/lib/use-library-feed";
+import type { LibraryDocument } from "@/lib/library";
 import { formatDate, formatDuration, type Channel, type Playlist, type Video } from "@/lib/catalog";
 import { collapseMeetingOccurrences, formatMeetingDate, formatMeetingTime, meetingGroups, meetingHref, meetingJoinVisible } from "@/lib/meetings";
 import { feedChannels, feedMeetings, feedPlaylists, feedVideos, refreshCatalogFeed, usePublicCatalog } from "@/lib/use-catalog";
@@ -67,9 +66,7 @@ export default function HomeScreen() {
   const [now, setNow] = useState(0);
   const [heroIndex, setHeroIndex] = useState(0);
   const [shareNotice, setShareNotice] = useState("");
-  const [studyCategories, setStudyCategories] = useState<LibraryCategory[]>([]);
-  const [studyDocuments, setStudyDocuments] = useState<LibraryDocument[]>([]);
-  const [studiesLoaded, setStudiesLoaded] = useState(false);
+  const { categories: studyCategories, documents: studyDocuments, loaded: studiesLoaded } = usePublicLibrary();
 
   // Every public page reads the shared server snapshot cached for 24 hours. No
   // page opens an onSnapshot listener on videos, playlists, channels, or
@@ -104,20 +101,6 @@ export default function HomeScreen() {
     return () => { active = false; window.clearTimeout(timer); };
   }, [showAllVideos, pageVideos, feed.videos.length]);
   useEffect(() => { const initial = window.setTimeout(() => setNow(Date.now()), 0); const timer = window.setInterval(() => setNow(Date.now()), 30_000); return () => { window.clearTimeout(initial); window.clearInterval(timer); }; }, []);
-
-  // The homepage study shelf reads the same library collections as /library.
-  // Documents and categories are small, admin-managed sets, so a single
-  // snapshot listener per collection is safe here.
-  useEffect(() => onSnapshot(
-    collection(db, "libraryDocuments"),
-    (snapshot) => { setStudyDocuments(snapshot.docs.map((item) => ({ ...item.data(), id: item.id }) as LibraryDocument)); setStudiesLoaded(true); },
-    () => setStudiesLoaded(true),
-  ), []);
-  useEffect(() => onSnapshot(
-    collection(db, "libraryCategories"),
-    (snapshot) => setStudyCategories(snapshot.docs.map((item) => ({ ...item.data(), id: item.id }) as LibraryCategory)),
-    () => setStudyCategories([]),
-  ), []);
 
   const channelIds = new Set(channels.map((channel) => channel.id));
   const activeVideos = videos.filter((video) => video.catalogChannelIds?.some((id) => channelIds.has(id)));

@@ -21,10 +21,7 @@ export default function NotificationBell({ user }: { user: User | null }) {
     // A missing composite index falls back to the unbounded read so the bell
     // never goes silently blank.
     const bounded = query(collection(db, "contacts"), orderBy("createdAt", "desc"), limit(20));
-    const fallback = query(collection(db, "contacts"), limit(20));
-    return onSnapshot(bounded, (snapshot) => setItems(snapshot.docs.map((item) => ({ ...item.data(), id: item.id }) as InboxItem)), () => {
-      onSnapshot(fallback, (snapshot) => setItems(snapshot.docs.map((item) => ({ ...item.data(), id: item.id }) as InboxItem)));
-    });
+    return onSnapshot(bounded, (snapshot) => setItems(snapshot.docs.map((item) => ({ ...item.data(), id: item.id }) as InboxItem)));
   }, [user]);
 
   const ordered = useMemo(() => [...items].sort((a, b) => (b.createdAt?.toDate?.().getTime() ?? 0) - (a.createdAt?.toDate?.().getTime() ?? 0)), [items]);

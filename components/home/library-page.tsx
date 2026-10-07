@@ -1,12 +1,10 @@
 "use client";
 
-import { doc, getDoc } from "firebase/firestore";
 import Link from "next/link";
 import { useEffect, useMemo, useRef, useState } from "react";
-import { db } from "@/lib/firebase";
-import type { LibraryCategory, LibraryDocument } from "@/lib/library";
+import type { LibraryDocument } from "@/lib/library";
+import { usePublicLibrary } from "@/lib/use-library-feed";
 import { feedPlaylists, usePublicCatalog } from "@/lib/use-catalog";
-import { collection, onSnapshot } from "firebase/firestore";
 import MobileBottomNav from "@/components/home/mobile-bottom-nav";
 import PdfDocument from "@/components/home/pdf-document";
 import { sharePublicUrl } from "@/lib/share";
@@ -284,70 +282,19 @@ const Icon = {
 };
 
 export default function LibraryPage({ documentId }: { documentId?: string }) {
-  const [categories, setCategories] = useState<LibraryCategory[]>([]);
-  const [documents, setDocuments] = useState<LibraryDocument[]>([]);
-  const [current, setCurrent] = useState<LibraryDocument | null>(null);
   const [filter, setFilter] = useState("all");
   const [search, setSearch] = useState("");
   const [zoom, setZoom] = useState(100);
-  const [loading, setLoading] = useState(true);
-  const [error, setError] = useState("");
   const [floating, setFloating] = useState(false);
   const sentinelRef = useRef<HTMLDivElement | null>(null);
 
   const { feed } = usePublicCatalog();
+  const library = usePublicLibrary();
+  const { categories, documents } = library;
+  const loading = !library.loaded;
+  const error = library.error;
+  const current = documentId ? documents.find((item) => item.id === documentId) ?? null : null;
   const playlists = feedPlaylists(feed).filter((item) => !item.website?.hidden);
-
-  useEffect(
-    () =>
-      onSnapshot(
-        collection(db, "libraryCategories"),
-        (s) => setCategories(s.docs.map((x) => ({ ...x.data(), id: x.id }) as LibraryCategory)),
-        (e) => setError(e.message),
-      ),
-    [],
-  );
-
-  useEffect(
-    () =>
-      onSnapshot(
-        collection(db, "libraryDocuments"),
-        (s) => {
-          setDocuments(s.docs.map((x) => ({ ...x.data(), id: x.id }) as LibraryDocument));
-          setLoading(false);
-        },
-        (e) => {
-          setError(e.message);
-          setLoading(false);
-        },
-      ),
-    [],
-  );
-
-  useEffect(() => {
-    if (!documentId) {
-      setCurrent(null);
-      return;
-    }
-    let active = true;
-    setLoading(true);
-    getDoc(doc(db, "libraryDocuments", documentId))
-      .then((snapshot) => {
-        if (active) {
-          setCurrent(snapshot.exists() ? ({ ...snapshot.data(), id: snapshot.id } as LibraryDocument) : null);
-          setLoading(false);
-        }
-      })
-      .catch((e: unknown) => {
-        if (active) {
-          setError(e instanceof Error ? e.message : "Could not open this resource.");
-          setLoading(false);
-        }
-      });
-    return () => {
-      active = false;
-    };
-  }, [documentId]);
 
   /* Floating search bar on scroll */
   useEffect(() => {
@@ -378,7 +325,7 @@ export default function LibraryPage({ documentId }: { documentId?: string }) {
     (p) => p.id === filter || children(p.id).some((c) => c.id === filter),
   );
 
-  const target = current ?? documents.find((item) => item.id === documentId);
+  const target = current;
   const officeUrl = target?.fileUrl
     ? `https://view.officeapps.live.com/op/embed.aspx?src=${encodeURIComponent(target.fileUrl)}`
     : "";

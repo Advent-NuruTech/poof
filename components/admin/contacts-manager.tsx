@@ -1,7 +1,7 @@
 "use client";
 
 import { onAuthStateChanged, signOut, type User } from "firebase/auth";
-import { collection, deleteDoc, doc, getDoc, onSnapshot, query } from "firebase/firestore";
+import { collection, deleteDoc, doc, getDoc, limit, onSnapshot, query } from "firebase/firestore";
 import { useEffect, useState } from "react";
 import { auth, db } from "@/lib/firebase";
 import { signInWithGoogle } from "@/lib/sign-in";
@@ -29,7 +29,7 @@ export default function ContactsManager({ mode = "all" }: { mode?: "all" | "meet
   }, [user]);
   useEffect(() => {
     if (!isAdmin) return;
-    return onSnapshot(query(collection(db, "contacts")), (snapshot) => {
+    return onSnapshot(query(collection(db, "contacts"), limit(100)), (snapshot) => {
       setContacts(snapshot.docs.map((item) => ({ ...item.data(), id: item.id }) as Contact).filter((item) => mode === "all" || item.category === mode).sort((a, b) => (b.createdAt?.toDate?.().getTime() ?? 0) - (a.createdAt?.toDate?.().getTime() ?? 0)));
     }, (reason) => setError(reason.message));
   }, [isAdmin, mode]);

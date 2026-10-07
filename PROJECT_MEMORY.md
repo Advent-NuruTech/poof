@@ -1,5 +1,13 @@
 # Project Memory
 
+## 2026-10-07: Cache public library data and bound admin snapshots
+
+- **Major changes:** Added a shared server-cached `/api/library` snapshot for public categories and documents, refreshed every 10 minutes and capped at 900 records per collection. Homepage and Library screens now share a client in-memory request and no longer open full collection listeners; opening a library reader uses the cached document list rather than adding a separate Firestore `getDoc` read.
+- **Major changes:** Bounded the admin meeting and published-resource live snapshots to 200 records and the inbox snapshot to 100. The notification bell keeps its 20-row ordered listener and no longer opens a second fallback listener after errors.
+- **Time handling:** Meeting creation already converts the administrator browser's local date/time to UTC and stores its IANA timezone; meeting displays format the stored instant in each visitor's detected browser timezone. Kept that behavior unchanged.
+- **Errors and fixes:** The first TypeScript check found a missing type-only `LibraryDocument` import in the homepage helper annotations. Restored the import; the next check passed. No runtime/build errors encountered.
+- **Verification:** `npx.cmd tsc --noEmit` and `git diff --check` passed. Not measured against live Firestore traffic, so the exact percentage of read reduction is not verified. Public library updates can take up to 10 minutes to appear in the shared feed.
+
 ## 2026-10-07: Mobile meeting actions and share-ready study links
 
 - **Major changes:** Meeting-card actions retain their labels on narrow screens and arrange into a two-column action grid, eliminating the empty mobile outlines caused by hiding both text labels. The homepage masthead and footer are now reusable `PublicHeader` and `SiteFooter` components. Desktop navigation links no longer use pill/text backgrounds; the active route uses a small red underline.
