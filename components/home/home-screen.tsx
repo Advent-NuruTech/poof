@@ -2,6 +2,9 @@
 import { useEffect, useState } from "react";
 import type { ReactNode } from "react";
 import Link from "next/link";
+import { collection, onSnapshot } from "firebase/firestore";
+import { db } from "@/lib/firebase";
+import type { LibraryCategory, LibraryDocument } from "@/lib/library";
 import { formatDate, formatDuration, type Channel, type Playlist, type Video } from "@/lib/catalog";
 import { collapseMeetingOccurrences, formatMeetingDate, formatMeetingTime, meetingGroups, meetingHref, meetingJoinVisible } from "@/lib/meetings";
 import { feedChannels, feedMeetings, feedPlaylists, feedVideos, refreshCatalogFeed, usePublicCatalog } from "@/lib/use-catalog";
@@ -17,6 +20,7 @@ const HOME_SECTION_LIMIT = 12;
 const ARCHIVE_VIDEO_LIMIT = 15;
 const HERO_ITEM_LIMIT = 4;
 const LATEST_PAGE_SIZE = 6;
+const HOME_STUDY_LIMIT = 6;
 const HERO_MEETING_MS = 15_000;
 const HERO_VIDEO_MS = 5_000;
 
@@ -61,6 +65,9 @@ export default function HomeScreen() {
   const [now, setNow] = useState(0);
   const [heroIndex, setHeroIndex] = useState(0);
   const [shareNotice, setShareNotice] = useState("");
+  const [studyCategories, setStudyCategories] = useState<LibraryCategory[]>([]);
+  const [studyDocuments, setStudyDocuments] = useState<LibraryDocument[]>([]);
+  const [studiesLoaded, setStudiesLoaded] = useState(false);
 
   // Every public page reads the shared server snapshot cached for 24 hours. No
   // page opens an onSnapshot listener on videos, playlists, channels, or
@@ -96,6 +103,20 @@ export default function HomeScreen() {
   }, [showAllVideos, pageVideos, feed.videos.length]);
   useEffect(() => { const initial = window.setTimeout(() => setNow(Date.now()), 0); const timer = window.setInterval(() => setNow(Date.now()), 30_000); return () => { window.clearTimeout(initial); window.clearInterval(timer); }; }, []);
 
+  // The homepage study shelf reads the same library collections as /library.
+  // Documents and categories are small, admin-managed sets, so a single
+  // snapshot listener per collection is safe here.
+  useEffect(() => onSnapshot(
+    collection(db, "libraryDocuments"),
+    (snapshot) => { setStudyDocuments(snapshot.docs.map((item) => ({ ...item.data(), id: item.id }) as LibraryDocument)); setStudiesLoaded(true); },
+    () => setStudiesLoaded(true),
+  ), []);
+  useEffect(() => onSnapshot(
+    collection(db, "libraryCategories"),
+    (snapshot) => setStudyCategories(snapshot.docs.map((item) => ({ ...item.data(), id: item.id }) as LibraryCategory)),
+    () => setStudyCategories([]),
+  ), []);
+
   const channelIds = new Set(channels.map((channel) => channel.id));
   const activeVideos = videos.filter((video) => video.catalogChannelIds?.some((id) => channelIds.has(id)));
   const currentYear = now ? new Date(now).getFullYear() : 0;
@@ -128,6 +149,20 @@ export default function HomeScreen() {
   // below ever re-reads Firestore.
   const meetingGroupsShown = meetingGroups(collapseMeetingOccurrences(meetings, now), now).filter((group) => group.status !== "completed").slice(0, 2).map((group) => ({ ...group, meetings: group.meetings.slice(0, 3) })).filter((group) => group.meetings.length);
   const visibleVideos = showAllVideos ? latest.slice(0, HOME_SECTION_LIMIT) : latest.slice(0, LATEST_PAGE_SIZE);
+  // Latest studies: newest first, but anything filed under a Health category is
+  // surfaced ahead of the rest so health material leads the shelf.
+  const healthCategoryIds = new Set(studyCategories.filter((category) => /health/i.test(category.name)).map((category) => category.id));
+  const isHealthStudy = (study: LibraryDocument) => healthCategoryIds.has(study.categoryId) || /health/i.test(study.categoryName ?? "");
+  const latestStudies = [...studyDocuments]
+    .sort((a, b) => new Date(b.createdAt ?? b.updatedAt ?? 0).getTime() - new Date(a.createdAt ?? a.updatedAt ?? 0).getTime())
+    .sort((a, b) => Number(isHealthStudy(b)) - Number(isHealthStudy(a)))
+    .slice(0, HOME_STUDY_LIMIT);
+  const studyKindLabel = (kind: LibraryDocument["kind"]) => kind === "pdf" ? "PDF" : kind === "doc" ? "DOC" : "NOTE";
+  const studyPreviewUrl = (study: LibraryDocument) =>
+    study.previewUrl ||
+    (study.fileUrl && process.env.NEXT_PUBLIC_CLOUDINARY_CLOUD_NAME
+      ? `https://res.cloudinary.com/${process.env.NEXT_PUBLIC_CLOUDINARY_CLOUD_NAME}/image/fetch/pg_1,f_jpg,w_1000/${encodeURIComponent(study.fileUrl)}`
+      : study.fileUrl || "");
 
   async function shareVideo(video: Video) {
     const url = `https://www.youtube.com/watch?v=${encodeURIComponent(video.id)}`;
@@ -215,7 +250,7 @@ export default function HomeScreen() {
           })}
         </div>)}</div> : <div className="playlist-empty"><Icon name="play" size={20}/><span>No videos from {label} are available in the connected channels.</span></div>}
       </section>)}
-      <section className="home-section" id="playlist-listing"><SectionTitle icon="list" title="Playlists" href="/playlists"/>{!playlistsLoaded ? <CardGridSkeleton/> : topPlaylists.length ? <div className="playlist-strip">{topPlaylists.map((playlist) => <Link className="playlist-card" href={`/playlists/${encodeURIComponent(playlist.id)}`} key={`all-${playlist.id}`}><span className="playlist-art"><img src={playlist.thumbnail} alt=""/><span>{playlist.itemCount} videos</span></span><strong>{playlist.title}</strong><small>{playlist.channelTitle}</small></Link>)}</div> : <div className="playlist-empty"><Icon name="list" size={20}/><span>Playlists will appear here as they become available.</span></div>}</section>
+      <section className="home-section studies-section" id="studies"><SectionTitle icon="list" title="Latest Studies" href="/library"/>{!studiesLoaded ? <CardGridSkeleton/> : latestStudies.length ? <div className="study-grid">{latestStudies.map((study) => <Link className="study-card" href={`/library/${encodeURIComponent(study.id)}`} key={study.id}><span className="study-card-preview"><span className="study-kind">{studyKindLabel(study.kind)}</span>{study.kind === "pdf" && study.fileUrl ? <img src={studyPreviewUrl(study)} alt={`${study.title}, page 1`} loading="lazy"/> : study.kind === "doc" && study.fileUrl ? <iframe src={`https://view.officeapps.live.com/op/embed.aspx?src=${encodeURIComponent(study.fileUrl)}`} title={`${study.title} first page`} tabIndex={-1}/> : <span className="study-note-preview" dangerouslySetInnerHTML={{ __html: study.contentHtml ?? "" }}/>}<span className="study-card-arrow" aria-hidden="true">&#8594;</span></span><span className="study-card-body"><strong>{study.title}</strong><small>{study.description?.trim() || (study.kind === "note" ? "Read this study note online" : study.fileName || study.categoryName || "Study resource")}</small></span></Link>)}</div> : <div className="playlist-empty"><Icon name="list" size={20}/><span>Study resources will appear here as they are published.</span></div>}</section>
       <section className="home-section channels-section" id="channels"><SectionTitle icon="grid" title="Our Channels" href="#channels"/>{!channelsLoaded ? <CardGridSkeleton/> : channels.length ? <div className="channel-strip">{channels.map((channel) => <a className="public-channel" href={channel.customUrl ? `https://www.youtube.com/${channel.customUrl}` : `https://www.youtube.com/channel/${channel.id}`} target="_blank" rel="noreferrer" key={channel.id}><ChannelAvatar channel={channel}/><span><strong>{channel.title}</strong><small>Explore channel</small></span><Icon name="chevron" size={16}/></a>)}</div> : <p className="channel-empty">A growing collection of messages, ministries, and music.</p>}</section>
     <footer className="site-footer">
       <div className="footer-inner">

@@ -1,5 +1,11 @@
 # Project Memory
 
+## 2026-10-07: Homepage Latest Studies mirrors the Library listing
+
+- **Major changes:** The homepage Latest Studies shelf now renders the same visual material as `/library`: a first-page preview for PDFs (including the existing Cloudinary fallback), an Office preview for Word files, and a clipped note preview for authored notes. Each card retains the Library type badge, title, two-line description, and hover affordance, and links directly to its reader.
+- **Limit:** The shelf intentionally remains capped at six newest studies (`HOME_STUDY_LIMIT`), with Health material retaining its existing priority ordering.
+- **Verification:** `npx.cmd tsc --noEmit`, targeted `npx.cmd eslint components/home/home-screen.tsx`, and `git diff --check` passed.
+
 ## 2026-10-07: Homepage section visibility and ministry-card height
 
 - **Major changes:** The homepage ministry feature now uses content height on desktop rather than stretching to match the adjacent Latest Videos column. Empty loaded Meetings, 2-years-ago, and 4-years-ago sections are omitted instead of showing placeholder space.
