@@ -2,24 +2,51 @@
 
 import { onAuthStateChanged, signOut, type User } from "firebase/auth";
 import { addDoc, collection, deleteDoc, doc, getDoc, limit, onSnapshot, query, updateDoc, deleteField } from "firebase/firestore";
-import { useEffect, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 import type { FormEvent } from "react";
 import { auth, db } from "@/lib/firebase";
 import { signInWithGoogle } from "@/lib/sign-in";
 import { endAdminSession } from "@/lib/admin-session";
 import { deviceTimeZone, formatMeetingDate, formatMeetingTime, type Meeting } from "@/lib/meetings";
 
-const blank = { title: "", description: "", posterUrl: "", date: "", start: "", end: "", meetingType: "online" as "online" | "onsite", meetingUrl: "", venue: "", repeats: false, repeatDays: [] as number[], repeatUntil: "never" as "never" | "date", untilDate: "" };
+const blank = { title: "", description: "", posterUrl: "", date: "", start: "", end: "", timeZone: "", meetingType: "online" as "online" | "onsite", meetingUrl: "", venue: "", repeats: false, repeatDays: [] as number[], repeatUntil: "never" as "never" | "date", untilDate: "" };
 const weekdays = ["Sunday", "Monday", "Tuesday", "Wednesday", "Thursday", "Friday", "Saturday"];
-function localDateTime(date: string, time: string) { return new Date(`${date}T${time}`).toISOString(); }
+const timeZoneStorageKey = "poof-meeting-time-zone";
+const timeZones = (() => {
+  try { return ["UTC", ...Intl.supportedValuesOf("timeZone")]; }
+  catch { return ["UTC", "America/Los_Angeles", "America/New_York", "America/Chicago", "Europe/London", "Europe/Paris", "Africa/Nairobi", "Asia/Dubai", "Asia/Kolkata", "Asia/Tokyo", "Australia/Sydney"]; }
+})();
+function preferredTimeZone() {
+  try {
+    const saved = window.localStorage.getItem(timeZoneStorageKey);
+    if (saved && timeZones.includes(saved)) return saved;
+  } catch { /* Storage may be disabled; use the browser's zone. */ }
+  return deviceTimeZone();
+}
+function localDateTime(date: string, time: string, timeZone: string) {
+  const [year, month, day] = date.split("-").map(Number);
+  const [hour, minute] = time.split(":").map(Number);
+  const target = Date.UTC(year, month - 1, day, hour, minute);
+  let guess = target;
+  for (let attempt = 0; attempt < 3; attempt += 1) {
+    const parts = new Intl.DateTimeFormat("en-CA", { timeZone, year: "numeric", month: "2-digit", day: "2-digit", hour: "2-digit", minute: "2-digit", second: "2-digit", hourCycle: "h23" }).formatToParts(new Date(guess));
+    const get = (type: Intl.DateTimeFormatPartTypes) => Number(parts.find((part) => part.type === type)?.value ?? 0);
+    guess += target - Date.UTC(get("year"), get("month") - 1, get("day"), get("hour"), get("minute"), get("second"));
+  }
+  return new Date(guess).toISOString();
+}
+function dateTimeInZone(value: string, timeZone: string) {
+  const parts = new Intl.DateTimeFormat("en-CA", { timeZone, year: "numeric", month: "2-digit", day: "2-digit", hour: "2-digit", minute: "2-digit", hourCycle: "h23" }).formatToParts(new Date(value));
+  const get = (type: Intl.DateTimeFormatPartTypes) => parts.find((part) => part.type === type)?.value ?? "00";
+  return { date: `${get("year")}-${get("month")}-${get("day")}`, time: `${get("hour")}:${get("minute")}` };
+}
 function meetingForm(meeting: Meeting) {
-  const start = new Date(meeting.startsAt);
-  const end = new Date(meeting.endsAt);
-  const localStart = new Date(start.getTime() - start.getTimezoneOffset() * 60_000).toISOString();
-  const localEnd = new Date(end.getTime() - end.getTimezoneOffset() * 60_000).toISOString();
+  const timeZone = meeting.timeZone || deviceTimeZone();
+  const localStart = dateTimeInZone(meeting.startsAt, timeZone);
+  const localEnd = dateTimeInZone(meeting.endsAt, timeZone);
   return {
     title: meeting.title, description: meeting.description ?? "", posterUrl: meeting.posterUrl ?? "",
-    date: localStart.slice(0, 10), start: localStart.slice(11, 16), end: localEnd.slice(11, 16),
+    date: localStart.date, start: localStart.time, end: localEnd.time, timeZone,
     meetingType: meeting.meetingType ?? "online", meetingUrl: meeting.meetingUrl ?? "", venue: meeting.venue ?? "",
     repeats: Boolean(meeting.recurrence), repeatDays: meeting.recurrence?.days ?? [],
     repeatUntil: meeting.recurrence?.until ? "date" as const : "never" as const, untilDate: meeting.recurrence?.until ?? "",
@@ -32,13 +59,15 @@ export default function MeetingsManager() {
   const [isAdmin, setIsAdmin] = useState(false);
   const [meetings, setMeetings] = useState<Meeting[]>([]);
   const [form, setForm] = useState(blank);
+  const [timeZoneSearch, setTimeZoneSearch] = useState("");
   const [editingId, setEditingId] = useState<string | null>(null);
   const [busy, setBusy] = useState(false);
   const [uploadingPoster, setUploadingPoster] = useState(false);
   const [error, setError] = useState("");
   const [notice, setNotice] = useState("");
+  const filteredTimeZones = useMemo(() => timeZones.filter((zone) => zone.replaceAll("_", " ").toLowerCase().includes(timeZoneSearch.trim().toLowerCase())), [timeZoneSearch]);
 
-  useEffect(() => onAuthStateChanged(auth, (current) => { setUser(current); setReady(true); if (!current) setIsAdmin(false); }), []);
+  useEffect(() => onAuthStateChanged(auth, (current) => { setUser(current); setReady(true); setForm((form) => form.timeZone ? form : { ...form, timeZone: preferredTimeZone() }); if (!current) setIsAdmin(false); }), []);
   useEffect(() => {
     if (!user) return;
     let active = true;
@@ -62,15 +91,17 @@ export default function MeetingsManager() {
   }
 
   function cancelEdit() {
-    setForm(blank); setEditingId(null); setError(""); setNotice("");
+    setForm({ ...blank, timeZone: preferredTimeZone() }); setEditingId(null); setError(""); setNotice("");
   }
 
   async function saveMeeting(event: FormEvent<HTMLFormElement>) {
     event.preventDefault(); if (busy || uploadingPoster) return;
     setError(""); setNotice("");
     try {
-      const startsAt = localDateTime(form.date, form.start);
-      const endsAt = localDateTime(form.date, form.end);
+      if (!form.timeZone) throw new Error("Choose the time zone for this meeting.");
+      const timeZone = form.timeZone;
+      const startsAt = localDateTime(form.date, form.start, timeZone);
+      const endsAt = localDateTime(form.date, form.end, timeZone);
       if (new Date(endsAt) <= new Date(startsAt)) throw new Error("The end time must be later than the start time.");
       if (form.repeats && !form.repeatDays.length) throw new Error("Choose at least one day for a repeating meeting.");
       if (form.repeats && form.repeatUntil === "date" && !form.untilDate) throw new Error("Choose the date when this repeating meeting ends.");
@@ -78,7 +109,7 @@ export default function MeetingsManager() {
       setBusy(true);
       if (form.meetingType === "onsite" && !form.venue.trim()) throw new Error("Enter the meeting venue.");
       const recurrence = form.repeats ? { frequency: "weekly" as const, days: form.repeatDays, ...(form.repeatUntil === "date" ? { until: form.untilDate } : {}) } : undefined;
-      const data = { title: form.title.trim(), description: form.description.trim(), posterUrl: form.posterUrl.trim(), startsAt, endsAt, timeZone: deviceTimeZone(), meetingType: form.meetingType, meetingUrl: form.meetingType === "online" ? form.meetingUrl.trim() : "", venue: form.meetingType === "onsite" ? form.venue.trim() : "" };
+      const data = { title: form.title.trim(), description: form.description.trim(), posterUrl: form.posterUrl.trim(), startsAt, endsAt, timeZone, meetingType: form.meetingType, meetingUrl: form.meetingType === "online" ? form.meetingUrl.trim() : "", venue: form.meetingType === "onsite" ? form.venue.trim() : "" };
       if (editingId) {
         await updateDoc(doc(db, "meetings", editingId), { ...data, recurrence: recurrence ?? deleteField() });
         setNotice("Meeting updated.");
@@ -86,7 +117,8 @@ export default function MeetingsManager() {
         await addDoc(collection(db, "meetings"), { ...data, ...(recurrence ? { recurrence } : {}) });
         setNotice("Meeting published.");
       }
-      setForm(blank); setEditingId(null);
+      try { window.localStorage.setItem(timeZoneStorageKey, timeZone); } catch { /* Keep the meeting saved if browser storage is unavailable. */ }
+      setForm({ ...blank, timeZone }); setEditingId(null);
     } catch (reason) { setError(reason instanceof Error ? reason.message : "Could not save this meeting."); }
     finally { setBusy(false); }
   }
@@ -118,8 +150,9 @@ export default function MeetingsManager() {
             {form.posterUrl && <div className="meeting-poster-preview"><img src={form.posterUrl} alt="Meeting poster preview"/><button type="button" className="outline-button" onClick={() => setForm({ ...form, posterUrl: "" })}>Remove poster</button></div>}
             <label>Meeting format<select value={form.meetingType} onChange={(event) => setForm({ ...form, meetingType: event.target.value as "online" | "onsite" })}><option value="online">Online</option><option value="onsite">Onsite</option></select></label>
             {form.meetingType === "online" ? <label>Meeting link <span>Optional · visible one hour before start</span><input type="url" value={form.meetingUrl} onChange={(event) => setForm({ ...form, meetingUrl: event.target.value })} placeholder="https://zoom.us/j/…"/></label> : <label>Venue<input required value={form.venue} onChange={(event) => setForm({ ...form, venue: event.target.value })} placeholder="Address or venue name"/></label>}
+            <div className="meeting-timezone-picker"><label htmlFor="meeting-time-zone-search">Search time zones<input id="meeting-time-zone-search" type="search" value={timeZoneSearch} onChange={(event) => setTimeZoneSearch(event.target.value)} placeholder="City, region, or UTC" autoComplete="off"/></label><label htmlFor="meeting-time-zone">Scheduling time zone<select id="meeting-time-zone" required value={form.timeZone || deviceTimeZone()} onChange={(event) => setForm({ ...form, timeZone: event.target.value })}>{!filteredTimeZones.includes(form.timeZone || deviceTimeZone()) && <option value={form.timeZone}>{form.timeZone}</option>}{filteredTimeZones.map((zone) => <option key={zone} value={zone}>{zone.replaceAll("_", " ")}</option>)}</select></label>{filteredTimeZones.length === 0 && <span className="meeting-timezone-empty">No time zones match your search.</span>}</div>
             <div className="meeting-time-fields"><label>Date<input required type="date" value={form.date} onChange={(event) => setForm({ ...form, date: event.target.value })}/></label><label>Starts at<input required type="time" value={form.start} onChange={(event) => setForm({ ...form, start: event.target.value })}/></label><label>Ends at<input required type="time" value={form.end} onChange={(event) => setForm({ ...form, end: event.target.value })}/></label></div>
-            <p className="meeting-timezone-note">Scheduling in your device timezone: <strong>{deviceTimeZone()}</strong>. Visitors will see this meeting in their own local timezone.</p>
+            <p className="meeting-timezone-note">Meeting times are scheduled in <strong>{form.timeZone || deviceTimeZone()}</strong>. Everyone will see the corresponding time in their own local timezone. Your choice is saved on this device for next time.</p>
             <fieldset className="meeting-recurrence"><legend>Does this repeat?</legend><label className="repeat-choice"><input type="radio" name="repeats" checked={!form.repeats} onChange={() => setForm({ ...form, repeats: false })}/> No</label><label className="repeat-choice"><input type="radio" name="repeats" checked={form.repeats} onChange={() => setForm({ ...form, repeats: true })}/> Yes</label>{form.repeats && <div className="repeat-options"><label>Repeat<select value="weekly" disabled><option value="weekly">Weekly</option></select></label><div><span className="repeat-label">Days</span><div className="repeat-days">{weekdays.map((day, index) => <label key={day}><input type="checkbox" checked={form.repeatDays.includes(index)} onChange={() => setForm({ ...form, repeatDays: form.repeatDays.includes(index) ? form.repeatDays.filter((value) => value !== index) : [...form.repeatDays, index] })}/>{day}</label>)}</div></div><label>Until<select value={form.repeatUntil} onChange={(event) => setForm({ ...form, repeatUntil: event.target.value as "never" | "date" })}><option value="never">Never</option><option value="date">A date</option></select></label>{form.repeatUntil === "date" && <label>End date<input required type="date" min={form.date || undefined} value={form.untilDate} onChange={(event) => setForm({ ...form, untilDate: event.target.value })}/></label>}</div>}</fieldset>
             {error && <p className="notice error-notice">{error}</p>}{notice && <p className="notice">{notice}</p>}
             <button className="primary-button" disabled={busy || uploadingPoster}>{busy ? "Saving…" : editingId ? "Save changes" : "Publish meeting"}</button>{editingId && <button type="button" className="outline-button" disabled={busy || uploadingPoster} onClick={cancelEdit}>Cancel edit</button>}
