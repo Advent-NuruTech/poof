@@ -4,6 +4,7 @@ import Link from "next/link";
 import { usePathname } from "next/navigation";
 
 const sections = [
+  { href: "/admin", label: "Dashboard", icon: "⌂" },
   { href: "/admin", label: "Channels", icon: "▶" },
   { href: "/admin/meetings", label: "Meetings", icon: "◷" },
   { href: "/admin/library", label: "Library", icon: "▤" },
@@ -25,6 +26,7 @@ function NavItems({ items }: { items: typeof sections }) {
 export default function AdminSidebar() {
   return <aside className="admin-sidebar">
     <Link href="/admin" className="admin-sidebar-brand"><span>FAITH OF THE</span><strong>PIONEERS</strong></Link>
+    <div className="admin-sidebar-mobile-heading">Admin menu</div>
     <nav aria-label="Admin navigation"><p>Workspace</p><NavItems items={sections}/><p>Inbox</p><NavItems items={inbox}/></nav>
     <Link className="admin-sidebar-public" href="/" target="_blank">View public site <span aria-hidden="true">↗</span></Link>
   </aside>;

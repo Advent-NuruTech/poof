@@ -1,5 +1,5 @@
-import ChannelManager from "@/components/admin/channel-manager";
+import AdminDashboard from "@/components/admin-dashboard";
 
 export default function AdminPage() {
-  return <ChannelManager />;
+  return <AdminDashboard />;
 }
