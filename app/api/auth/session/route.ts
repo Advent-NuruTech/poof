@@ -13,8 +13,9 @@ type DocumentFields = {
   codeHash?: { stringValue?: string };
 };
 
-// The signup code authorizes access to the admin pages. Only a hash of it is
-// stored in Firestore so the code itself is never published.
+// Firestore rules require a non-empty codeHash on admins/{uid}. Only a hash is
+// stored so the code itself is never published; the value is a formality now
+// because sign-in no longer requires the code.
 async function hashSignupCode(code: string) {
   const data = new TextEncoder().encode(code);
   const digest = await crypto.subtle.digest("SHA-256", data);
@@ -30,11 +31,11 @@ export async function POST(request: Request) {
   const signupCode = process.env.SIGN_UP_CODE;
   if (!apiKey || !projectId) return NextResponse.json({ error: "Authentication is not configured." }, { status: 503 });
 
-  let body: { idToken?: unknown; code?: unknown };
+  let body: { idToken?: unknown };
   try { body = await request.json(); }
   catch { return NextResponse.json({ error: "Invalid request." }, { status: 400 }); }
-  const { idToken, code } = body;
-  if (typeof idToken !== "string" || idToken.length > 10000 || (code !== undefined && typeof code !== "string")) {
+  const { idToken } = body;
+  if (typeof idToken !== "string" || idToken.length > 10000) {
     return NextResponse.json({ error: "Sign in again to continue." }, { status: 401 });
   }
 
@@ -50,7 +51,10 @@ export async function POST(request: Request) {
   const adminPath = `admins/${encodeURIComponent(uid)}`;
   const adminUrl = `https://firestore.googleapis.com/v1/${root}/${adminPath}`;
   const now = Date.now();
-  const codeHash = signupCode ? await hashSignupCode(signupCode) : "";
+  // The signup code is not required to sign in; the field only has to satisfy
+  // the Firestore rules, so store a hash of the configured code when present
+  // and a fixed marker otherwise.
+  const codeHash = signupCode ? await hashSignupCode(signupCode) : "password-sign-in";
 
   const priorResponse = await readAdminDocument(idToken, adminUrl);
   // A missing document is a normal 404. A denied read (403) is also expected on
@@ -69,19 +73,14 @@ export async function POST(request: Request) {
   const prior = priorResponse.ok ? await priorResponse.json().catch(() => null) as { fields?: DocumentFields } | null : null;
   const priorExpiresAt = Date.parse(prior?.fields?.expiresAt?.timestampValue ?? "");
   const priorActive = prior?.fields?.enabled?.booleanValue === true && priorExpiresAt > now;
-  const priorMatchesCode = prior?.fields?.codeHash?.stringValue === codeHash;
 
-  if (priorActive && priorMatchesCode) {
+  if (priorActive) {
     // This account's admin session is still valid; keep its original deadline.
     return setSessionCookie(idToken, priorExpiresAt - now);
   }
 
-  // The signup code authorizes admin access. On first use the stored hash is
-  // written; afterwards it must match so the code cannot be changed to take over.
-  if (!codeHash || code !== signupCode || (prior?.fields?.codeHash?.stringValue && !priorMatchesCode)) {
-    return NextResponse.json({ error: "The signup code is incorrect." }, { status: 403 });
-  }
-
+  // Email and password alone open the session: the account already passed
+  // verification when it was created, so no signup code is required here.
   const expiresAt = now + SESSION_MS;
   const writeResponse = await fetch(`${adminUrl}?updateMask.fieldPaths=enabled&updateMask.fieldPaths=expiresAt&updateMask.fieldPaths=codeHash`, {
     method: "PATCH",
