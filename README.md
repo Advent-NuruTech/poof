@@ -31,7 +31,7 @@ Firebase Web API keys identify the Firebase project and are expected to be prese
 - Channel deletion only removes the channel source record; it does not delete videos or playlists.
 - `/admin/mailing` manages meeting-member verification, newsletter subscribers, campaign schedules, and Resend delivery history. Public meeting-link requests are saved as pending members; newsletter addresses are normalized and deduplicated by a SHA-256 document ID.
 - Meeting and newsletter sends use an inbox-friendly responsive HTML template. YouTube videos appear as clickable thumbnail previews because most email clients do not play embedded video. Newsletter emails include signed unsubscribe links.
-- The Vercel cron at `/api/mailing/cron` runs every minute, sends due one-time/daily/weekly/monthly campaigns, observes each schedule's timezone and optional end date, retries temporary provider failures up to three times with Resend idempotency keys, and records delivery results. Repeating schedules without an end date continue until an admin cancels them.
+- The Vercel Hobby cron at `/api/mailing/cron` runs once per day at 09:00 UTC, sends due one-time/daily/weekly/monthly campaigns, observes each schedule's timezone and optional end date, retries temporary provider failures up to three times with Resend idempotency keys, and records delivery results. Hobby cron timing has hourly precision (up to ±59 minutes), so an email scheduled after that day's check may wait until the following day's run. Repeating schedules without an end date continue until an admin cancels them.
 
 ### Mailing environment and deployment
 
@@ -39,7 +39,7 @@ Firebase Web API keys identify the Firebase project and are expected to be prese
 - Set `FIREBASE_SERVICE_ACCOUNT_JSON` to the Firebase project's service-account JSON. Keep this private server-side variable out of browser configuration and source control; it grants trusted access to meeting-member, subscriber, campaign, and history data.
 - Set `CRON_SECRET` to a long random value and `NEWSLETTER_UNSUBSCRIBE_SECRET` to a separate long random value. Vercel sends `CRON_SECRET` as the cron request's bearer token.
 - Set `NEXT_PUBLIC_SITE_URL` to the canonical HTTPS site URL so newsletter unsubscribe links point to the production domain.
-- Vercel Cron requires a deployment plan that supports a one-minute schedule. Scheduled email may be delivered within about a minute of the configured time. Local development does not run the cron automatically; invoke `/api/mailing/cron` with `Authorization: Bearer <CRON_SECRET>` to test due schedules.
+- The Hobby plan permits cron jobs only once per day. This project checks at 09:00 UTC with Vercel's Hobby hourly precision (±59 minutes); schedule sends may therefore be delayed until the next daily check and are not suitable for exact-time or same-day delivery guarantees. Local development does not run the cron automatically; invoke `/api/mailing/cron` with `Authorization: Bearer <CRON_SECRET>` to test due schedules.
 - Browser-side Firestore rules do not grant access to mailing collections. All mailing reads/writes are performed by server routes after admin checks, except public forms which validate and persist only their own submissions.
 
 ## Sync operation
