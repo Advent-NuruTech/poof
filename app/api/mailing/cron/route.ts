@@ -1,4 +1,4 @@
-import { FieldValue, mailDb, Timestamp, type Campaign, deliverCampaign } from "@/lib/mailing-server";
+import { FieldValue, getMailDb, Timestamp, type Campaign, deliverCampaign } from "@/lib/mailing-server";
 
 export const maxDuration = 300;
 
@@ -51,6 +51,7 @@ export async function GET(request: Request) {
     return Response.json({ error: "Not authorized." }, { status: 401 });
   }
   try {
+    const mailDb = getMailDb();
     const due = await mailDb.collection("mailingSchedules")
       .where("nextSendAt", "<=", Timestamp.now())
       .limit(20)

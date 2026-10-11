@@ -1,5 +1,5 @@
 import { createHash, randomUUID } from "node:crypto";
-import { FieldValue, mailDb, requireMailAdmin, Timestamp, type Campaign, deliverCampaign } from "@/lib/mailing-server";
+import { FieldValue, getMailDb, requireMailAdmin, Timestamp, type Campaign, deliverCampaign } from "@/lib/mailing-server";
 
 export const maxDuration = 300;
 
@@ -39,6 +39,7 @@ function parseCampaign(body: ScheduleInput): Campaign | string {
 export async function GET(request: Request) {
   try {
     if (!await requireMailAdmin(request)) return Response.json({ error: "Administrator access is required." }, { status: 401 });
+    const mailDb = getMailDb();
     const [members, subscribers, schedules, history, verifiedMembers, pendingMembers, activeSubscribers, unsubscribed] = await Promise.all([
       mailDb.collection("onlineMeetingMembers").orderBy("createdAt", "desc").limit(500).get(),
       mailDb.collection("newsletterSubscribers").orderBy("createdAt", "desc").limit(500).get(),
@@ -73,6 +74,7 @@ export async function POST(request: Request) {
   try {
     const adminId = await requireMailAdmin(request);
     if (!adminId) return Response.json({ error: "Administrator access is required." }, { status: 401 });
+    const mailDb = getMailDb();
     let body: ScheduleInput;
     try { body = await request.json() as ScheduleInput; }
     catch { return Response.json({ error: "Invalid request body." }, { status: 400 }); }
@@ -150,6 +152,7 @@ export async function PATCH(request: Request) {
   try {
     const adminId = await requireMailAdmin(request);
     if (!adminId) return Response.json({ error: "Administrator access is required." }, { status: 401 });
+    const mailDb = getMailDb();
     const body = await request.json() as ScheduleInput & { collection?: string; id?: string; status?: string };
     if (!body || typeof body !== "object" || Array.isArray(body)) return Response.json({ error: "Invalid request body." }, { status: 400 });
     if (!body.id || body.id.length > 150) return Response.json({ error: "Choose a valid record." }, { status: 400 });

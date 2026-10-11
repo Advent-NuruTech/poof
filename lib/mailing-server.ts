@@ -1,28 +1,52 @@
 import { createHash, createHmac } from "node:crypto";
 import { applicationDefault, cert, getApp, getApps, initializeApp, type ServiceAccount } from "firebase-admin/app";
 import { getAuth } from "firebase-admin/auth";
-import { FieldValue, getFirestore, Timestamp } from "firebase-admin/firestore";
+import { FieldValue, getFirestore, Timestamp, type Firestore } from "firebase-admin/firestore";
 import { Resend } from "resend";
 
-const serviceAccount = process.env.FIREBASE_SERVICE_ACCOUNT_JSON;
-const adminApp = getApps().length
-  ? getApp()
-  : initializeApp({
-      credential: serviceAccount
-        ? cert(JSON.parse(serviceAccount.replace(/\\n/g, "\n")) as ServiceAccount)
-        : applicationDefault(),
-      projectId: process.env.NEXT_PUBLIC_FIREBASE_PROJECT_ID,
-    });
+function parseServiceAccount(value: string): ServiceAccount {
+  let parsed: unknown;
+  try {
+    parsed = JSON.parse(value) as unknown;
+  } catch {
+    throw new Error("FIREBASE_SERVICE_ACCOUNT_JSON must contain valid service-account JSON. Store the JSON as one environment-variable value and preserve escaped \\n characters in private_key.");
+  }
+  if (!parsed || typeof parsed !== "object" || Array.isArray(parsed)) {
+    throw new Error("FIREBASE_SERVICE_ACCOUNT_JSON must be a service-account JSON object.");
+  }
+  const account = parsed as Record<string, unknown>;
+  const projectId = account.project_id ?? account.projectId;
+  const clientEmail = account.client_email ?? account.clientEmail;
+  const privateKey = account.private_key ?? account.privateKey;
+  if (typeof projectId !== "string" || typeof clientEmail !== "string" || typeof privateKey !== "string") {
+    throw new Error("FIREBASE_SERVICE_ACCOUNT_JSON is missing project_id, client_email, or private_key.");
+  }
+  return { projectId, clientEmail, privateKey: privateKey.replace(/\\n/g, "\n") };
+}
 
-export const mailDb = getFirestore(adminApp);
+function getAdminApp() {
+  if (getApps().length) return getApp();
+  const serviceAccount = process.env.FIREBASE_SERVICE_ACCOUNT_JSON;
+  return initializeApp({
+    credential: serviceAccount
+      ? cert(parseServiceAccount(serviceAccount))
+      : applicationDefault(),
+    projectId: process.env.NEXT_PUBLIC_FIREBASE_PROJECT_ID,
+  });
+}
+
+export function getMailDb(): Firestore {
+  return getFirestore(getAdminApp());
+}
 export { FieldValue, Timestamp };
 
 export async function requireMailAdmin(request: Request) {
   const token = request.headers.get("authorization")?.match(/^Bearer\s+(.+)$/i)?.[1];
   if (!token) return null;
-  const identity = await getAuth(adminApp).verifyIdToken(token).catch(() => null);
+  const app = getAdminApp();
+  const identity = await getAuth(app).verifyIdToken(token).catch(() => null);
   if (!identity) return null;
-  const admin = await mailDb.collection("admins").doc(identity.uid).get();
+  const admin = await getFirestore(app).collection("admins").doc(identity.uid).get();
   const data = admin.data();
   return data?.enabled === true && data.expiresAt instanceof Timestamp && data.expiresAt.toMillis() > Date.now()
     ? identity.uid

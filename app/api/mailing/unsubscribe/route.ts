@@ -1,5 +1,5 @@
 import { createHmac, timingSafeEqual } from "node:crypto";
-import { FieldValue, mailDb } from "@/lib/mailing-server";
+import { FieldValue, getMailDb } from "@/lib/mailing-server";
 
 function signature(id: string, secret: string) {
   return createHmac("sha256", secret).update(id).digest("hex");
@@ -42,6 +42,7 @@ export async function POST(request: Request) {
   try {
     const result = await unsubscribe(request);
     if (result instanceof Response) return result;
+    const mailDb = getMailDb();
     await mailDb.collection("newsletterSubscribers").doc(result.id).update({
       status: "unsubscribed", unsubscribedAt: FieldValue.serverTimestamp(), updatedAt: FieldValue.serverTimestamp(),
     });

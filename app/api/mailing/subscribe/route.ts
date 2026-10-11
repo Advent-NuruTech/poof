@@ -1,5 +1,5 @@
 import { createHash } from "node:crypto";
-import { mailDb, FieldValue } from "@/lib/mailing-server";
+import { getMailDb, FieldValue } from "@/lib/mailing-server";
 
 export async function POST(request: Request) {
   try {
@@ -10,6 +10,7 @@ export async function POST(request: Request) {
     if (email.length > 254 || !/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email)) {
       return Response.json({ error: "Enter a valid email address." }, { status: 400 });
     }
+    const mailDb = getMailDb();
     const id = createHash("sha256").update(email).digest("hex");
     const subscriber = mailDb.collection("newsletterSubscribers").doc(id);
     const result = await mailDb.runTransaction(async (transaction) => {

@@ -1,5 +1,5 @@
 import { createHash, randomUUID } from "node:crypto";
-import { mailDb, FieldValue } from "@/lib/mailing-server";
+import { getMailDb, FieldValue } from "@/lib/mailing-server";
 
 export async function POST(request: Request) {
   try {
@@ -14,6 +14,7 @@ export async function POST(request: Request) {
         phone.length > 40 || !message || message.length > 4000) {
       return Response.json({ error: "Complete the form with a valid name, email, and message." }, { status: 400 });
     }
+    const mailDb = getMailDb();
     const memberId = createHash("sha256").update(email).digest("hex");
     const member = mailDb.collection("onlineMeetingMembers").doc(memberId);
     const contact = mailDb.collection("contacts").doc(randomUUID());

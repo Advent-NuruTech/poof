@@ -36,7 +36,7 @@ Firebase Web API keys identify the Firebase project and are expected to be prese
 ### Mailing environment and deployment
 
 - Set `RESEND_API_KEY` and `RESEND_FROM_EMAIL` to a verified Resend sender address.
-- Set `FIREBASE_SERVICE_ACCOUNT_JSON` to the Firebase project's service-account JSON. Keep this private server-side variable out of browser configuration and source control; it grants trusted access to meeting-member, subscriber, campaign, and history data.
+- Set `FIREBASE_SERVICE_ACCOUNT_JSON` to the Firebase project's service-account JSON as one valid JSON value (minified to one line is the simplest `.env.local` format). Do not put unquoted, pretty-printed JSON directly after the `=` in `.env.local`; dotenv will not treat its following lines as part of the variable. Keep this private server-side variable out of browser configuration and source control; it grants trusted access to meeting-member, subscriber, campaign, and history data.
 - Set `CRON_SECRET` to a long random value and `NEWSLETTER_UNSUBSCRIBE_SECRET` to a separate long random value. Vercel sends `CRON_SECRET` as the cron request's bearer token.
 - Set `NEXT_PUBLIC_SITE_URL` to the canonical HTTPS site URL so newsletter unsubscribe links point to the production domain.
 - The Hobby plan permits cron jobs only once per day. This project checks at 09:00 UTC with Vercel's Hobby hourly precision (±59 minutes); schedule sends may therefore be delayed until the next daily check and are not suitable for exact-time or same-day delivery guarantees. Local development does not run the cron automatically; invoke `/api/mailing/cron` with `Authorization: Bearer <CRON_SECRET>` to test due schedules.
