@@ -214,7 +214,7 @@ const CSS = `
 .lib-reader-sheet-head{margin-bottom:48px;padding-bottom:32px;border-bottom:1px solid var(--line)}
 .lib-reader-sheet-head h1{font-weight:500;font-size:clamp(32px,4.5vw,56px);line-height:1.05;letter-spacing:-.035em;margin:14px 0 16px}
 .lib-reader-desc{font-size:17px;line-height:1.65;color:var(--muted);margin:0}
-.lib-reader-rich{font-size:17px;line-height:1.75;color:var(--ink)}
+.lib-reader-rich{font-family:"Times New Roman",Times,serif;font-size:17px;line-height:1.75;color:var(--ink)}
 .lib-reader-rich h1,.lib-reader-rich h2,.lib-reader-rich h3{font-weight:600;letter-spacing:-.02em;margin:1.6em 0 .6em}
 .lib-reader-rich p{margin:0 0 1.1em}
 .lib-reader-rich a{color:var(--red);text-decoration:underline;text-underline-offset:3px}

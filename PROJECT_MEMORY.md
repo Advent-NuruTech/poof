@@ -1,4 +1,9 @@
 # Project Memory
+## 2026-10-11: Library note editor formatting and floating toolbar
+- **Major changes:** Added a sticky, horizontally scrollable rich-text toolbar for mobile and desktop with a text color picker and font-family choices. Color changes restore the editor selection so applying a color retains the intended text range. Times New Roman is now the default in the note editor and public note reader.
+- **Errors and fixes:** No build/runtime errors. TypeScript and editor/reader diagnostics passed; targeted ESLint reported only two existing `<img>` warnings in the library reader.
+- **Verification:** `npx.cmd tsc --noEmit` passed; targeted ESLint on `components/admin/library-manager.tsx` and `components/home/library-page.tsx` passed with 0 errors and 2 existing image warnings. `git diff --check` passed.
+
 ## 2026-10-10: Admin dashboard overview and channel route
 - **Major changes:** Expanded the admin overview with channel and playlist totals, refreshed responsive dashboard cards, and distinct loading/sign-in/unauthorized states. Added `/admin/channels`, mounted the existing channel manager there, and corrected the sidebar Channels link so it no longer routes back to the dashboard.
 - **Meeting counts:** Dashboard meeting totals now come from the same cached `/api/catalog` snapshot and `meetingGroups` recurrence expansion used by `/meetings`, so counts include the public schedule's visible weekly occurrences instead of counting only up to 200 raw Firestore documents.
