@@ -1,4 +1,10 @@
 # Project Memory
+## 2026-10-10: Admin dashboard overview and channel route
+- **Major changes:** Expanded the admin overview with channel and playlist totals, refreshed responsive dashboard cards, and distinct loading/sign-in/unauthorized states. Added `/admin/channels`, mounted the existing channel manager there, and corrected the sidebar Channels link so it no longer routes back to the dashboard.
+- **Meeting counts:** Dashboard meeting totals now come from the same cached `/api/catalog` snapshot and `meetingGroups` recurrence expansion used by `/meetings`, so counts include the public schedule's visible weekly occurrences instead of counting only up to 200 raw Firestore documents.
+- **Errors and fixes:** Targeted ESLint initially flagged a synchronous loading-state reset inside an effect; removed the redundant reset and rely on the initial loading state while the asynchronous catalog request resolves. No build/runtime errors.
+- **Verification:** `npx.cmd tsc --noEmit` and `npm.cmd run build` passed, including generation of `/admin/channels`. Targeted ESLint passed with 0 errors and 2 existing `<img>` warnings in the channel manager.
+
 ## 2026-10-09: Desktop header typography
 - **Major changes:** Loaded Oswald through `next/font/google` and applied it to the desktop public masthead. Desktop branding is uppercase at 24px and navigation is uppercase at 22px; the existing mobile font and sizes remain unchanged.
 - **Verification:** `npx.cmd tsc --noEmit` and `npm.cmd run build` passed. Targeted ESLint passed with 0 errors and one pre-existing `<img>` warning in `components/home/public-header.tsx`.
