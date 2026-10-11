@@ -286,7 +286,7 @@ const Icon = {
 export default function MeetingDetail({ id }: { id: string }) {
   // Reads the shared 24-hour snapshot instead of a live per-document listener,
   // which burned a connection and duplicate reads on every visit to this page.
-  const { feed } = usePublicCatalog();
+  const { feed, status: catalogStatus } = usePublicCatalog();
   const meeting: Meeting | null = feedMeetings(feed).find((item) => item.id === id) ?? null;
   const [now, setNow] = useState(0);
 
@@ -336,7 +336,20 @@ export default function MeetingDetail({ id }: { id: string }) {
           </div>
         </header>
 
-        {!meeting ? (
+        {catalogStatus === "loading" ? (
+          <section className="md-empty" role="status">
+            <h2>Loading meeting…</h2>
+            <p>Meeting details are loading. Please wait a moment.</p>
+          </section>
+        ) : catalogStatus === "error" ? (
+          <section className="md-empty" role="alert">
+            <h2>Could not load meeting</h2>
+            <p>Meeting details could not be loaded. Please try again.</p>
+            <Link href="/meetings" className="md-btn md-btn-primary">
+              Back to meetings <Icon.ArrowRight />
+            </Link>
+          </section>
+        ) : !meeting ? (
           <section className="md-empty">
             <h2>Meeting unavailable</h2>
             <p>This meeting may have been removed or the link is no longer valid.</p>

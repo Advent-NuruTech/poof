@@ -1,4 +1,15 @@
 # Project Memory
+## 2026-10-11: Admin mobile view — hamburger drawer instead of bottom nav
+- **Problem:** On `max-width:760px` the admin sidebar was repurposed into a fixed bottom navigation bar, which left the mobile admin UI cramped and caused bottom-space overlap with page content.
+- **Fix:** Removed the bottom-nav media block and replaced it with a slide-in drawer. `components/admin/admin-sidebar.tsx` now renders a mobile top bar (`.admin-mobile-bar`) with a hamburger button, an overlay backdrop, and a off-canvas `.admin-sidebar` that opens via `.open`. The drawer closes on nav click, backdrop click, Escape, and route change; all three close paths were verified reachable. CSS localized to `app/globals.css` (`@media(max-width:900px)` block).
+- **Runtime error:** ESLint rule `react-hooks/set-state-in-effect` rejected `useEffect(() => setOpen(false), [pathname])`. **Verified fix:** close-on-navigation is derived during render by comparing a stored `openPath` with the current `pathname` instead of a state-setting effect.
+- **Verification:** `npx eslint components/admin/admin-sidebar.tsx` passes with zero errors/warnings. (Full-repo `npm run lint` still reports pre-existing unrelated errors in public policy pages and generated bundles.)
+
+## 2026-10-11: Avoid false unavailable state while meeting catalog loads
+- **Bug:** Opening a meeting from the homepage could show “Meeting unavailable” before the detail page's client-side catalog request had finished. The detail page treated its intentionally empty initial feed as a confirmed missing meeting.
+- **Fix:** Meeting details now show a loading state until the catalog request completes, an explicit load-failure state if the request fails, and the unavailable state only after a successful load confirms the meeting is absent.
+- **Verification:** `npx.cmd eslint components/home/meeting-detail.tsx` passed with zero errors and one existing `<img>` warning. `npx.cmd tsc --noEmit` passed. No build/runtime errors were encountered.
+
 ## 2026-10-11: Support separate Firebase Admin credential variables
 - **Major changes:** Firebase Admin initialization now accepts `FIREBASE_PROJECT_ID`, `FIREBASE_CLIENT_EMAIL`, and `FIREBASE_PRIVATE_KEY` directly, normalizes escaped private-key newlines, and reports incomplete credential configuration explicitly. Existing `FIREBASE_SERVICE_ACCOUNT_JSON` and application-default credential support remain available. Updated `.env.example` and setup documentation with project ID `poof-40b24`.
 - **Verification:** `npx.cmd eslint lib/mailing-server.ts`, `npx.cmd tsc --noEmit`, `npm.cmd run build`, and `git diff --check` pass.
