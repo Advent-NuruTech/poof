@@ -1,4 +1,8 @@
 # Project Memory
+## 2026-10-11: Support separate Firebase Admin credential variables
+- **Major changes:** Firebase Admin initialization now accepts `FIREBASE_PROJECT_ID`, `FIREBASE_CLIENT_EMAIL`, and `FIREBASE_PRIVATE_KEY` directly, normalizes escaped private-key newlines, and reports incomplete credential configuration explicitly. Existing `FIREBASE_SERVICE_ACCOUNT_JSON` and application-default credential support remain available. Updated `.env.example` and setup documentation with project ID `poof-40b24`.
+- **Verification:** `npx.cmd eslint lib/mailing-server.ts`, `npx.cmd tsc --noEmit`, `npm.cmd run build`, and `git diff --check` pass.
+
 ## 2026-10-11: Parse service-account JSON safely during mailing API initialization
 - **Build errors:** Initializing Firebase Admin during route module import made page-data collection parse credentials during build. Replacing `\\n` over the whole JSON also made a valid private key invalid JSON. A follow-up typecheck showed Firebase Admin's `ServiceAccount` uses camelCase properties rather than JSON's snake_case names. A separate lazy-initialization refactor initially put `mailDb` in the unsubscribe GET rather than POST handler.
 - **Fixes:** Firebase Admin initialization is now lazy, so builds do not parse deployment credentials while collecting route configuration. When a route needs Firebase, the JSON is parsed first, required snake_case/camelCase fields are validated and mapped to Firebase Admin's type, and escaped newlines are normalized only within `privateKey`. Invalid credentials produce explicit configuration errors without exposing credential contents. The unsubscribe database connection is scoped to its POST handler.

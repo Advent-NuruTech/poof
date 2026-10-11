@@ -24,14 +24,33 @@ function parseServiceAccount(value: string): ServiceAccount {
   return { projectId, clientEmail, privateKey: privateKey.replace(/\\n/g, "\n") };
 }
 
+function getSplitServiceAccount(): ServiceAccount | undefined {
+  const clientEmail = process.env.FIREBASE_CLIENT_EMAIL;
+  const privateKey = process.env.FIREBASE_PRIVATE_KEY;
+  if (!clientEmail && !privateKey) return undefined;
+
+  const projectId = process.env.FIREBASE_PROJECT_ID ?? process.env.NEXT_PUBLIC_FIREBASE_PROJECT_ID;
+  if (!projectId || !clientEmail?.trim() || !privateKey?.trim()) {
+    throw new Error("Configure FIREBASE_PROJECT_ID, FIREBASE_CLIENT_EMAIL, and FIREBASE_PRIVATE_KEY together.");
+  }
+  return { projectId, clientEmail: clientEmail.trim(), privateKey: privateKey.replace(/\\n/g, "\n") };
+}
+
 function getAdminApp() {
   if (getApps().length) return getApp();
-  const serviceAccount = process.env.FIREBASE_SERVICE_ACCOUNT_JSON;
+  const splitServiceAccount = getSplitServiceAccount();
+  const legacyServiceAccount = !splitServiceAccount && process.env.FIREBASE_SERVICE_ACCOUNT_JSON
+    ? parseServiceAccount(process.env.FIREBASE_SERVICE_ACCOUNT_JSON)
+    : undefined;
   return initializeApp({
-    credential: serviceAccount
-      ? cert(parseServiceAccount(serviceAccount))
+    credential: splitServiceAccount
+      ? cert(splitServiceAccount)
+      : legacyServiceAccount
+        ? cert(legacyServiceAccount)
       : applicationDefault(),
-    projectId: process.env.NEXT_PUBLIC_FIREBASE_PROJECT_ID,
+    projectId: process.env.FIREBASE_PROJECT_ID
+      ?? legacyServiceAccount?.projectId
+      ?? process.env.NEXT_PUBLIC_FIREBASE_PROJECT_ID,
   });
 }
 
