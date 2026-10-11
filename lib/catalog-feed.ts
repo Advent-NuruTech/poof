@@ -20,7 +20,8 @@ import { EMPTY_CATALOG_FEED } from "@/lib/catalog-feed-types";
  *  - No `onSnapshot` listener may be added here. A live listener re-delivers
  *    every document to every visitor on every sync write, which is what
  *    exhausted the project quota before.
- *  - Reads are one-shot and bounded by MAX_FEED_ROWS per collection.
+ *  - Reads are one-shot and bounded per collection: videos are capped at
+ *    MAX_VIDEO_FEED_ROWS and other collections at MAX_FEED_ROWS.
  */
 
 export type { FeedChannel, FeedMeeting, FeedPlaylist, FeedVideo, PublicCatalogFeed } from "@/lib/catalog-feed-types";
@@ -28,6 +29,8 @@ export { EMPTY_CATALOG_FEED, FEED_CACHE_CONTROL, FEED_CACHE_MS, FEED_CACHE_SECON
 
 /** Hard ceiling on documents pulled per collection, regardless of catalog size. */
 export const MAX_FEED_ROWS = 900;
+/** Keep the public video feed focused on recent uploads and bounded to 100 reads. */
+export const MAX_VIDEO_FEED_ROWS = 100;
 
 const FEED_TIMEOUT_MS = 8000;
 
@@ -71,11 +74,12 @@ function decodeFields(fields: Record<string, unknown>): Record<string, unknown> 
  * `cache: "no-store"` is deliberate: the 24-hour caching is owned entirely by
  * `use cache` + `cacheLife` below, so there is exactly one cache in play.
  */
-async function readCollection<T>(collectionId: string): Promise<T[]> {
+async function readCollection<T>(collectionId: string, maxRows = MAX_FEED_ROWS, orderBy?: string): Promise<T[]> {
   const projectId = process.env.NEXT_PUBLIC_FIREBASE_PROJECT_ID;
   const apiKey = process.env.NEXT_PUBLIC_FIREBASE_API_KEY;
   if (!projectId || !apiKey) return [];
-  const url = `https://firestore.googleapis.com/v1/projects/${encodeURIComponent(projectId)}/databases/(default)/documents/${encodeURIComponent(collectionId)}?pageSize=${MAX_FEED_ROWS}&key=${encodeURIComponent(apiKey)}`;
+  const ordering = orderBy ? `&orderBy=${encodeURIComponent(orderBy)}` : "";
+  const url = `https://firestore.googleapis.com/v1/projects/${encodeURIComponent(projectId)}/databases/(default)/documents/${encodeURIComponent(collectionId)}?pageSize=${maxRows}${ordering}&key=${encodeURIComponent(apiKey)}`;
   try {
     const response = await fetch(url, { cache: "no-store", signal: AbortSignal.timeout(FEED_TIMEOUT_MS) });
     if (!response.ok) return [];
@@ -102,7 +106,7 @@ export async function getPublicCatalog(): Promise<PublicCatalogFeed> {
   if (!process.env.NEXT_PUBLIC_FIREBASE_PROJECT_ID || !process.env.NEXT_PUBLIC_FIREBASE_API_KEY) return EMPTY_CATALOG_FEED;
   const [channels, videos, playlists, meetings] = await Promise.all([
     readCollection<FeedChannel>("channels"),
-    readCollection<FeedVideo>("videos"),
+    readCollection<FeedVideo>("videos", MAX_VIDEO_FEED_ROWS, "publishedAt desc"),
     readCollection<FeedPlaylist>("playlists"),
     readCollection<FeedMeeting>("meetings"),
   ]);
@@ -113,6 +117,6 @@ export async function getPublicCatalog(): Promise<PublicCatalogFeed> {
     playlists,
     meetings,
     fetchedAt: new Date().toISOString(),
-    truncated: channels.length >= MAX_FEED_ROWS || videos.length >= MAX_FEED_ROWS || playlists.length >= MAX_FEED_ROWS || meetings.length >= MAX_FEED_ROWS || total >= MAX_FEED_ROWS,
+    truncated: channels.length >= MAX_FEED_ROWS || videos.length >= MAX_VIDEO_FEED_ROWS || playlists.length >= MAX_FEED_ROWS || meetings.length >= MAX_FEED_ROWS || total >= MAX_FEED_ROWS,
   };
 }

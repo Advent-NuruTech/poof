@@ -402,3 +402,8 @@ Record verified errors and fixes, plus major changes, here. Review this file bef
 - **Action needed by the operator:** this is a billing/quota issue, not a code issue. Check Firebase Console → Firestore → Usage. The free Spark tier's daily read allowance resets at midnight Pacific; either wait for the reset (then sign in again — the code flow itself is fine) or attach a billing account / Blaze plan. Reducing the listener fan-out (the app opens many `onSnapshot` listeners on large collections with high `pageSize` caps) is the durable mitigation.
 - **Verification:** `npx tsc --noEmit` exit 0; targeted `npx eslint app/api/auth/session/route.ts` 0 problems. Test scripts were temporary and have been deleted.
 - **Prevention:** when diagnosing Firestore REST failures from route handlers, **always print the actual status and body** rather than branching on "not 404". Branching on a single expected status hid a 429 behind an auth-sounding message for two debugging rounds. Treat 429/503 as retryable and distinct from 401/403.
+
+## 2026-10-11: Bound and sort public video feed
+- **Major change:** The cached public catalog now requests at most 100 video documents (down from 900) and asks Firestore for them in `publishedAt desc` order so recent uploads appear in the homepage feed. Other collection caps and the shared 24-hour cache are unchanged. The feed's `truncated` flag now reflects the 100-video ceiling.
+- **Errors and fixes:** No build or runtime errors encountered.
+- **Verification:** `npx.cmd tsc --noEmit`, `npx.cmd eslint lib/catalog-feed.ts`, and `npm.cmd run build` passed.
