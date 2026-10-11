@@ -73,6 +73,7 @@ export type FeedMeeting = {
 export type PublicCatalogFeed = {
   channels: FeedChannel[];
   videos: FeedVideo[];
+  mostViewedVideos: FeedVideo[];
   playlists: FeedPlaylist[];
   meetings: FeedMeeting[];
   fetchedAt: string;
@@ -91,10 +92,13 @@ export type PublicCatalogFeed = {
  */
 export const FEED_CACHE_SECONDS = 24 * 60 * 60;
 
+/** Per-channel candidates needed to compute the homepage's global top 12. */
+export const MOST_VIEWED_VIDEO_LIMIT = 12;
+
 /** The same window in milliseconds, for client-side refresh timers. */
 export const FEED_CACHE_MS = FEED_CACHE_SECONDS * 1000;
 
 /** Cache-Control header for the catalog endpoint, derived from the window. */
 export const FEED_CACHE_CONTROL = `public, s-maxage=${FEED_CACHE_SECONDS}, stale-while-revalidate=3600`;
 
-export const EMPTY_CATALOG_FEED: PublicCatalogFeed = { channels: [], videos: [], playlists: [], meetings: [], fetchedAt: "", truncated: false };
+export const EMPTY_CATALOG_FEED: PublicCatalogFeed = { channels: [], videos: [], mostViewedVideos: [], playlists: [], meetings: [], fetchedAt: "", truncated: false };

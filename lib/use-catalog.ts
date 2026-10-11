@@ -38,7 +38,7 @@ export async function fetchCatalogFeed(): Promise<PublicCatalogFeed | null> {
   }
 }
 
-const EMPTY_FEED: PublicCatalogFeed = { channels: [], videos: [], playlists: [], meetings: [], fetchedAt: "", truncated: false };
+const EMPTY_FEED: PublicCatalogFeed = { channels: [], videos: [], mostViewedVideos: [], playlists: [], meetings: [], fetchedAt: "", truncated: false };
 
 export function usePublicCatalog() {
   const [feed, setFeed] = useState<PublicCatalogFeed>(EMPTY_FEED);
@@ -73,6 +73,7 @@ const asChannel = (channel: FeedChannel): Channel => ({ ...channel, enabled: cha
 const asMeeting = (meeting: FeedMeeting): Meeting => meeting;
 
 export function feedVideos(feed: PublicCatalogFeed): Video[] { return feed.videos.map(asVideo); }
+export function feedMostViewedVideos(feed: PublicCatalogFeed): Video[] { return feed.mostViewedVideos.map(asVideo); }
 export function feedPlaylists(feed: PublicCatalogFeed): Playlist[] { return feed.playlists.map(asPlaylist); }
 export function feedChannels(feed: PublicCatalogFeed): Channel[] { return feed.channels.map(asChannel); }
 export function feedMeetings(feed: PublicCatalogFeed): Meeting[] { return feed.meetings.map(asMeeting); }

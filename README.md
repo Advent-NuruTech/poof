@@ -15,7 +15,7 @@ A responsive YouTube catalog. YouTube owns source video and playlist metadata; t
 4. Create a Google Cloud API key with the YouTube Data API v3 enabled. Set it as `YOUTUBE_DATA_API_KEY` in `.env.local` and your deployment's server environment. Do not add a `NEXT_PUBLIC_` prefix. Restrict the key to the YouTube Data API and the server environments that need it.
 5. Start the app with `npm run dev`.
 6. Sign in at `/admin` with the initial administrator Google account (Firebase UID `3H3BclyO2FePQ59KYIO2kKSirnx2`). On first sign-in, the app creates `admins/{uid}` automatically. The Firestore rules allow this creation only for that UID and only with `enabled: true`.
-7. Add a channel by URL, handle, or channel ID. The initial sync discovers playlists, playlist order, and unique video records. The homepage listens to the public catalog.
+7. Add a channel by URL, handle, or channel ID. The initial sync discovers playlists, playlist order, and unique video records. The homepage reads the shared cached public catalog; its Most Viewed shelf uses the bounded per-channel view-count query described below.
 
 8. Configure the email environment variables below, deploy to Vercel, and verify your sending domain in Resend. Open `/admin/mailing` to verify meeting requests, add meeting members, and create or schedule emails.
 
@@ -28,6 +28,8 @@ Firebase Web API keys identify the Firebase project and are expected to be prese
 - `app/api/youtube` validates a Firebase ID token against Firebase Authentication, checks the caller's Firestore admin record, and then calls YouTube. It never writes to Firestore.
 - The browser writes synchronized data through the Firebase client SDK. `firestore.rules` permits public catalog reads and limits writes to provisioned admin UIDs. Admin records cannot be edited from the app.
 - `videos/{youtubeVideoId}` uses the YouTube video ID as its document ID. Playlist membership and order are stored on playlist documents. Editorial controls live in each record's `website` map and are kept separate from YouTube fields.
+- The homepage's Most Viewed shelf queries the top 12 videos by view count for each enabled channel, then merges those small result sets. The query is covered by `firestore.indexes.json` and included in the shared 24-hour server-cached catalog feed; it does not download the full video collection for each visitor.
+- Deploy the Firestore indexes and wait for the view-count index to finish building before building/deploying the app. The catalog snapshot can be generated during build; Firestore rejects the Most Viewed query until that index is ready.
 - Channel deletion only removes the channel source record; it does not delete videos or playlists.
 - `/admin/mailing` manages meeting-member verification, newsletter subscribers, campaign schedules, and Resend delivery history. Public meeting-link requests are saved as pending members; newsletter addresses are normalized and deduplicated by a SHA-256 document ID.
 - Meeting and newsletter sends use an inbox-friendly responsive HTML template. YouTube videos appear as clickable thumbnail previews because most email clients do not play embedded video. Newsletter emails include signed unsubscribe links.

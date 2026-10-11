@@ -6,7 +6,7 @@ import type { LibraryCategory, LibraryDocument } from "@/lib/library";
 import { usePublicLibrary } from "@/lib/use-library-feed";
 import { formatDate, formatDuration, type Channel, type Playlist, type Video } from "@/lib/catalog";
 import { collapseMeetingOccurrences, formatMeetingDate, formatMeetingTime, meetingGroups, meetingHref, meetingJoinVisible } from "@/lib/meetings";
-import { feedChannels, feedMeetings, feedPlaylists, feedVideos, refreshCatalogFeed, usePublicCatalog } from "@/lib/use-catalog";
+import { feedChannels, feedMeetings, feedMostViewedVideos, feedPlaylists, feedVideos, refreshCatalogFeed, usePublicCatalog } from "@/lib/use-catalog";
 import { FEED_CACHE_MS } from "@/lib/catalog-feed-types";
 import MeetingCard from "@/components/home/meeting-card";
 import MobileBottomNav from "@/components/home/mobile-bottom-nav";
@@ -109,7 +109,7 @@ export default function HomeScreen() {
   const videosFromYear = (year: number) => year ? activeVideos.filter((video) => video.publishedAt && new Date(video.publishedAt).getFullYear() === year).slice(0, ARCHIVE_VIDEO_LIMIT) : [];
   const twoYearVideos = videosFromYear(currentYear - 2);
   const fourYearVideos = videosFromYear(currentYear - 4);
-  const mostViewedVideos = [...activeVideos].filter((video) => video.statistics?.viewCount !== undefined).sort((a, b) => Number(b.statistics?.viewCount ?? 0) - Number(a.statistics?.viewCount ?? 0)).slice(0, HOME_SECTION_LIMIT);
+  const mostViewedVideos = feedMostViewedVideos(feed).filter((video) => video.catalogChannelIds?.some((id) => channelIds.has(id)));
   // Search all videos in the shared catalog, not only the six-card homepage shelf.
   // Matching stays local and adds no Firestore or YouTube API reads.
   const term = search.trim().toLowerCase();

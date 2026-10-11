@@ -5,6 +5,14 @@
       "queryScope": "COLLECTION",
       "fields": [
         { "fieldPath": "catalogChannelIds", "arrayConfig": "CONTAINS" },
+        { "fieldPath": "statistics.viewCount", "order": "DESCENDING" }
+      ]
+    },
+    {
+      "collectionGroup": "videos",
+      "queryScope": "COLLECTION",
+      "fields": [
+        { "fieldPath": "catalogChannelIds", "arrayConfig": "CONTAINS" },
         { "fieldPath": "publishedAt", "order": "DESCENDING" }
       ]
     }

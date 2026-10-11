@@ -1,4 +1,10 @@
 # Project Memory
+## 2026-10-11: Homepage most-viewed shelf covers full channel catalogs
+- **Major change:** The homepage now builds its Most Viewed shelf from the top 12 `viewCount` results per enabled channel rather than sorting only the 100 most recent catalog videos. Results are deduplicated and merged to the homepage's top 12.
+- **Read-efficiency:** Each per-channel Firestore query runs only while creating the shared server catalog snapshot, which remains cached for 24 hours. The recent-video feed remains capped at 100 documents; no per-visitor full-catalog read or listener was added. Added the required array-membership/view-count composite index and documented the approach.
+- **Build/runtime note:** Production build succeeded, but static generation logged Firestore HTTP 400 for the new ranked query. The new composite index has not been deployed from this workspace; deploy `firestore.indexes.json` and wait for the index to finish building before rebuilding/deploying, since the catalog snapshot may be generated during build. This remote-index fix was not verified here.
+- **Verification:** `npx.cmd tsc --noEmit`, focused ESLint (0 errors; existing homepage warnings), production build, Firestore index JSON parsing, and `git diff --check` passed.
+
 ## 2026-10-11: Admin mobile view — hamburger drawer instead of bottom nav
 - **Problem:** On `max-width:760px` the admin sidebar was repurposed into a fixed bottom navigation bar, which left the mobile admin UI cramped and caused bottom-space overlap with page content.
 - **Fix:** Removed the bottom-nav media block and replaced it with a slide-in drawer. `components/admin/admin-sidebar.tsx` now renders a mobile top bar (`.admin-mobile-bar`) with a hamburger button, an overlay backdrop, and a off-canvas `.admin-sidebar` that opens via `.open`. The drawer closes on nav click, backdrop click, Escape, and route change; all three close paths were verified reachable. CSS localized to `app/globals.css` (`@media(max-width:900px)` block).

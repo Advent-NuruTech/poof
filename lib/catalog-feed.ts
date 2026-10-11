@@ -1,7 +1,7 @@
 import { cacheLife } from "next/cache";
 
 import type { FeedChannel, FeedMeeting, FeedPlaylist, FeedVideo, PublicCatalogFeed } from "@/lib/catalog-feed-types";
-import { EMPTY_CATALOG_FEED } from "@/lib/catalog-feed-types";
+import { EMPTY_CATALOG_FEED, MOST_VIEWED_VIDEO_LIMIT } from "@/lib/catalog-feed-types";
 
 /**
  * The public catalog snapshot, read from Firestore once and then cached
@@ -20,8 +20,9 @@ import { EMPTY_CATALOG_FEED } from "@/lib/catalog-feed-types";
  *  - No `onSnapshot` listener may be added here. A live listener re-delivers
  *    every document to every visitor on every sync write, which is what
  *    exhausted the project quota before.
- *  - Reads are one-shot and bounded per collection: videos are capped at
- *    MAX_VIDEO_FEED_ROWS and other collections at MAX_FEED_ROWS.
+ *  - Reads are one-shot and bounded per collection: recent videos are capped
+ *    at MAX_VIDEO_FEED_ROWS; most-viewed candidates are capped per channel;
+ *    other collections are capped at MAX_FEED_ROWS.
  */
 
 export type { FeedChannel, FeedMeeting, FeedPlaylist, FeedVideo, PublicCatalogFeed } from "@/lib/catalog-feed-types";
@@ -35,6 +36,8 @@ export const MAX_VIDEO_FEED_ROWS = 100;
 const FEED_TIMEOUT_MS = 8000;
 
 type RestDocument = { name?: string; fields?: Record<string, unknown> };
+
+type RestValue = { stringValue: string } | { integerValue: string };
 
 function documentId(name?: string) {
   if (!name) return "";
@@ -64,6 +67,59 @@ function decodeFields(fields: Record<string, unknown>): Record<string, unknown> 
   const row: Record<string, unknown> = {};
   for (const [key, value] of Object.entries(fields)) row[key] = fieldValue(value);
   return row;
+}
+
+async function readMostViewedVideos(channelIds: string[]): Promise<FeedVideo[]> {
+  const projectId = process.env.NEXT_PUBLIC_FIREBASE_PROJECT_ID;
+  const apiKey = process.env.NEXT_PUBLIC_FIREBASE_API_KEY;
+  if (!projectId || !apiKey || !channelIds.length) return [];
+
+  const url = `https://firestore.googleapis.com/v1/projects/${encodeURIComponent(projectId)}/databases/(default)/documents:runQuery?key=${encodeURIComponent(apiKey)}`;
+  const results = await Promise.all(channelIds.map(async (channelId) => {
+    const structuredQuery = {
+      from: [{ collectionId: "videos" }],
+      where: {
+        fieldFilter: {
+          field: { fieldPath: "catalogChannelIds" },
+          op: "ARRAY_CONTAINS",
+          value: { stringValue: channelId } satisfies RestValue,
+        },
+      },
+      orderBy: [{ field: { fieldPath: "statistics.viewCount" }, direction: "DESCENDING" }],
+      limit: MOST_VIEWED_VIDEO_LIMIT,
+    };
+    try {
+      const response = await fetch(url, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ structuredQuery }),
+        cache: "no-store",
+        signal: AbortSignal.timeout(FEED_TIMEOUT_MS),
+      });
+      if (!response.ok) {
+        console.error(`Could not load most-viewed videos for channel ${channelId}: Firestore returned ${response.status}.`);
+        return [];
+      }
+      const body = await response.json() as Array<{ document?: RestDocument }>;
+      return body.flatMap(({ document }) => {
+        const id = documentId(document?.name);
+        if (!id || !document?.fields) return [];
+        return [{ id, ...decodeFields(document.fields) } as FeedVideo];
+      });
+    } catch (error) {
+      console.error(`Could not load most-viewed videos for channel ${channelId}.`, error);
+      return [];
+    }
+  }));
+
+  const uniqueVideos = new Map<string, FeedVideo>();
+  for (const video of results.flat()) {
+    if (video.availability === "unavailable" || video.website?.hidden === true || video.statistics?.viewCount === undefined) continue;
+    uniqueVideos.set(video.id, video);
+  }
+  return [...uniqueVideos.values()]
+    .sort((a, b) => (b.statistics?.viewCount ?? 0) - (a.statistics?.viewCount ?? 0))
+    .slice(0, MOST_VIEWED_VIDEO_LIMIT);
 }
 
 /**
@@ -104,9 +160,11 @@ export async function getPublicCatalog(): Promise<PublicCatalogFeed> {
   "use cache";
   cacheLife("catalogFeed");
   if (!process.env.NEXT_PUBLIC_FIREBASE_PROJECT_ID || !process.env.NEXT_PUBLIC_FIREBASE_API_KEY) return EMPTY_CATALOG_FEED;
-  const [channels, videos, playlists, meetings] = await Promise.all([
-    readCollection<FeedChannel>("channels"),
+  const channels = await readCollection<FeedChannel>("channels");
+  const enabledChannelIds = channels.filter((channel) => channel.enabled !== false).map((channel) => channel.id);
+  const [videos, mostViewedVideos, playlists, meetings] = await Promise.all([
     readCollection<FeedVideo>("videos", MAX_VIDEO_FEED_ROWS, "publishedAt desc"),
+    readMostViewedVideos(enabledChannelIds),
     readCollection<FeedPlaylist>("playlists"),
     readCollection<FeedMeeting>("meetings"),
   ]);
@@ -114,6 +172,7 @@ export async function getPublicCatalog(): Promise<PublicCatalogFeed> {
   return {
     channels: channels.filter((channel) => channel.enabled !== false),
     videos: videos.filter((video) => video.availability !== "unavailable" && video.website?.hidden !== true),
+    mostViewedVideos,
     playlists,
     meetings,
     fetchedAt: new Date().toISOString(),
