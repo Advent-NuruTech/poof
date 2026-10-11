@@ -124,6 +124,7 @@ export default function AdminDashboard() {
       <section className="dashboard-shortcuts" aria-label="Admin shortcuts">
         <Link href="/admin/link-requests"><span aria-hidden="true">↗</span><span><strong>Meeting link requests</strong><small>Review requests for Zoom links</small></span><b aria-hidden="true">→</b></Link>
         <Link href="/admin/contacts"><span aria-hidden="true">✉</span><span><strong>Contact & prayer inbox</strong><small>Read and respond to submissions</small></span><b aria-hidden="true">→</b></Link>
+        <Link href="/admin/mailing"><span aria-hidden="true">✉</span><span><strong>Mailing system</strong><small>Manage members, newsletters, and delivery</small></span><b aria-hidden="true">→</b></Link>
       </section>
     </>}
   </main>;

@@ -17,7 +17,9 @@ A responsive YouTube catalog. YouTube owns source video and playlist metadata; t
 6. Sign in at `/admin` with the initial administrator Google account (Firebase UID `3H3BclyO2FePQ59KYIO2kKSirnx2`). On first sign-in, the app creates `admins/{uid}` automatically. The Firestore rules allow this creation only for that UID and only with `enabled: true`.
 7. Add a channel by URL, handle, or channel ID. The initial sync discovers playlists, playlist order, and unique video records. The homepage listens to the public catalog.
 
-Firebase Web API keys identify the Firebase project and are expected to be present in the browser. The YouTube Data API key remains server-side. This app intentionally uses Google sign-in only and does not include the Firebase Admin SDK. The initial admin UID is allowlisted in both the admin page and Firestore rules; publish the rules in this repo for automatic provisioning to work.
+8. Configure the email environment variables below, deploy to Vercel, and verify your sending domain in Resend. Open `/admin/mailing` to verify meeting requests, add meeting members, and create or schedule emails.
+
+Firebase Web API keys identify the Firebase project and are expected to be present in the browser. YouTube and email credentials remain server-side. The initial admin UID is allowlisted in both the admin page and Firestore rules; publish the rules in this repo for automatic provisioning to work.
 
 ## Routes and data
 
@@ -27,13 +29,25 @@ Firebase Web API keys identify the Firebase project and are expected to be prese
 - The browser writes synchronized data through the Firebase client SDK. `firestore.rules` permits public catalog reads and limits writes to provisioned admin UIDs. Admin records cannot be edited from the app.
 - `videos/{youtubeVideoId}` uses the YouTube video ID as its document ID. Playlist membership and order are stored on playlist documents. Editorial controls live in each record's `website` map and are kept separate from YouTube fields.
 - Channel deletion only removes the channel source record; it does not delete videos or playlists.
+- `/admin/mailing` manages meeting-member verification, newsletter subscribers, campaign schedules, and Resend delivery history. Public meeting-link requests are saved as pending members; newsletter addresses are normalized and deduplicated by a SHA-256 document ID.
+- Meeting and newsletter sends use an inbox-friendly responsive HTML template. YouTube videos appear as clickable thumbnail previews because most email clients do not play embedded video. Newsletter emails include signed unsubscribe links.
+- The Vercel cron at `/api/mailing/cron` runs every minute, sends due one-time/daily/weekly/monthly campaigns, observes each schedule's timezone and optional end date, retries temporary provider failures up to three times with Resend idempotency keys, and records delivery results. Repeating schedules without an end date continue until an admin cancels them.
+
+### Mailing environment and deployment
+
+- Set `RESEND_API_KEY` and `RESEND_FROM_EMAIL` to a verified Resend sender address.
+- Set `FIREBASE_SERVICE_ACCOUNT_JSON` to the Firebase project's service-account JSON. Keep this private server-side variable out of browser configuration and source control; it grants trusted access to meeting-member, subscriber, campaign, and history data.
+- Set `CRON_SECRET` to a long random value and `NEWSLETTER_UNSUBSCRIBE_SECRET` to a separate long random value. Vercel sends `CRON_SECRET` as the cron request's bearer token.
+- Set `NEXT_PUBLIC_SITE_URL` to the canonical HTTPS site URL so newsletter unsubscribe links point to the production domain.
+- Vercel Cron requires a deployment plan that supports a one-minute schedule. Scheduled email may be delivered within about a minute of the configured time. Local development does not run the cron automatically; invoke `/api/mailing/cron` with `Authorization: Bearer <CRON_SECRET>` to test due schedules.
+- Browser-side Firestore rules do not grant access to mailing collections. All mailing reads/writes are performed by server routes after admin checks, except public forms which validate and persist only their own submissions.
 
 ## Sync operation
 
 The admin page checks enabled channels at a six-hour interval while an admin session is open and provides a manual **Sync now** action. A Firestore lease prevents concurrent browser sessions from syncing the same channel at once. Sync uses the YouTube API's paginated channel, playlist, playlist-item, and video resources, with a 2,500 item safety cap per paginated collection. Existing catalog content remains available while a sync runs or fails.
 
-This no-Admin-SDK design does not run a background worker when no administrator browser is open. Fully unattended scheduled synchronization requires a trusted scheduled identity and a separate deployment choice; do not make catalog writes public to simulate a scheduler. The YouTube Data API quota and the 2,500 item guard also bound very large channels. For larger catalogs, move synchronization to a trusted queue/worker that still uses Firebase client-authenticated writes or a separately approved server data-access mechanism.
+Catalog synchronization still runs from an administrator browser; it does not run when no administrator session is open. Do not make catalog writes public to simulate a scheduler. The separate mailing worker uses the Firebase Admin SDK only for its protected server-side mailing collections. The YouTube Data API quota and the 2,500 item guard also bound very large channels.
 
 ## Deployment
 
-Set the six Firebase Web configuration variables and `YOUTUBE_DATA_API_KEY` in the hosting provider's environment settings. Deploy the Next.js application and publish the Firestore rules/indexes. The Firebase Authentication authorized domain must include the production hostname. Keep `.env.local` out of source control and rotate any key exposed outside its intended environment.
+Set the six Firebase Web configuration variables, `YOUTUBE_DATA_API_KEY`, and the mailing environment variables in the hosting provider's environment settings. Deploy the Next.js application and publish the Firestore rules/indexes. The Firebase Authentication authorized domain must include the production hostname. Keep `.env.local` out of source control and rotate any key exposed outside its intended environment.

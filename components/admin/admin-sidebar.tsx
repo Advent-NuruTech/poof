@@ -8,6 +8,7 @@ const sections = [
   { href: "/admin/channels", label: "Channels", icon: "▶" },
   { href: "/admin/meetings", label: "Meetings", icon: "◷" },
   { href: "/admin/library", label: "Library", icon: "▤" },
+  { href: "/admin/mailing", label: "Mailing", icon: "✉" },
 ];
 
 const inbox = [

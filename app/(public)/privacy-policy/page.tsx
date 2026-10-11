@@ -5,7 +5,7 @@ export default function PrivacyPolicyPage() {
         <a href="/">← Back to home</a>
         <span>LEGAL</span>
         <h1>Privacy Policy</h1>
-        <p>Last updated: October 4, 2026</p>
+        <p>Last updated: October 11, 2026</p>
       </header>
 
       <section style={{ maxWidth: 760, margin: "32px auto 0", lineHeight: 1.7, fontSize: 15, color: "#333" }}>
@@ -55,6 +55,11 @@ export default function PrivacyPolicyPage() {
           <li>
             <strong>Firebase:</strong> We use Firebase (by Google) for data storage and authentication. Your use of
             Firebase is subject to Google's <a href="https://policies.google.com/privacy" target="_blank" rel="noopener noreferrer" style={{ color: "#c51c31" }}>Privacy Policy</a>.
+          </li>
+          <li>
+            <strong>Resend:</strong> If you subscribe to our newsletter or request an online meeting link, your email
+            address and related request details are stored to manage subscriptions and send requested updates.
+            Newsletter delivery uses Resend. You can unsubscribe from newsletters using the link included in each email.
           </li>
         </ul>
 

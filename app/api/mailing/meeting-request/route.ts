@@ -1,0 +1,35 @@
+import { createHash, randomUUID } from "node:crypto";
+import { mailDb, FieldValue } from "@/lib/mailing-server";
+
+export async function POST(request: Request) {
+  try {
+    const body = await request.json() as unknown;
+    if (!body || typeof body !== "object" || Array.isArray(body)) return Response.json({ error: "Complete the form with a valid name, email, and message." }, { status: 400 });
+    const requestBody = body as { name?: unknown; email?: unknown; phone?: unknown; message?: unknown };
+    const name = typeof requestBody.name === "string" ? requestBody.name.trim() : "";
+    const email = typeof requestBody.email === "string" ? requestBody.email.trim().toLowerCase() : "";
+    const phone = typeof requestBody.phone === "string" ? requestBody.phone.trim() : "";
+    const message = typeof requestBody.message === "string" ? requestBody.message.trim() : "";
+    if (!name || name.length > 120 || !/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email) || email.length > 254 ||
+        phone.length > 40 || !message || message.length > 4000) {
+      return Response.json({ error: "Complete the form with a valid name, email, and message." }, { status: 400 });
+    }
+    const memberId = createHash("sha256").update(email).digest("hex");
+    const member = mailDb.collection("onlineMeetingMembers").doc(memberId);
+    const contact = mailDb.collection("contacts").doc(randomUUID());
+    const now = FieldValue.serverTimestamp();
+    const result = await mailDb.runTransaction(async (transaction) => {
+      const prior = await transaction.get(member);
+      transaction.set(contact, { category: "meeting-link", name, email, phone, message, createdAt: now });
+      if (!prior.exists) {
+        transaction.create(member, { email, name, status: "pending", source: "meeting-request", createdAt: now });
+        return "pending";
+      }
+      return prior.get("status") === "verified" ? "verified" : "pending";
+    });
+    return Response.json({ received: true, status: result }, { status: 201 });
+  } catch (error) {
+    console.error("Meeting link request failed", error);
+    return Response.json({ error: "Your request could not be sent. Please try again." }, { status: 500 });
+  }
+}

@@ -8,7 +8,6 @@ import { db } from "@/lib/firebase";
 import MobileBottomNav from "@/components/home/mobile-bottom-nav";
 
 const emptyForm = { name: "", email: "", phone: "", message: "" };
-const ministryEmail = "birdmanjo@gmail.com";
 type ContactPageProps = { mode?: "contact" | "prayer" | "meeting-link" };
 
 const CSS = `
@@ -255,6 +254,18 @@ export default function ContactPage({ mode = "contact" }: ContactPageProps) {
       const email = form.email.trim();
       const phone = form.phone.trim();
       const message = form.message.trim();
+      if (isMeetingLink) {
+        const response = await fetch("/api/mailing/meeting-request", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ name, email, phone, message }),
+        });
+        const result = await response.json() as { error?: string };
+        if (!response.ok) throw new Error(result.error ?? "Your request could not be sent. Please try again.");
+        setForm(emptyForm);
+        setSent(true);
+        return;
+      }
       await addDoc(collection(db, "contacts"), {
         category: mode,
         name,
@@ -263,14 +274,6 @@ export default function ContactPage({ mode = "contact" }: ContactPageProps) {
         message,
         createdAt: serverTimestamp(),
       });
-      if (isMeetingLink) {
-        const subject = "Zoom meeting link request - Faith of the Pioneers";
-        const body = `Hello,\n\nI am from Faith of the Pioneers and would like to request the next Zoom meeting link.\n\nName: ${name}\nEmail: ${email}\nWhatsApp number: ${phone}\nMessage: ${message}`;
-        window.location.href = `mailto:${ministryEmail}?subject=${encodeURIComponent(
-          subject
-        )}&body=${encodeURIComponent(body)}`;
-        return;
-      }
       setForm(emptyForm);
       setSent(true);
     } catch (reason) {
