@@ -23,6 +23,20 @@ const CSS = `
   font-family:"Helvetica Neue",Helvetica,"Inter","Segoe UI",Arial,sans-serif;
   -webkit-font-smoothing:antialiased;text-rendering:optimizeLegibility;
 }
+@media (min-width:901px){
+  .zm-header{font-family:var(--font-oswald),"Arial Narrow",sans-serif}
+  .zm-brand-text{
+    font-size:24px;
+    letter-spacing:.02em;
+    text-transform:uppercase;
+  }
+  .zm-nav a{
+    font-size:22px;
+    font-weight:600;
+    letter-spacing:.02em;
+    text-transform:uppercase;
+  }
+}
 .zm-header *{box-sizing:border-box}
 .zm-header-inner{
   max-width:1120px;margin:0 auto;
@@ -181,6 +195,7 @@ const CSS = `
 
 /* ===== MOBILE ===== */
 @media (max-width:900px){
+  .zm-header{font-family:"Helvetica Neue",Helvetica,"Inter","Segoe UI",Arial,sans-serif}
   .zm-header-inner{padding:12px 16px;gap:10px;flex-wrap:nowrap}
 
   .zm-nav{display:none}

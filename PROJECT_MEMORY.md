@@ -1,4 +1,8 @@
 # Project Memory
+## 2026-10-09: Desktop header typography
+- **Major changes:** Loaded Oswald through `next/font/google` and applied it to the desktop public masthead. Desktop branding is uppercase at 24px and navigation is uppercase at 22px; the existing mobile font and sizes remain unchanged.
+- **Verification:** `npx.cmd tsc --noEmit` and `npm.cmd run build` passed. Targeted ESLint passed with 0 errors and one pre-existing `<img>` warning in `components/home/public-header.tsx`.
+
 ## 2026-10-08: Searchable meeting scheduling time zone
 - **Major changes:** Meeting admins can search/select an IANA scheduling timezone; the chosen zone is persisted with each meeting and reused from browser local storage for the next meeting. Form date/start/end wall-clock values are converted using the selected zone (including DST offset calculation), and editing an older or existing meeting displays its values in the meeting's own scheduling zone. Public displays continue converting the stored instant into each viewer's device timezone.
 - **Safety:** If browser storage is blocked, meeting publishing still succeeds; the browser zone is used as the default. The saved selection is device-local and can be changed before any meeting is scheduled.
