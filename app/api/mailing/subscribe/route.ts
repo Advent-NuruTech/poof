@@ -1,5 +1,5 @@
 import { createHash } from "node:crypto";
-import { getMailDb, FieldValue } from "@/lib/mailing-server";
+import { getMailDb, FieldValue, sendNewsletterWelcome } from "@/lib/mailing-server";
 
 export async function POST(request: Request) {
   try {
@@ -26,7 +26,32 @@ export async function POST(request: Request) {
       });
       return "subscribed";
     });
-    return Response.json({ status: result }, { status: result === "subscribed" ? 201 : 200 });
+    if (result === "already-subscribed") return Response.json({ status: result });
+
+    const baseUrl = process.env.NEXT_PUBLIC_SITE_URL?.replace(/\/$/, "") ||
+      `https://${process.env.VERCEL_URL ?? new URL(request.url).host}`;
+    try {
+      const delivery = await sendNewsletterWelcome({ id, email }, baseUrl);
+      if (delivery.failures.length) {
+        console.error("Newsletter welcome email delivery failed", {
+          subscriberId: id,
+          error: delivery.failures[0].error,
+        });
+        return Response.json({
+          status: result,
+          welcomeEmailSent: false,
+          welcomeEmailError: "Your subscription was saved, but the welcome email could not be sent. Please contact us for help.",
+        }, { status: 201 });
+      }
+      return Response.json({ status: result, welcomeEmailSent: true }, { status: 201 });
+    } catch (error) {
+      console.error("Newsletter welcome email failed", { subscriberId: id, error });
+      return Response.json({
+        status: result,
+        welcomeEmailSent: false,
+        welcomeEmailError: "Your subscription was saved, but the welcome email could not be sent. Please contact us for help.",
+      }, { status: 201 });
+    }
   } catch (error) {
     console.error("Newsletter subscription failed", error);
     return Response.json({ error: "Could not save your subscription. Please try again." }, { status: 500 });

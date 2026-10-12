@@ -314,3 +314,14 @@ body{font-size:16px}.home-section-title h2{font-size:25px}.latest-card .video-co
 .rich-editor-compact{min-height:260px;font:16px/1.7 Arial,sans-serif}
 @media(max-width:860px){.mailing-admin .admin-content{width:calc(100% - 30px)}.mailing-grid{grid-template-columns:1fr}.mailing-people,.mailing-compose,.mailing-history{padding:19px}}
 @media(max-width:560px){.mailing-admin .admin-content{width:calc(100% - 14px)}.mailing-stats{grid-template-columns:repeat(2,minmax(0,1fr));gap:8px}.mailing-stats article{padding:13px}.mailing-stats span{font-size:11px}.mailing-stats strong{font-size:25px}.mailing-tabs button{font-size:12px}.mailing-people,.mailing-compose,.mailing-history{padding:14px}.mailing-form>label,.mailing-schedule-form>label,.mailing-schedule-fields label{font-size:13px}.mailing-form input,.mailing-form textarea,.mailing-schedule-form input,.mailing-schedule-form select{font-size:16px}.mailing-template-preview{padding:12px}.mailing-template-card>section{padding:16px}.mailing-preview-body{font-size:16px}.mailing-history-actions{gap:6px}.mailing-history-actions .outline-button{flex:1 1 auto}.rich-editor-compact{min-height:230px}}
+.unsubscribe-page{min-height:100vh;display:grid;place-items:center;padding:24px;background:#f1f3f2;color:#172126;font-family:Arial,Helvetica,sans-serif}
+.unsubscribe-card{width:min(100%,520px);display:flex;flex-direction:column;align-items:center;padding:clamp(26px,7vw,48px);border:1px solid #e1e5e2;border-radius:16px;background:#fff;box-shadow:0 16px 48px #17212612;text-align:center}
+.unsubscribe-card>img{margin-bottom:18px;border-radius:50%;object-fit:cover}
+.unsubscribe-eyebrow{color:#8b7028;font-size:11px;font-weight:750;letter-spacing:2px}
+.unsubscribe-card h1{margin:14px 0 10px;font-size:clamp(27px,6vw,36px);letter-spacing:-.7px}
+.unsubscribe-card>p{max-width:38ch;margin:0;color:#5f6964;font-size:16px;line-height:1.65}
+.unsubscribe-card form{width:100%;margin-top:26px}
+.unsubscribe-card button{width:100%;min-height:50px;padding:12px 18px;border:0;border-radius:8px;background:#172126;color:#fff;font:700 15px Arial,Helvetica,sans-serif;cursor:pointer}
+.unsubscribe-card button:hover{background:#263e69}
+.unsubscribe-home{margin-top:18px;color:#263e69;font-size:14px;font-weight:700;text-decoration:underline;text-underline-offset:3px}
+.unsubscribe-card small{margin-top:24px;color:#78817c;font-size:12px;line-height:1.6}

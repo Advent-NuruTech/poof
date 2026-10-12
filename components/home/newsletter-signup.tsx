@@ -6,6 +6,8 @@ import type { FormEvent } from "react";
 type SubscribeResponse = {
 status?: string;
 error?: string;
+welcomeEmailSent?: boolean;
+welcomeEmailError?: string;
 };
 
 const GENERIC_ERROR =
@@ -52,11 +54,14 @@ try {
     );
   }
 
-  setMessage(
-    result.status === "already-subscribed"
-      ? "This email is already subscribed."
-      : "You're subscribed. Watch your inbox for our next newsletter."
-  );
+  if (result.status === "already-subscribed") {
+    setMessage("This email is already subscribed.");
+  } else if (result.welcomeEmailSent) {
+    setMessage("You're subscribed! A welcome email with our three latest videos is on its way.");
+  } else {
+    setFailed(true);
+    setMessage(result.welcomeEmailError || "You're subscribed! Watch your inbox for a welcome email.");
+  }
 
   setEmail("");
 } catch (error) {

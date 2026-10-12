@@ -14,6 +14,8 @@ const publicPaths = [
   },
   { path: "/contact", changeFrequency: "yearly", priority: 0.5 },
 ] as const;
+ 
+
 
 export default function sitemap(): MetadataRoute.Sitemap {
   return publicPaths.map(({ path, changeFrequency, priority }) => ({

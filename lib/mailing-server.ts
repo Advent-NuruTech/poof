@@ -3,6 +3,7 @@ import { applicationDefault, cert, getApp, getApps, initializeApp, type ServiceA
 import { AggregateField, FieldValue, getFirestore, Timestamp, type Firestore } from "firebase-admin/firestore";
 import { Resend } from "resend";
 import { automaticPreviewText, extractFeaturedVideoUrl, richTextToPlainText, sanitizeRichText } from "@/lib/rich-text";
+import { getPublicCatalog, type FeedVideo } from "@/lib/catalog-feed";
 
 function parseServiceAccount(value: string): ServiceAccount {
   let parsed: unknown;
@@ -202,9 +203,14 @@ function bodyHtml(value: string) {
     .replace(/<img\b([^>]*)>/gi, '<img$1 style="display:block;width:100%;max-width:640px;height:auto;margin:24px auto;border:0;border-radius:8px">');
 }
 
-export function renderCampaign(campaign: Campaign, unsubscribeUrl = "", brandLogoUrl = "") {
+export function renderCampaign(
+  campaign: Campaign,
+  unsubscribeUrl = "",
+  brandLogoUrl = "",
+  options: { includeFeaturedVideo?: boolean; textSuffix?: string } = {},
+) {
   const buttonUrl = safeUrl(campaign.buttonUrl);
-  const videoUrl = safeUrl(campaign.videoUrl || extractFeaturedVideoUrl(campaign.body));
+  const videoUrl = options.includeFeaturedVideo === false ? "" : safeUrl(campaign.videoUrl || extractFeaturedVideoUrl(campaign.body));
   const logoUrl = safeUrl(brandLogoUrl);
   const youtubeId = videoUrl.match(/(?:youtu\.be\/|youtube\.com\/(?:watch\?v=|embed\/|shorts\/))([\w-]{11})/)?.[1];
   const preview = youtubeId
@@ -214,19 +220,28 @@ export function renderCampaign(campaign: Campaign, unsubscribeUrl = "", brandLog
     ? `<p style="margin:28px 0"><a href="${escapeHtml(buttonUrl)}" style="display:inline-block;background:#172126;color:#fff;padding:14px 24px;border-radius:28px;text-decoration:none;font-weight:700">${escapeHtml(campaign.buttonLabel || "Learn more")}</a></p>`
     : "";
   const unsubscribe = unsubscribeUrl
-    ? `<p style="margin:30px 0 0;color:#68736e;font-size:13px;line-height:1.6">You received this newsletter because you subscribed to Faith of the Pioneers. <a href="${escapeHtml(unsubscribeUrl)}" style="color:#68736e">Unsubscribe</a></p>`
+    ? `<p style="margin:30px 0 0;padding-top:20px;border-top:1px solid #e5e8e6;color:#68736e;font-size:13px;line-height:1.6">You received this newsletter because you subscribed to Faith of the Pioneers. <a href="${escapeHtml(unsubscribeUrl)}" style="color:#263e69;font-weight:700">Unsubscribe from emails</a></p>`
     : "";
   const logo = logoUrl
     ? `<img src="${escapeHtml(logoUrl)}" alt="Faith of the Pioneers" width="84" height="84" style="display:block;width:84px;height:84px;object-fit:contain;margin:0 auto 12px;border:0">`
     : "";
   const letterTitle = escapeHtml(campaign.letterTitle || (campaign.kind === "meeting" ? "Online meeting reminder" : "A letter for your journey"));
+  const siteUrl = logoUrl ? new URL(logoUrl).origin : "";
+  const footerSite = siteUrl ? `<a href="${escapeHtml(siteUrl)}" style="color:#263e69;text-decoration:underline">Visit Faith of the Pioneers</a>` : "Faith of the Pioneers";
   return {
-    html: `<!doctype html><html><head><meta name="viewport" content="width=device-width,initial-scale=1"><style>@media only screen and (max-width:600px){.email-outer{padding:0!important}.email-card{border-radius:0!important}.email-content{padding:24px 20px!important}.email-brand{padding:25px 18px!important}.email-headline{font-size:29px!important}.email-body{font-size:18px!important}}</style></head><body style="margin:0;background:#f1f3f2;font-family:Arial,Helvetica,sans-serif;color:#172126"><div style="display:none;max-height:0;overflow:hidden;opacity:0">${escapeHtml(campaign.preheader || automaticPreviewText(campaign.body))}</div><table role="presentation" class="email-outer" width="100%" cellspacing="0" cellpadding="0" style="background:#f1f3f2;padding:24px 14px"><tr><td align="center"><table role="presentation" class="email-card" width="720" cellspacing="0" cellpadding="0" style="width:100%;max-width:720px;background:#fff;border:1px solid #e5e8e6;border-radius:12px;overflow:hidden"><tr><td class="email-brand" align="center" style="padding:28px 24px;background:#082d63;background-image:linear-gradient(145deg,#0c3978,#061e49);color:#fff">${logo}<div style="font-size:12px;letter-spacing:3px;font-weight:700;color:#f3d875">FAITH OF THE PIONEERS</div><div style="height:1px;width:64px;background:#d8b84d;margin:15px auto 11px"></div><div style="font-size:17px;line-height:1.4;font-style:italic;color:#fff">${letterTitle}</div></td></tr><tr><td class="email-content" style="padding:36px 48px 40px"><div style="height:3px;width:42px;background:#c51c31;margin:0 0 20px"></div><h1 class="email-headline" style="font-size:34px;line-height:1.18;letter-spacing:-.5px;margin:0 0 24px;color:#172126">${escapeHtml(campaign.headline)}</h1><div class="email-body">${bodyHtml(campaign.body)}</div>${preview}${button}${unsubscribe}</td></tr><tr><td style="padding:18px 28px;background:#f7f8f6;color:#68736e;font-size:13px;line-height:1.5;text-align:center">Faith of the Pioneers · Online fellowship, study, and worship</td></tr></table></td></tr></table></body></html>`,
-    text: [letterTitle, campaign.headline, richTextToPlainText(campaign.body), videoUrl ? `Watch: ${videoUrl}` : "", buttonUrl ? `${campaign.buttonLabel || "Learn more"}: ${buttonUrl}` : "", unsubscribeUrl ? `Unsubscribe: ${unsubscribeUrl}` : ""].filter(Boolean).join("\n\n"),
+    html: `<!doctype html><html><head><meta name="viewport" content="width=device-width,initial-scale=1"><style>@media only screen and (max-width:600px){.email-outer{padding:0!important}.email-card{border-radius:0!important}.email-content{padding:24px 20px!important}.email-brand{padding:25px 18px!important}.email-headline{font-size:29px!important}.email-body{font-size:18px!important}}</style></head><body style="margin:0;background:#f1f3f2;font-family:Arial,Helvetica,sans-serif;color:#172126"><div style="display:none;max-height:0;overflow:hidden;opacity:0">${escapeHtml(campaign.preheader || automaticPreviewText(campaign.body))}</div><table role="presentation" class="email-outer" width="100%" cellspacing="0" cellpadding="0" style="background:#f1f3f2;padding:24px 14px"><tr><td align="center"><table role="presentation" class="email-card" width="720" cellspacing="0" cellpadding="0" style="width:100%;max-width:720px;background:#fff;border:1px solid #e5e8e6;border-radius:12px;overflow:hidden"><tr><td class="email-brand" align="center" style="padding:28px 24px;background:#082d63;background-image:linear-gradient(145deg,#0c3978,#061e49);color:#fff">${logo}<div style="font-size:12px;letter-spacing:3px;font-weight:700;color:#f3d875">FAITH OF THE PIONEERS</div><div style="height:1px;width:64px;background:#d8b84d;margin:15px auto 11px"></div><div style="font-size:17px;line-height:1.4;font-style:italic;color:#fff">${letterTitle}</div></td></tr><tr><td class="email-content" style="padding:36px 48px 40px"><div style="height:3px;width:42px;background:#c51c31;margin:0 0 20px"></div><h1 class="email-headline" style="font-size:34px;line-height:1.18;letter-spacing:-.5px;margin:0 0 24px;color:#172126">${escapeHtml(campaign.headline)}</h1><div class="email-body">${bodyHtml(campaign.body)}</div>${preview}${button}${unsubscribe}</td></tr><tr><td style="padding:22px 28px;background:#f7f8f6;border-top:1px solid #e8ebe8;color:#68736e;font-size:13px;line-height:1.7;text-align:center"><strong style="color:#243b64;letter-spacing:1.5px">FAITH OF THE PIONEERS</strong><br>Online fellowship, Bible study, and worship<br>${footerSite}<br><span style="font-size:11px;color:#84908a">© Faith of the Pioneers</span></td></tr></table></td></tr></table></body></html>`,
+    text: [letterTitle, campaign.headline, richTextToPlainText(campaign.body), videoUrl ? `Watch: ${videoUrl}` : "", buttonUrl ? `${campaign.buttonLabel || "Learn more"}: ${buttonUrl}` : "", options.textSuffix, unsubscribeUrl ? `Unsubscribe: ${unsubscribeUrl}` : "", siteUrl ? `Visit Faith of the Pioneers: ${siteUrl}` : ""].filter(Boolean).join("\n\n"),
   };
 }
 
 export function unsubscribeLink(subscriberId: string, baseUrl: string) {
+  const secret = process.env.NEWSLETTER_UNSUBSCRIBE_SECRET;
+  if (!secret) throw new Error("NEWSLETTER_UNSUBSCRIBE_SECRET is not configured.");
+  const signature = createSignature(subscriberId, secret);
+  return `${baseUrl}/unsubscribe?id=${encodeURIComponent(subscriberId)}&sig=${signature}`;
+}
+
+function oneClickUnsubscribeLink(subscriberId: string, baseUrl: string) {
   const secret = process.env.NEWSLETTER_UNSUBSCRIBE_SECRET;
   if (!secret) throw new Error("NEWSLETTER_UNSUBSCRIBE_SECRET is not configured.");
   const signature = createSignature(subscriberId, secret);
@@ -237,7 +252,13 @@ function createSignature(value: string, secret: string) {
   return createHmac("sha256", secret).update(value).digest("hex");
 }
 
-export async function deliverCampaign(campaign: Campaign, recipients: Array<{ id: string; email: string }>, baseUrl: string, idempotencyPrefix: string) {
+export async function deliverCampaign(
+  campaign: Campaign,
+  recipients: Array<{ id: string; email: string }>,
+  baseUrl: string,
+  idempotencyPrefix: string,
+  options: { includeFeaturedVideo?: boolean; textSuffix?: string } = {},
+) {
   const apiKey = process.env.RESEND_API_KEY;
   const from = process.env.RESEND_FROM_EMAIL;
   if (!apiKey || !from) throw new Error("Configure RESEND_API_KEY and RESEND_FROM_EMAIL to send email.");
@@ -251,7 +272,8 @@ export async function deliverCampaign(campaign: Campaign, recipients: Array<{ id
     const group = recipients.slice(start, start + 5);
     const results = await Promise.all(group.map(async (recipient) => {
       const unsubscribe = campaign.kind === "newsletter" ? unsubscribeLink(recipient.id, baseUrl) : "";
-      const content = renderCampaign(campaign, unsubscribe, `${baseUrl.replace(/\/$/, "")}/images/logo.jpeg`);
+      const oneClickUnsubscribe = campaign.kind === "newsletter" ? oneClickUnsubscribeLink(recipient.id, baseUrl) : "";
+      const content = renderCampaign(campaign, unsubscribe, `${baseUrl.replace(/\/$/, "")}/images/logo.jpeg`, options);
       try {
         const { error } = await resend.emails.send({
           from,
@@ -259,7 +281,7 @@ export async function deliverCampaign(campaign: Campaign, recipients: Array<{ id
           subject: campaign.subject,
           html: content.html,
           text: content.text,
-          ...(unsubscribe ? { headers: { "List-Unsubscribe": `<${unsubscribe}>`, "List-Unsubscribe-Post": "List-Unsubscribe=One-Click" } } : {}),
+          ...(oneClickUnsubscribe ? { headers: { "List-Unsubscribe": `<${oneClickUnsubscribe}>`, "List-Unsubscribe-Post": "List-Unsubscribe=One-Click" } } : {}),
         }, {
           idempotencyKey: createHash("sha256").update(`${idempotencyPrefix}:${recipient.id}`).digest("hex"),
         });
@@ -276,4 +298,43 @@ export async function deliverCampaign(campaign: Campaign, recipients: Array<{ id
     }
   }
   return { sent, failures };
+}
+
+function welcomeVideoMarkup(videos: FeedVideo[]) {
+  return videos.map((video) => {
+    if (!/^[\w-]{11}$/.test(video.id)) return "";
+    const watchUrl = `https://www.youtube.com/watch?v=${encodeURIComponent(video.id)}`;
+    const thumbnailUrl = `https://img.youtube.com/vi/${encodeURIComponent(video.id)}/hqdefault.jpg`;
+    return `<p><a href="${watchUrl}"><img src="${thumbnailUrl}" alt="Watch ${escapeHtml(video.title)}"></a><br><a href="${watchUrl}"><strong>${escapeHtml(video.title || "Watch the latest video")}</strong></a></p>`;
+  }).filter(Boolean).join("");
+}
+
+export async function sendNewsletterWelcome(subscriber: { id: string; email: string }, baseUrl: string) {
+  const feed = await getPublicCatalog();
+  const videos = feed.videos
+    .filter((video) => video.availability !== "unavailable" && video.website?.hidden !== true && /^[\w-]{11}$/.test(video.id))
+    .sort((first, second) => Date.parse(second.publishedAt) - Date.parse(first.publishedAt))
+    .slice(0, 3);
+  const videoSection = videos.length
+    ? `<p>Here are three of our latest videos to enjoy:</p>${welcomeVideoMarkup(videos)}`
+    : `<p>We share Bible studies, encouragement, and fellowship through our latest videos and updates. Visit our website to explore what is new.</p>`;
+  const campaign: Campaign = {
+    kind: "newsletter",
+    subject: "Welcome to Faith of the Pioneers",
+    letterTitle: "A warm welcome",
+    headline: "You're on the list!",
+    preheader: "Thank you for subscribing. Here are three recent videos to get you started.",
+    body: `<p>Thank you for subscribing to Faith of the Pioneers. We are glad to have you with us.</p>${videoSection}<p>We hope these messages encourage your faith and make you feel at home in our community.</p>`,
+    buttonLabel: "Explore the website",
+    buttonUrl: baseUrl,
+    videoUrl: "",
+  };
+  const videoText = videos.map((video) => `Latest video: ${video.title} — https://www.youtube.com/watch?v=${encodeURIComponent(video.id)}`).join("\n");
+  return deliverCampaign(
+    campaign,
+    [subscriber],
+    baseUrl,
+    `newsletter-welcome:${subscriber.id}:${Date.now()}`,
+    { includeFeaturedVideo: false, textSuffix: videoText },
+  );
 }

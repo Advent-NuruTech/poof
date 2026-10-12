@@ -22,7 +22,10 @@ async function unsubscribe(request: Request) {
 function page(message: string, action = "") {
   const safeAction = action.replace(/&/g, "&amp;").replace(/"/g, "&quot;").replace(/</g, "&lt;");
   const form = action ? `<form method="post" action="${safeAction}"><button type="submit">Unsubscribe</button></form>` : "";
-  return new Response(`<!doctype html><html><head><meta name="viewport" content="width=device-width, initial-scale=1"><title>Newsletter preferences</title></head><body style="margin:0;background:#f4f5f2;font:16px Arial,sans-serif;color:#172126"><main style="max-width:520px;margin:12vh auto;padding:32px;background:#fff;border:1px solid #e5e8e4;border-radius:14px"><p style="color:#c51c31;font-size:12px;letter-spacing:2px">FAITH OF THE PIONEERS</p><h1 style="font-size:25px">${message}</h1>${form}</main><style>button{padding:12px 18px;border:0;border-radius:24px;background:#172126;color:#fff;font-weight:700;cursor:pointer}</style></body></html>`, {
+  const safeMessage = message.replace(/[&<>"']/g, (character) => ({
+    "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;",
+  })[character] ?? character);
+  return new Response(`<!doctype html><html><head><meta name="viewport" content="width=device-width, initial-scale=1"><title>Email preferences | Faith of the Pioneers</title></head><body style="margin:0;background:#f1f3f2;font:16px Arial,Helvetica,sans-serif;color:#172126"><main style="box-sizing:border-box;width:min(520px,calc(100% - 32px));margin:12vh auto;padding:clamp(24px,7vw,42px);background:#fff;border:1px solid #e1e5e2;border-radius:16px;box-shadow:0 16px 48px #17212612;text-align:center"><p style="color:#8b7028;font-size:11px;font-weight:750;letter-spacing:2px">FAITH OF THE PIONEERS</p><h1 style="font-size:clamp(25px,6vw,32px);line-height:1.2">${safeMessage}</h1>${form}<p style="margin-top:22px;color:#78817c;font-size:12px;line-height:1.6">You are in control of your inbox. You can safely close this page if you did not request to unsubscribe.</p></main><style>button{width:100%;min-height:48px;padding:12px 18px;border:0;border-radius:8px;background:#172126;color:#fff;font:700 15px Arial,Helvetica,sans-serif;cursor:pointer}button:hover{background:#263e69}</style></body></html>`, {
     headers: { "Content-Type": "text/html; charset=utf-8", "Cache-Control": "no-store" },
   });
 }
