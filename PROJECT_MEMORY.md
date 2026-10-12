@@ -2,6 +2,13 @@
 ## Ongoing working preference
 - Whenever project changes are made, record the major change and any build/runtime errors with their verified fixes in this file before finishing. When the user asks, provide the exact suggested Git commit message; do not create a commit unless explicitly requested.
 
+## 2026-10-12: Fix production mailing API runtime crash
+- **Bug:** Vercel's `/api/mailing` function crashed while loading `firebase-admin/auth`: its CommonJS `jwks-rsa` dependency requires ESM-only `jose`, which fails on Node versions before 22.12. This happened before the route handler could return its normal JSON authentication response.
+- **Fix:** Pinned the project Node engine to `22.x` in `package.json` and the lockfile so Vercel builds/functions use a supported current Node 22 runtime for Firebase Admin 14 and `jose`.
+- **Verification:** Vercel logs identify the `ERR_REQUIRE_ESM` cause. The current production build succeeds, and a local built-server GET to `/api/mailing` returns the expected JSON 401 when unauthenticated. Deploy the engine pin, then confirm the authenticated mailing list loads against production Firestore.
+- **Build note:** Explicit `runtime = "nodejs"` route exports are incompatible with this repository's Next.js 16 `cacheComponents` setting; no such exports remain.
+- **Secret hygiene:** Cleared the populated `CRON_SECRET` from `.env.example`; keep actual values only in the hosting environment or an ignored local env file. The cron secret was present in the committed example file, so rotate it in Vercel and update the matching cron configuration.
+
 ## 2026-10-12: Lead homepage and share titles with ministry name
 - **Major changes:** Updated homepage title, default title, Open Graph title, and Twitter title so "Faith of the Pioneers" appears first, followed by the Bible study and ministry keywords. Added an absolute-title option to the shared metadata helper so the homepage share preview does not receive a duplicated brand suffix from the title template.
 - **Verification:** Production build, focused ESLint, and generated homepage HTML checks passed; the browser title, Open Graph title, and Twitter title all start with "Faith of the Pioneers".
