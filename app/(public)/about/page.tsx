@@ -1,5 +1,6 @@
 import Link from "next/link";
 import AboutMostViewed from "@/components/home/about-most-viewed";
+import AboutMeetingPoster from "@/components/home/about-meeting-poster";
 
 const CSS = `
 .about-page{
@@ -40,6 +41,11 @@ const CSS = `
   background:linear-gradient(90deg,transparent,var(--red),transparent);opacity:.55;
 }
 .about-hero-inner{position:relative;max-width:1120px;margin:0 auto;z-index:1}
+.about-meeting-poster{
+  display:block;width:min(880px,100%);height:clamp(220px,38vw,440px);
+  object-fit:cover;object-position:center;border:1px solid var(--line);
+  border-radius:18px;margin:0 auto 38px;box-shadow:0 16px 44px rgba(10,10,10,.12);
+}
 
 .about-crumbs{
   display:inline-flex;align-items:center;gap:8px;
@@ -145,6 +151,7 @@ const CSS = `
 /* ================= RESPONSIVE ================= */
 @media (max-width:640px){
   .about-hero{padding:48px 20px 40px}
+  .about-meeting-poster{height:clamp(190px,58vw,320px);border-radius:13px;margin-bottom:30px}
   .about-body{padding:44px 20px 24px;font-size:16px}
   .about-body h2{margin:44px 0 14px;padding-top:20px}
   .about-body ul li{padding:12px 16px 12px 36px;font-size:14.5px}
@@ -166,6 +173,8 @@ export default function AboutPage() {
               <span aria-hidden="true">/</span>
               <span>About</span>
             </nav>
+
+            <AboutMeetingPoster />
 
             <p className="about-eyebrow">
               <span className="about-eyebrow-line" />

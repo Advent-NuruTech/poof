@@ -5,7 +5,7 @@ import Link from "next/link";
 import type { LibraryCategory, LibraryDocument } from "@/lib/library";
 import { usePublicLibrary } from "@/lib/use-library-feed";
 import { formatDate, formatDuration, type Channel, type Playlist, type Video } from "@/lib/catalog";
-import { collapseMeetingOccurrences, formatMeetingDate, formatMeetingTime, meetingGroups, meetingHref, meetingJoinVisible } from "@/lib/meetings";
+import { collapseMeetingOccurrences, meetingGroups } from "@/lib/meetings";
 import { feedChannels, feedMeetings, feedMostViewedVideos, feedPlaylists, feedVideos, refreshCatalogFeed, usePublicCatalog } from "@/lib/use-catalog";
 import { FEED_CACHE_MS } from "@/lib/catalog-feed-types";
 import MeetingCard from "@/components/home/meeting-card";
@@ -13,6 +13,7 @@ import MobileBottomNav from "@/components/home/mobile-bottom-nav";
 import PublicHeader from "@/components/home/public-header";
 import SiteFooter from "@/components/home/site-footer";
 import NewsletterSignup from "@/components/home/newsletter-signup";
+import HomeHero from "@/components/home/home-hero";
 import { CardGridSkeleton, MeetingListSkeleton, VideoListSkeleton } from "@/components/home/skeleton";
 
 // How many cards each homepage section renders. These caps, not the size of the
@@ -23,9 +24,6 @@ const ARCHIVE_VIDEO_LIMIT = 15;
 const HERO_ITEM_LIMIT = 4;
 const LATEST_PAGE_SIZE = 6;
 const HOME_STUDY_LIMIT = 6;
-const HERO_MEETING_MS = 15_000;
-const HERO_VIDEO_MS = 5_000;
-
 function Icon({ name, size = 22 }: { name: "search" | "user" | "play" | "list" | "grid" | "home" | "camera" | "menu" | "chevron" | "close" | "calendar"; size?: number }) {
   const common = { width: size, height: size, viewBox: "0 0 24 24", fill: "none", stroke: "currentColor", strokeWidth: 2, strokeLinecap: "round" as const, strokeLinejoin: "round" as const, "aria-hidden": true as const };
   const paths: Record<string, ReactNode> = {
@@ -65,7 +63,6 @@ export default function HomeScreen() {
   const [selectedPlaylist, setSelectedPlaylist] = useState<Playlist | null>(null);
   const [showAllVideos, setShowAllVideos] = useState(false);
   const [now, setNow] = useState(0);
-  const [heroIndex, setHeroIndex] = useState(0);
   const [shareNotice, setShareNotice] = useState("");
   const { categories: studyCategories, documents: studyDocuments, loaded: studiesLoaded } = usePublicLibrary();
 
@@ -123,17 +120,6 @@ export default function HomeScreen() {
   const heroVideos = [...activeVideos.filter((video) => video.liveStatus === "live"), ...activeVideos.filter((video) => video.website?.featured && video.liveStatus !== "live"), ...activeVideos.filter((video) => video.liveStatus !== "live" && !video.website?.featured)].map((video) => ({ kind: "video" as const, video }));
   const priorityMeetings = meetingGroups(collapseMeetingOccurrences(meetings, now), now).filter((group) => group.status !== "completed").flatMap((group) => group.meetings).map((meeting) => ({ kind: "meeting" as const, meeting }));
   const heroItems = [...priorityMeetings, ...heroVideos].slice(0, HERO_ITEM_LIMIT);
-  const heroItem = heroItems[heroItems.length ? heroIndex % heroItems.length : 0];
-  const heroVideo = heroItem?.kind === "video" ? heroItem.video : undefined;
-  const heroMeeting = heroItem?.kind === "meeting" ? heroItem.meeting : undefined;
-  const heroSlideKey = heroMeeting ? `meeting:${heroMeeting.id}` : heroVideo ? `video:${heroVideo.id}` : "empty";
-  const heroSlideDuration = heroMeeting ? HERO_MEETING_MS : HERO_VIDEO_MS;
-
-  useEffect(() => {
-    if (heroItems.length < 2) return;
-    const timer = window.setTimeout(() => setHeroIndex((index) => (index + 1) % heroItems.length), heroSlideDuration);
-    return () => window.clearTimeout(timer);
-  }, [heroItems.length, heroSlideDuration, heroSlideKey]);
   const allTopPlaylists = activePlaylists.filter((playlist) => playlist.website?.featured).concat(activePlaylists.filter((playlist) => !playlist.website?.featured));
   const topPlaylists = allTopPlaylists.slice(0, 8);
   // Each section is capped before render. The catalog itself may hold thousands
@@ -183,31 +169,10 @@ export default function HomeScreen() {
     </article>;
   }
 
-  function renderMeetingSlideBody(meeting: (typeof priorityMeetings)[number]["meeting"]) {
-    return <>
-      <span className="hero-kicker"><i/> MEETING</span>
-      <h1>{meeting.title}</h1>
-      <p>{formatMeetingDate(meeting.startsAt)} · {formatMeetingTime(meeting)}</p>
-      <div className="hero-actions">
-        {meetingJoinVisible(meeting, now) ? <a className="watch-button" href={meeting.meetingUrl} target="_blank" rel="noreferrer"><Icon name="play" size={16}/> Join now</a>
-          : meeting.meetingType === "onsite" ? <a className="watch-button" href={`/meeting-link-request`}><Icon name="calendar" size={16}/> Request details</a>
-          : <a className="watch-button" href={`/meeting-link-request`}><Icon name="calendar" size={16}/> Request meeting link</a>}
-        <a className="hero-secondary-button" href={meetingHref(meeting)}>See details</a>
-      </div>
-    </>;
-  }
-
   return <main className="home-app">
     <PublicHeader searchOpen={searchOpen} search={search} onSearchOpenChange={setSearchOpen} onSearchChange={setSearch}/>
     {searchOpen && <div className="search-overlay" onClick={() => { setSearchOpen(false); setSearch(""); }}><section className="search-panel" role="dialog" aria-label="Video search results" onClick={(event) => event.stopPropagation()}><div className="search-panel-heading"><strong>{term ? `Results for ${search.trim()}` : "Search videos"}</strong><span>{term ? `${latest.length} ${latest.length === 1 ? "video" : "videos"}${latest.length > searchResults.length ? ` · showing ${searchResults.length}` : ""}` : "Search titles, topics, and channels"}</span></div>{!term ? <p className="search-prompt">Start typing to find a video.</p> : !videosLoaded ? <VideoListSkeleton/> : searchResults.length ? <div className="search-results">{searchResults.map(renderSearchCard)}</div> : <div className="search-empty"><strong>No videos found</strong><span>Try another title, topic, or channel.</span></div>}</section></div>}
-    <section className="hero" id="home" style={{ backgroundImage: heroVideo?.thumbnail ? `linear-gradient(90deg, rgba(5,13,18,.88) 0%, rgba(5,13,18,.48) 42%, rgba(5,13,18,.02) 100%), url("${heroVideo.thumbnail}")` : "radial-gradient(ellipse at 74% 45%, #bd9154 0%, #654c37 17%, transparent 38%), linear-gradient(110deg, #111e24, #293b3f 58%, #11191d)" }}>
-      <button className="hero-arrow hero-arrow-left" aria-label="Previous featured item" disabled={heroItems.length < 2} onClick={() => setHeroIndex((index) => (index + Math.max(heroItems.length, 1) - 1) % Math.max(heroItems.length, 1))}><Icon name="chevron" size={20}/></button>
-      <div className="hero-copy">{live && !heroMeeting ? <><span className="hero-kicker"><i/> LIVE NOW</span><h1>{live.title}</h1><p>{live.channelTitle}</p><button className="watch-button" onClick={() => setWatching(live)}><Icon name="play" size={16}/> Watch now</button></>
-        : heroMeeting ? renderMeetingSlideBody(heroMeeting)
-        : <><span className="hero-kicker">{heroVideo ? "FEATURED MESSAGE" : "FAITH OF THE PIONEERS"}</span><h1>{heroVideo?.title ?? <>Faith for<br/>every season.</>}</h1><p>{heroVideo?.channelTitle ?? "A home for uplifting messages, worship, and Bible study."}</p>{heroVideo ? <button className="watch-button" onClick={() => setWatching(heroVideo)}><Icon name="play" size={16}/> Watch now</button> : <a className="watch-button" href="#latest"><Icon name="play" size={16}/> Explore videos</a>}</>}</div>
-      <button className="hero-arrow hero-arrow-right" aria-label="Next featured item" disabled={heroItems.length < 2} onClick={() => setHeroIndex((index) => (index + 1) % Math.max(heroItems.length, 1))}><Icon name="chevron" size={20}/></button>
-      <div className="hero-dots">{Array.from({ length: heroItems.length ? Math.min(heroItems.length, 4) : 4 }, (_, dot) => <button key={dot} className={dot === heroIndex % Math.max(heroItems.length, 1) ? "dot-current" : ""} aria-label={`Show featured item ${dot + 1}`} onClick={() => setHeroIndex(dot)}/>)}</div>
-    </section>
+    <HomeHero items={heroItems} live={live} now={now} onWatch={setWatching}/>
     <div className="home-content">
       <div className="latest-about-layout">
       <section className="home-section latest-section" id="latest"><SectionTitle icon="list" title={search ? "Search results" : "Latest Videos"} onViewAll={() => setShowAllVideos(!showAllVideos)}/>

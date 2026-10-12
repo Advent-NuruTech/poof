@@ -1,4 +1,8 @@
 # Project Memory
+## 2026-10-12: Independent homepage hero, matching About colors, and meeting poster
+- **Major changes:** Extracted the homepage hero carousel, slide timing, and meeting/video actions into `components/home/home-hero.tsx`. The featured About card now uses the newsletter form's exact blue palette. The About page now displays the nearest upcoming meeting's poster above its About heading when that meeting has a poster, falling back to an ongoing meeting only when no upcoming one exists; the poster reads the shared public catalog cache.
+- **Verification:** `npx.cmd tsc --noEmit`, focused ESLint, and `git diff --check` passed. ESLint reported zero errors and nine existing homepage warnings. No build or runtime errors were encountered.
+
 ## 2026-10-11: Homepage most-viewed shelf covers full channel catalogs
 - **Major change:** The homepage now builds its Most Viewed shelf from the top 12 `viewCount` results per enabled channel rather than sorting only the 100 most recent catalog videos. Results are deduplicated and merged to the homepage's top 12.
 - **Read-efficiency:** Each per-channel Firestore query runs only while creating the shared server catalog snapshot, which remains cached for 24 hours. The recent-video feed remains capped at 100 documents; no per-visitor full-catalog read or listener was added. Added the required array-membership/view-count composite index and documented the approach.

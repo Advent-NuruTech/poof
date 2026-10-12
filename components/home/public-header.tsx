@@ -321,7 +321,7 @@ export default function PublicHeader({
                 Home
               </Link>
               <Link href="/playlists">Playlists</Link>
-              <a href="#channels">Channels</a>
+              <Link href="/about">About Us</Link>
               <Link href="/meetings">Zoom</Link>
               <Link href="/library">Library</Link>
               <Link className="zm-donate" href="/donate">
