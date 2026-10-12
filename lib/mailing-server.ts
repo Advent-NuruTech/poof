@@ -1,6 +1,5 @@
 import { createHash, createHmac } from "node:crypto";
 import { applicationDefault, cert, getApp, getApps, initializeApp, type ServiceAccount } from "firebase-admin/app";
-import { getAuth } from "firebase-admin/auth";
 import { FieldValue, getFirestore, Timestamp, type Firestore } from "firebase-admin/firestore";
 import { Resend } from "resend";
 import { automaticPreviewText, richTextToPlainText, sanitizeRichText } from "@/lib/rich-text";
@@ -58,18 +57,49 @@ function getAdminApp() {
 export function getMailDb(): Firestore {
   return getFirestore(getAdminApp());
 }
+
+async function getFirebaseUserId(idToken: string) {
+  const apiKey = process.env.NEXT_PUBLIC_FIREBASE_API_KEY;
+  if (!apiKey) throw new Error("NEXT_PUBLIC_FIREBASE_API_KEY must be configured to verify administrator sessions.");
+
+  const response = await fetch(`https://identitytoolkit.googleapis.com/v1/accounts:lookup?key=${encodeURIComponent(apiKey)}`, {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({ idToken }),
+    cache: "no-store",
+  });
+  const result: unknown = await response.json();
+  if (!response.ok) {
+    const error = result && typeof result === "object" && "error" in result ? result.error : undefined;
+    const message = error && typeof error === "object" && "message" in error ? error.message : undefined;
+    if (response.status === 400 && ["INVALID_ID_TOKEN", "TOKEN_EXPIRED", "USER_DISABLED", "USER_NOT_FOUND"].includes(String(message))) {
+      return null;
+    }
+    throw new Error(`Firebase ID-token verification failed (HTTP ${response.status}).`);
+  }
+
+  if (!result || typeof result !== "object" || !("users" in result) || !Array.isArray(result.users)) {
+    throw new Error("Firebase ID-token verification returned an invalid response.");
+  }
+  const user = result.users[0];
+  if (!user || typeof user !== "object" || !("localId" in user) || typeof user.localId !== "string" || !user.localId) {
+    throw new Error("Firebase ID-token verification returned an invalid response.");
+  }
+  return user.localId;
+}
+
 export { FieldValue, Timestamp };
 
 export async function requireMailAdmin(request: Request) {
   const token = request.headers.get("authorization")?.match(/^Bearer\s+(.+)$/i)?.[1];
   if (!token) return null;
+  const uid = await getFirebaseUserId(token);
+  if (!uid) return null;
   const app = getAdminApp();
-  const identity = await getAuth(app).verifyIdToken(token).catch(() => null);
-  if (!identity) return null;
-  const admin = await getFirestore(app).collection("admins").doc(identity.uid).get();
+  const admin = await getFirestore(app).collection("admins").doc(uid).get();
   const data = admin.data();
   return data?.enabled === true && data.expiresAt instanceof Timestamp && data.expiresAt.toMillis() > Date.now()
-    ? identity.uid
+    ? uid
     : null;
 }
 

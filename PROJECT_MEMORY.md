@@ -2,10 +2,12 @@
 ## Ongoing working preference
 - Whenever project changes are made, record the major change and any build/runtime errors with their verified fixes in this file before finishing. When the user asks, provide the exact suggested Git commit message; do not create a commit unless explicitly requested.
 
-## 2026-10-12: Fix production mailing API runtime crash
-- **Bug:** Vercel's `/api/mailing` function crashed while loading `firebase-admin/auth`: its CommonJS `jwks-rsa` dependency requires ESM-only `jose`, which fails on Node versions before 22.12. This happened before the route handler could return its normal JSON authentication response.
-- **Fix:** Pinned the project Node engine to `22.x` in `package.json` and the lockfile so Vercel builds/functions use a supported current Node 22 runtime for Firebase Admin 14 and `jose`.
-- **Verification:** Vercel logs identify the `ERR_REQUIRE_ESM` cause. The current production build succeeds, and a local built-server GET to `/api/mailing` returns the expected JSON 401 when unauthenticated. Deploy the engine pin, then confirm the authenticated mailing list loads against production Firestore.
+## 2026-10-12: Work around production Firebase Auth runtime crash
+- **Bug:** The live Vercel `/api/mailing` and `/api/mailing/subscribe` endpoints still return empty HTTP 500 responses. A prior Node `22.x` engine pin did not resolve the live crash; prior Vercel logs traced the failure to Firebase Admin Auth loading `jwks-rsa`/ESM-only `jose` before route handlers could respond.
+- **Fix:** Removed the Firebase Admin Auth dependency from the shared mailing server module. Admin ID tokens are now validated by Firebase's `accounts:lookup` API using the configured public Firebase API key; the admin Firestore record and enabled/expiry checks remain unchanged. Documented the required Vercel API-key setting.
+- **Verification:** Confirm the mailing API module loads locally with an unauthenticated request returning JSON 401, and run the production build, TypeScript check, and focused lint. Production authenticated Firestore/mail sending requires deploying this change and then retesting `/admin/mailing` online.
+- **Build note:** Explicit `runtime = "nodejs"` route exports are incompatible with this repository's Next.js 16 `cacheComponents` setting; no such exports remain.
+- **Secret hygiene:** Cleared the populated `CRON_SECRET` from `.env.example`; keep actual values only in the hosting environment or an ignored local env file. The cron secret was present in the committed example file, so rotate it in Vercel and update the matching cron configuration.
 - **Build note:** Explicit `runtime = "nodejs"` route exports are incompatible with this repository's Next.js 16 `cacheComponents` setting; no such exports remain.
 - **Secret hygiene:** Cleared the populated `CRON_SECRET` from `.env.example`; keep actual values only in the hosting environment or an ignored local env file. The cron secret was present in the committed example file, so rotate it in Vercel and update the matching cron configuration.
 
