@@ -16,6 +16,7 @@ type PageMetadataOptions = {
   path: string;
   image?: string;
   type?: "article" | "website";
+  absoluteTitle?: boolean;
 };
 
 export function createPageMetadata({
@@ -24,6 +25,7 @@ export function createPageMetadata({
   path,
   image = siteLogo,
   type = "website",
+  absoluteTitle = false,
 }: PageMetadataOptions): Metadata {
   const images = [
     { url: image, alt: "Faith of the Pioneers" },
@@ -31,7 +33,7 @@ export function createPageMetadata({
   ];
 
   return {
-    title,
+    title: absoluteTitle ? { absolute: title } : title,
     description,
     alternates: { canonical: path },
     openGraph: {

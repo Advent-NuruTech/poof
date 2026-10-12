@@ -13,7 +13,7 @@ const oswald = Oswald({
 export const metadata: Metadata = {
   metadataBase: siteMetadataBase,
   title: {
-    default: "Faith of the Pioneers | Online Bible Study & Meetings",
+    default: "Faith of the Pioneers | Online Bible Study, Meetings & Ministry",
     template: "%s | Faith of the Pioneers",
   },
   description: siteDescription,
@@ -37,13 +37,13 @@ export const metadata: Metadata = {
     type: "website",
     siteName: "Faith of the Pioneers",
     locale: "en_US",
-    title: "Faith of the Pioneers | Online Bible Study & Meetings",
+    title: "Faith of the Pioneers | Online Bible Study, Meetings & Ministry",
     description: siteDescription,
     images: [{ url: siteLogo, alt: "Faith of the Pioneers logo" }],
   },
   twitter: {
     card: "summary_large_image",
-    title: "Faith of the Pioneers | Online Bible Study & Meetings",
+    title: "Faith of the Pioneers | Online Bible Study, Meetings & Ministry",
     description: siteDescription,
     images: [siteLogo],
   },

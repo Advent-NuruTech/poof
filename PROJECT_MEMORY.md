@@ -1,4 +1,11 @@
 # Project Memory
+## Ongoing working preference
+- Whenever project changes are made, record the major change and any build/runtime errors with their verified fixes in this file before finishing. When the user asks, provide the exact suggested Git commit message; do not create a commit unless explicitly requested.
+
+## 2026-10-12: Lead homepage and share titles with ministry name
+- **Major changes:** Updated homepage title, default title, Open Graph title, and Twitter title so "Faith of the Pioneers" appears first, followed by the Bible study and ministry keywords. Added an absolute-title option to the shared metadata helper so the homepage share preview does not receive a duplicated brand suffix from the title template.
+- **Verification:** Production build, focused ESLint, and generated homepage HTML checks passed; the browser title, Open Graph title, and Twitter title all start with "Faith of the Pioneers".
+
 ## 2026-10-12: Improve public SEO and branded sharing
 - **Major changes:** Added a reusable SEO metadata helper with canonical URLs based on `NEXT_PUBLIC_SITE_URL` (defaulting to the confirmed `https://faithofthepioneers.org` domain), descriptive page titles and summaries, and branded Open Graph/Twitter images using the site logo. Added page metadata for the homepage, About, meetings, library, playlists, doctrine, and dynamic meeting/study pages. Added `robots.txt` and a sitemap covering public pages; authenticated admin, sign-in, and sign-up routes use `noindex`/`nofollow`.
 - **Build note and fix:** The initial build warned that social images resolved against localhost because no canonical URL was configured. Setting the confirmed production-domain fallback removed the warning; generated HTML now points the logo preview and canonical URLs at `faithofthepioneers.org`. A later build attempt briefly failed with Windows `EBUSY` while unlinking a generated `.next` map; rerunning the build after other checks completed succeeded.
