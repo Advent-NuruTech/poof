@@ -274,3 +274,43 @@ body{font-size:16px}.home-section-title h2{font-size:25px}.latest-card .video-co
 .mailing-preview-body{line-height:1.65;overflow-wrap:anywhere}
 .mailing-preview-body ul,.mailing-preview-body ol{padding-left:22px}
 .mc-desc{white-space:pre-wrap}
+
+/* Mailing workspace and responsive email preview */
+.mailing-admin .admin-content{width:min(1480px,calc(100% - 48px));max-width:1480px}
+.mailing-stats{grid-template-columns:repeat(4,minmax(0,1fr))}
+.mailing-stats article{gap:6px;padding:18px 20px}
+.mailing-stats span{font-size:12px}
+.mailing-stats strong{font-size:30px;line-height:1.2}
+.mailing-stats small{color:#7a817d;font-size:12px}
+.mailing-grid{grid-template-columns:minmax(300px,.8fr) minmax(0,1.35fr);gap:18px}
+.mailing-people,.mailing-compose,.mailing-history{padding:22px}
+.mailing-form,.mailing-schedule-form{gap:15px}
+.mailing-form>label,.mailing-schedule-form>label,.mailing-schedule-fields label{font-size:14px;line-height:1.4}
+.mailing-add-form>label{font-size:13px}
+.mailing-add-form input,.mailing-form input,.mailing-form textarea,.mailing-schedule-form input,.mailing-schedule-form select{font-size:15px;min-height:44px}
+.mailing-form small,.mailing-schedule-form small,.mailing-rich-field>small{display:block;color:#6c7570;font-size:12px;line-height:1.5;font-weight:400}
+.mailing-tabs button{font-size:14px}
+.mailing-section-heading h2{font-size:24px}
+.mailing-recipient-check{width:17px!important;height:17px;min-height:0!important;flex:0 0 auto;accent-color:#172126}
+.mailing-select-visible{margin:-8px 0 12px;font-size:13px}
+.mailing-audience-warning{margin:0;color:#a34738;font-size:13px}
+.mailing-history-managed{align-items:flex-start;flex-wrap:wrap;padding:15px 0}
+.mailing-history-managed>div:first-child{flex:1 1 230px}
+.mailing-history-actions{display:flex;flex:1 0 100%;flex-wrap:wrap;gap:7px}
+.mailing-history-actions .outline-button{min-height:35px;padding:0 11px;font-size:12px}
+.mailing-delete-history{color:#a91a2d!important}
+.mailing-template-preview{padding:18px}
+.mailing-template-card{overflow:hidden;border:1px solid #e1e5e4!important;border-radius:12px!important;padding:0!important}
+.mailing-template-card>header{display:grid;justify-items:center;gap:8px;padding:22px 14px;background:linear-gradient(145deg,#0c3978,#061e49);color:#fff}
+.mailing-template-card>header img{width:66px;height:66px;object-fit:contain;border-radius:50%}
+.mailing-template-card>header strong{color:#f3d875;font-size:11px;letter-spacing:2px}
+.mailing-template-card>header span{padding-top:9px;border-top:1px solid #d8b84d;font-size:14px;font-style:italic}
+.mailing-template-card>section{padding:20px}
+.mailing-template-card>section>small{font-size:12px;line-height:1.5}
+.mailing-template-preview h3{font-size:25px;line-height:1.2}
+.mailing-preview-body{font-size:16px;line-height:1.7}
+.mailing-preview-body img{display:block;width:100%;height:auto;margin:18px auto;border-radius:8px}
+.mailing-template-preview img,.mailing-video-preview img{max-width:100%}
+.rich-editor-compact{min-height:260px;font:16px/1.7 Arial,sans-serif}
+@media(max-width:860px){.mailing-admin .admin-content{width:calc(100% - 30px)}.mailing-grid{grid-template-columns:1fr}.mailing-people,.mailing-compose,.mailing-history{padding:19px}}
+@media(max-width:560px){.mailing-admin .admin-content{width:calc(100% - 14px)}.mailing-stats{grid-template-columns:repeat(2,minmax(0,1fr));gap:8px}.mailing-stats article{padding:13px}.mailing-stats span{font-size:11px}.mailing-stats strong{font-size:25px}.mailing-tabs button{font-size:12px}.mailing-people,.mailing-compose,.mailing-history{padding:14px}.mailing-form>label,.mailing-schedule-form>label,.mailing-schedule-fields label{font-size:13px}.mailing-form input,.mailing-form textarea,.mailing-schedule-form input,.mailing-schedule-form select{font-size:16px}.mailing-template-preview{padding:12px}.mailing-template-card>section{padding:16px}.mailing-preview-body{font-size:16px}.mailing-history-actions{gap:6px}.mailing-history-actions .outline-button{flex:1 1 auto}.rich-editor-compact{min-height:230px}}

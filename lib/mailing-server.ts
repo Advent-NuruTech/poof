@@ -1,8 +1,8 @@
 import { createHash, createHmac } from "node:crypto";
 import { applicationDefault, cert, getApp, getApps, initializeApp, type ServiceAccount } from "firebase-admin/app";
-import { FieldValue, getFirestore, Timestamp, type Firestore } from "firebase-admin/firestore";
+import { AggregateField, FieldValue, getFirestore, Timestamp, type Firestore } from "firebase-admin/firestore";
 import { Resend } from "resend";
-import { automaticPreviewText, richTextToPlainText, sanitizeRichText } from "@/lib/rich-text";
+import { automaticPreviewText, extractFeaturedVideoUrl, richTextToPlainText, sanitizeRichText } from "@/lib/rich-text";
 
 function parseServiceAccount(value: string): ServiceAccount {
   let parsed: unknown;
@@ -58,6 +58,21 @@ export function getMailDb(): Firestore {
   return getFirestore(getAdminApp());
 }
 
+export async function getEmailsSentCount(db: Firestore) {
+  const ref = db.collection("mailingStats").doc("summary");
+  const current = await ref.get();
+  if (current.exists) return Number(current.get("emailsSent") ?? 0);
+
+  const previous = await db.collection("mailingHistory").aggregate({ sent: AggregateField.sum("sent") }).get();
+  const initialCount = Number(previous.data().sent ?? 0);
+  return db.runTransaction(async (transaction) => {
+    const latest = await transaction.get(ref);
+    if (latest.exists) return Number(latest.get("emailsSent") ?? 0);
+    transaction.create(ref, { emailsSent: initialCount, initializedAt: FieldValue.serverTimestamp() });
+    return initialCount;
+  });
+}
+
 async function getFirebaseUserId(idToken: string) {
   const apiKey = process.env.NEXT_PUBLIC_FIREBASE_API_KEY;
   if (!apiKey) throw new Error("NEXT_PUBLIC_FIREBASE_API_KEY must be configured to verify administrator sessions.");
@@ -106,6 +121,7 @@ export async function requireMailAdmin(request: Request) {
 export type Campaign = {
   kind: "meeting" | "newsletter";
   subject: string;
+  letterTitle: string;
   headline: string;
   preheader: string;
   body: string;
@@ -113,6 +129,55 @@ export type Campaign = {
   buttonUrl: string;
   videoUrl: string;
 };
+
+export type CampaignAudience = {
+  mode: "all" | "selected" | "new";
+  recipientIds: string[];
+  since: string;
+};
+
+export function parseCampaignAudience(modeValue: unknown, recipientIdsValue: unknown, sinceValue: unknown): CampaignAudience | string {
+  const mode = modeValue ?? "all";
+  if (mode !== "all" && mode !== "selected" && mode !== "new") return "Choose a valid recipient group.";
+  const recipientIds = recipientIdsValue ?? [];
+  if (!Array.isArray(recipientIds) || recipientIds.length > 500 ||
+      recipientIds.some((id) => typeof id !== "string" || !id || id.length > 150)) {
+    return "Choose up to 500 valid email addresses.";
+  }
+  if (new Set(recipientIds).size !== recipientIds.length) return "Remove duplicate email addresses from the selection.";
+  if (mode === "selected" && recipientIds.length === 0) return "Select at least one eligible email address.";
+  if (mode !== "selected" && recipientIds.length > 0) return "Recipient selections are only valid for selected addresses.";
+  const since = sinceValue ?? "";
+  if (typeof since !== "string") return "Choose a valid date for new members.";
+  if (mode === "new" && !Number.isFinite(Date.parse(since))) return "Choose a valid original email date for new members.";
+  return { mode, recipientIds, since };
+}
+
+export async function getCampaignRecipients(db: Firestore, campaign: Campaign, audience: CampaignAudience) {
+  const isMeeting = campaign.kind === "meeting";
+  const collection = db.collection(isMeeting ? "onlineMeetingMembers" : "newsletterSubscribers");
+  const eligibleStatus = isMeeting ? "verified" : "active";
+  if (audience.mode === "selected") {
+    const recipients = [];
+    for (let start = 0; start < audience.recipientIds.length; start += 100) {
+      const refs = audience.recipientIds.slice(start, start + 100).map((id) => collection.doc(id));
+      const snapshots = await db.getAll(...refs);
+      recipients.push(...snapshots
+        .filter((item) => item.exists && item.get("status") === eligibleStatus)
+        .map((item) => ({ id: item.id, email: String(item.get("email") ?? "") }))
+        .filter((item) => item.email));
+    }
+    return recipients;
+  }
+  const query = audience.mode === "new"
+    ? collection.where("createdAt", ">", Timestamp.fromDate(new Date(audience.since)))
+    : collection.where("status", "==", eligibleStatus);
+  const snapshot = await query.limit(10000).get();
+  return snapshot.docs
+    .filter((item) => item.get("status") === eligibleStatus)
+    .map((item) => ({ id: item.id, email: String(item.get("email") ?? "") }))
+    .filter((item) => item.email);
+}
 
 const escapeHtml = (value: string) => value.replace(/[&<>"']/g, (char) => ({
   "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;",
@@ -128,16 +193,19 @@ function safeUrl(value: string) {
 }
 
 function bodyHtml(value: string) {
-  const richTags = /<\/?(?:a|b|blockquote|br|div|em|font|h[1-4]|i|li|ol|p|span|strong|u|ul)\b/i;
+  const richTags = /<\/?(?:a|b|blockquote|br|div|em|font|h[1-4]|i|img|li|ol|p|span|strong|u|ul)\b/i;
   if (!richTags.test(value)) {
-    return value.split(/\n{2,}/).map((paragraph) => `<p style="margin:0 0 18px;line-height:1.75;color:#4b5563">${escapeHtml(paragraph).replace(/\n/g, "<br>")}</p>`).join("");
+    return value.split(/\n{2,}/).map((paragraph) => `<p style="margin:0 0 20px;line-height:1.75;color:#46504d;font-size:18px">${escapeHtml(paragraph).replace(/\n/g, "<br>")}</p>`).join("");
   }
-  return sanitizeRichText(value).replace(/<p>/g, '<p style="margin:0 0 18px;line-height:1.75;color:#4b5563">');
+  return sanitizeRichText(value)
+    .replace(/<p>/g, '<p style="margin:0 0 20px;line-height:1.75;color:#46504d;font-size:18px">')
+    .replace(/<img\b([^>]*)>/gi, '<img$1 style="display:block;width:100%;max-width:640px;height:auto;margin:24px auto;border:0;border-radius:8px">');
 }
 
-export function renderCampaign(campaign: Campaign, unsubscribeUrl = "") {
+export function renderCampaign(campaign: Campaign, unsubscribeUrl = "", brandLogoUrl = "") {
   const buttonUrl = safeUrl(campaign.buttonUrl);
-  const videoUrl = safeUrl(campaign.videoUrl);
+  const videoUrl = safeUrl(campaign.videoUrl || extractFeaturedVideoUrl(campaign.body));
+  const logoUrl = safeUrl(brandLogoUrl);
   const youtubeId = videoUrl.match(/(?:youtu\.be\/|youtube\.com\/(?:watch\?v=|embed\/|shorts\/))([\w-]{11})/)?.[1];
   const preview = youtubeId
     ? `<a href="${escapeHtml(videoUrl)}" style="display:block;margin:26px 0;text-decoration:none"><img src="https://img.youtube.com/vi/${youtubeId}/hqdefault.jpg" alt="Watch the featured video" width="560" style="display:block;width:100%;max-width:560px;border:0;border-radius:12px"><span style="display:block;padding:12px;color:#c51c31;font-weight:700">▶ Watch the video</span></a>`
@@ -146,11 +214,15 @@ export function renderCampaign(campaign: Campaign, unsubscribeUrl = "") {
     ? `<p style="margin:28px 0"><a href="${escapeHtml(buttonUrl)}" style="display:inline-block;background:#172126;color:#fff;padding:14px 24px;border-radius:28px;text-decoration:none;font-weight:700">${escapeHtml(campaign.buttonLabel || "Learn more")}</a></p>`
     : "";
   const unsubscribe = unsubscribeUrl
-    ? `<p style="margin:24px 0 0;color:#788078;font-size:12px">You received this newsletter because you subscribed to Faith of the Pioneers. <a href="${escapeHtml(unsubscribeUrl)}" style="color:#788078">Unsubscribe</a></p>`
+    ? `<p style="margin:30px 0 0;color:#68736e;font-size:13px;line-height:1.6">You received this newsletter because you subscribed to Faith of the Pioneers. <a href="${escapeHtml(unsubscribeUrl)}" style="color:#68736e">Unsubscribe</a></p>`
     : "";
+  const logo = logoUrl
+    ? `<img src="${escapeHtml(logoUrl)}" alt="Faith of the Pioneers" width="84" height="84" style="display:block;width:84px;height:84px;object-fit:contain;margin:0 auto 12px;border:0">`
+    : "";
+  const letterTitle = escapeHtml(campaign.letterTitle || (campaign.kind === "meeting" ? "Online meeting reminder" : "A letter for your journey"));
   return {
-    html: `<!doctype html><html><body style="margin:0;background:#f4f5f2;font-family:Arial,Helvetica,sans-serif;color:#172126"><div style="display:none;max-height:0;overflow:hidden;opacity:0">${escapeHtml(campaign.preheader || automaticPreviewText(campaign.body))}</div><table role="presentation" width="100%" cellspacing="0" cellpadding="0" style="background:#f4f5f2;padding:32px 12px"><tr><td align="center"><table role="presentation" width="600" cellspacing="0" cellpadding="0" style="width:100%;max-width:600px;background:#fff;border-radius:16px;overflow:hidden"><tr><td style="padding:25px 34px;background:#172126;color:#fff"><div style="font-size:11px;letter-spacing:2px;color:#e9d891">FAITH OF THE PIONEERS</div><div style="font-size:12px;margin-top:7px;color:#d8dddb">A letter for your journey</div></td></tr><tr><td style="padding:34px"><div style="height:3px;width:40px;background:#c51c31;margin-bottom:20px"></div><h1 style="font-size:30px;line-height:1.15;letter-spacing:-.6px;margin:0 0 22px;color:#172126">${escapeHtml(campaign.headline)}</h1>${bodyHtml(campaign.body)}${preview}${button}${unsubscribe}</td></tr><tr><td style="padding:18px 34px;background:#f8f9f6;color:#788078;font-size:12px">Faith of the Pioneers · Online fellowship, study, and worship</td></tr></table></td></tr></table></body></html>`,
-    text: [campaign.headline, richTextToPlainText(campaign.body), videoUrl ? `Watch: ${videoUrl}` : "", buttonUrl ? `${campaign.buttonLabel || "Learn more"}: ${buttonUrl}` : "", unsubscribeUrl ? `Unsubscribe: ${unsubscribeUrl}` : ""].filter(Boolean).join("\n\n"),
+    html: `<!doctype html><html><head><meta name="viewport" content="width=device-width,initial-scale=1"><style>@media only screen and (max-width:600px){.email-outer{padding:0!important}.email-card{border-radius:0!important}.email-content{padding:24px 20px!important}.email-brand{padding:25px 18px!important}.email-headline{font-size:29px!important}.email-body{font-size:18px!important}}</style></head><body style="margin:0;background:#f1f3f2;font-family:Arial,Helvetica,sans-serif;color:#172126"><div style="display:none;max-height:0;overflow:hidden;opacity:0">${escapeHtml(campaign.preheader || automaticPreviewText(campaign.body))}</div><table role="presentation" class="email-outer" width="100%" cellspacing="0" cellpadding="0" style="background:#f1f3f2;padding:24px 14px"><tr><td align="center"><table role="presentation" class="email-card" width="720" cellspacing="0" cellpadding="0" style="width:100%;max-width:720px;background:#fff;border:1px solid #e5e8e6;border-radius:12px;overflow:hidden"><tr><td class="email-brand" align="center" style="padding:28px 24px;background:#082d63;background-image:linear-gradient(145deg,#0c3978,#061e49);color:#fff">${logo}<div style="font-size:12px;letter-spacing:3px;font-weight:700;color:#f3d875">FAITH OF THE PIONEERS</div><div style="height:1px;width:64px;background:#d8b84d;margin:15px auto 11px"></div><div style="font-size:17px;line-height:1.4;font-style:italic;color:#fff">${letterTitle}</div></td></tr><tr><td class="email-content" style="padding:36px 48px 40px"><div style="height:3px;width:42px;background:#c51c31;margin:0 0 20px"></div><h1 class="email-headline" style="font-size:34px;line-height:1.18;letter-spacing:-.5px;margin:0 0 24px;color:#172126">${escapeHtml(campaign.headline)}</h1><div class="email-body">${bodyHtml(campaign.body)}</div>${preview}${button}${unsubscribe}</td></tr><tr><td style="padding:18px 28px;background:#f7f8f6;color:#68736e;font-size:13px;line-height:1.5;text-align:center">Faith of the Pioneers · Online fellowship, study, and worship</td></tr></table></td></tr></table></body></html>`,
+    text: [letterTitle, campaign.headline, richTextToPlainText(campaign.body), videoUrl ? `Watch: ${videoUrl}` : "", buttonUrl ? `${campaign.buttonLabel || "Learn more"}: ${buttonUrl}` : "", unsubscribeUrl ? `Unsubscribe: ${unsubscribeUrl}` : ""].filter(Boolean).join("\n\n"),
   };
 }
 
@@ -179,7 +251,7 @@ export async function deliverCampaign(campaign: Campaign, recipients: Array<{ id
     const group = recipients.slice(start, start + 5);
     const results = await Promise.all(group.map(async (recipient) => {
       const unsubscribe = campaign.kind === "newsletter" ? unsubscribeLink(recipient.id, baseUrl) : "";
-      const content = renderCampaign(campaign, unsubscribe);
+      const content = renderCampaign(campaign, unsubscribe, `${baseUrl.replace(/\/$/, "")}/images/logo.jpeg`);
       try {
         const { error } = await resend.emails.send({
           from,

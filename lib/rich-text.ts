@@ -1,5 +1,5 @@
 const allowedTags = new Set([
-  "a", "b", "blockquote", "br", "div", "em", "font", "h1", "h2", "h3", "h4",
+  "a", "b", "blockquote", "br", "div", "em", "font", "h1", "h2", "h3", "h4", "img",
   "i", "li", "ol", "p", "span", "strong", "u", "ul",
 ]);
 const allowedFonts = new Set(["Arial", "Georgia", "Times New Roman"]);
@@ -23,6 +23,18 @@ export function sanitizeRichText(value: string) {
       if (!allowedTags.has(tag)) return "";
       if (whole.startsWith("</")) return `</${tag === "font" ? "span" : tag}>`;
       if (tag === "br") return "<br>";
+      if (tag === "img") {
+        const source = attributes.match(/\bsrc\s*=\s*(?:"([^"]*)"|'([^']*)'|([^\s>]+))/i)?.slice(1).find(Boolean);
+        const alt = attributes.match(/\balt\s*=\s*(?:"([^"]*)"|'([^']*)'|([^\s>]+))/i)?.slice(1).find(Boolean) ?? "";
+        if (!source) return "";
+        try {
+          const url = new URL(source);
+          if (url.protocol !== "https:") return "";
+          return `<img src="${escapeAttribute(url.toString())}" alt="${escapeAttribute(alt)}">`;
+        } catch {
+          return "";
+        }
+      }
       if (tag === "a") {
         const href = attributes.match(/\bhref\s*=\s*(?:"([^"]*)"|'([^']*)'|([^\s>]+))/i)?.slice(1).find(Boolean);
         if (!href) return "<a>";
@@ -51,6 +63,26 @@ export function sanitizeRichText(value: string) {
       }
       return `<${tag}>`;
     });
+}
+
+export function extractFeaturedVideoUrl(value: string) {
+  const candidates = value.match(/(?:https?:\/\/)?(?:www\.)?(?:youtube\.com\/(?:watch\?[^\s<>"']*|embed\/|shorts\/)|youtu\.be\/)[^\s<>"']+/gi) ?? [];
+  for (const candidate of candidates) {
+    const cleaned = candidate.replace(/[),.;!?]+$/, "").replace(/&amp;/gi, "&");
+    try {
+      const url = new URL(cleaned.startsWith("http") ? cleaned : `https://${cleaned}`);
+      const host = url.hostname.toLowerCase();
+      const id = host === "youtu.be"
+        ? url.pathname.match(/^\/([\w-]{11})/)?.[1] ?? ""
+        : ["youtube.com", "www.youtube.com", "m.youtube.com"].includes(host)
+          ? url.searchParams.get("v") ?? url.pathname.match(/^\/(?:embed|shorts)\/([\w-]{11})/)?.[1] ?? ""
+          : "";
+      if (/^[\w-]{11}$/.test(id)) return url.toString();
+    } catch {
+      continue;
+    }
+  }
+  return "";
 }
 
 export function richTextToPlainText(value: string) {

@@ -1,6 +1,9 @@
 import { createHash, randomUUID } from "node:crypto";
-import { FieldValue, getMailDb, requireMailAdmin, Timestamp, type Campaign, deliverCampaign } from "@/lib/mailing-server";
-import { richTextToPlainText, sanitizeRichText } from "@/lib/rich-text";
+import {
+  FieldValue, getCampaignRecipients, getEmailsSentCount, getMailDb, parseCampaignAudience, requireMailAdmin, Timestamp,
+  type Campaign, type CampaignAudience, deliverCampaign,
+} from "@/lib/mailing-server";
+import { extractFeaturedVideoUrl, richTextToPlainText, sanitizeRichText } from "@/lib/rich-text";
 
 export const maxDuration = 300;
 
@@ -12,6 +15,10 @@ type ScheduleInput = Campaign & {
   timeZone?: string;
   label?: string;
   email?: string;
+  historyId?: string;
+  audienceMode?: CampaignAudience["mode"];
+  recipientIds?: string[];
+  audienceSince?: string;
 };
 
 const validUrl = (value: string) => {
@@ -26,14 +33,18 @@ function parseCampaign(body: ScheduleInput): Campaign | string {
   for (const field of fields) {
     if (typeof body[field] !== "string") return "Complete every message field.";
   }
+  if (body.letterTitle !== undefined && typeof body.letterTitle !== "string") return "Enter a valid email header.";
   const campaign = Object.fromEntries(fields.map((field) => [field, body[field]!.trim()])) as Omit<Campaign, "kind">;
   const result: Campaign = {
     ...campaign,
     kind: body.kind,
+    letterTitle: (body.letterTitle?.trim() || (body.kind === "meeting" ? "Online meeting reminder" : "A letter for your journey")),
     preheader: campaign.preheader,
     body: sanitizeRichText(campaign.body),
+    videoUrl: campaign.videoUrl || extractFeaturedVideoUrl(campaign.body),
   };
-  if (!result.subject || result.subject.length > 180 || !result.headline || result.headline.length > 180 || result.body.length > 60000) {
+  if (!result.subject || result.subject.length > 180 || !result.headline || result.headline.length > 180 ||
+      !result.letterTitle || result.letterTitle.length > 140 || result.body.length > 60000) {
     return "Add a subject and headline, and keep the message within 12,000 characters.";
   }
   if (!validUrl(result.buttonUrl) || !validUrl(result.videoUrl)) return "Links must use HTTPS.";
@@ -53,11 +64,48 @@ function isFirestoreReadLimit(error: unknown) {
     /RESOURCE_EXHAUSTED|quota exceeded/i.test(message);
 }
 
+async function recordDelivery(
+  request: Request,
+  mailDb: FirebaseFirestore.Firestore,
+  adminId: string,
+  campaign: Campaign,
+  audience: CampaignAudience,
+  parentHistoryId?: string,
+) {
+  const recipients = await getCampaignRecipients(mailDb, campaign, audience);
+  if (!recipients.length) return Response.json({ error: "No eligible recipients match this selection." }, { status: 400 });
+  const baseUrl = process.env.NEXT_PUBLIC_SITE_URL?.replace(/\/$/, "") || `https://${process.env.VERCEL_URL ?? new URL(request.url).host}`;
+  await getEmailsSentCount(mailDb);
+  const result = await deliverCampaign(campaign, recipients, baseUrl, randomUUID());
+  const historyRef = mailDb.collection("mailingHistory").doc();
+  const batch = mailDb.batch();
+  batch.set(historyRef, {
+    kind: campaign.kind,
+    subject: campaign.subject,
+    headline: campaign.headline,
+    campaign,
+    audienceMode: audience.mode,
+    requested: recipients.length,
+    sent: result.sent,
+    failed: result.failures.length,
+    failures: result.failures.slice(0, 100),
+    ...(parentHistoryId ? { parentHistoryId } : {}),
+    sentAt: FieldValue.serverTimestamp(),
+    sentBy: adminId,
+  });
+  batch.set(mailDb.collection("mailingStats").doc("summary"), {
+    emailsSent: FieldValue.increment(result.sent),
+  }, { merge: true });
+  await batch.commit();
+  return Response.json({ sent: result.sent, failed: result.failures.length, failures: result.failures.slice(0, 20) });
+}
+
 export async function GET(request: Request) {
   try {
     if (!await requireMailAdmin(request)) return Response.json({ error: "Administrator access is required." }, { status: 401 });
     const mailDb = getMailDb();
-    const [members, subscribers, schedules, history, verifiedMembers, pendingMembers, activeSubscribers, unsubscribed] = await Promise.all([
+    const [emailsSent, members, subscribers, schedules, history, verifiedMembers, pendingMembers, activeSubscribers, unsubscribed, totalMembers, totalSubscribers] = await Promise.all([
+      getEmailsSentCount(mailDb),
       mailDb.collection("onlineMeetingMembers").orderBy("createdAt", "desc").limit(500).get(),
       mailDb.collection("newsletterSubscribers").orderBy("createdAt", "desc").limit(500).get(),
       mailDb.collection("mailingSchedules").orderBy("createdAt", "desc").limit(100).get(),
@@ -66,6 +114,8 @@ export async function GET(request: Request) {
       mailDb.collection("onlineMeetingMembers").where("status", "==", "pending").count().get(),
       mailDb.collection("newsletterSubscribers").where("status", "==", "active").count().get(),
       mailDb.collection("newsletterSubscribers").where("status", "==", "unsubscribed").count().get(),
+      mailDb.collection("onlineMeetingMembers").count().get(),
+      mailDb.collection("newsletterSubscribers").count().get(),
     ]);
     const serialize = (snapshot: FirebaseFirestore.QuerySnapshot) =>
       snapshot.docs.map((item) => ({ id: item.id, ...item.data() }));
@@ -79,6 +129,9 @@ export async function GET(request: Request) {
         pending: pendingMembers.data().count,
         active: activeSubscribers.data().count,
         unsubscribed: unsubscribed.data().count,
+        totalMembers: totalMembers.data().count,
+        totalSubscribers: totalSubscribers.data().count,
+        emailsSent,
       },
     }, { headers: { "Cache-Control": "no-store" } });
   } catch (error) {
@@ -118,25 +171,42 @@ export async function POST(request: Request) {
       });
       return Response.json({ status: result }, { status: result === "verified" ? 201 : 200 });
     }
+    if (body.action === "history-send") {
+      if (typeof body.historyId !== "string" || !body.historyId || body.historyId.length > 150) {
+        return Response.json({ error: "Choose a valid email from history." }, { status: 400 });
+      }
+      const history = await mailDb.collection("mailingHistory").doc(body.historyId).get();
+      const savedCampaign = history.get("campaign");
+      if (!history.exists || !savedCampaign || typeof savedCampaign !== "object") {
+        return Response.json({ error: "This older email has no saved message to resend. Edit it in the composer instead." }, { status: 409 });
+      }
+      const campaign = parseCampaign({ ...(savedCampaign as ScheduleInput), kind: history.get("kind") as Campaign["kind"] });
+      if (typeof campaign === "string") return Response.json({ error: "The saved email cannot be resent because its content is invalid." }, { status: 409 });
+      const mode = body.audienceMode === "new" ? "new" : body.audienceMode === "all" || body.audienceMode === undefined ? "all" : "";
+      if (!mode) return Response.json({ error: "Choose all eligible members or new members." }, { status: 400 });
+      const sentAt = history.get("sentAt");
+      if (mode === "new" && !(sentAt instanceof Timestamp)) {
+        return Response.json({ error: "This email's send date is unavailable, so new members cannot be identified." }, { status: 409 });
+      }
+      const audience: CampaignAudience = {
+        mode,
+        recipientIds: [],
+        since: mode === "new" ? (sentAt as Timestamp).toDate().toISOString() : "",
+      };
+      return await recordDelivery(request, mailDb, adminId, campaign, audience, body.historyId);
+    }
     const campaign = parseCampaign(body);
     if (typeof campaign === "string") return Response.json({ error: campaign }, { status: 400 });
 
     if (body.action === "send") {
-      const audience = await mailDb.collection(campaign.kind === "meeting" ? "onlineMeetingMembers" : "newsletterSubscribers")
-        .where("status", "==", campaign.kind === "meeting" ? "verified" : "active")
-        .limit(10000).get();
-      const recipients = audience.docs.map((item) => ({ id: item.id, email: String(item.get("email") ?? "") })).filter((item) => item.email);
-      const baseUrl = process.env.NEXT_PUBLIC_SITE_URL?.replace(/\/$/, "") || `https://${process.env.VERCEL_URL ?? new URL(request.url).host}`;
-      const result = await deliverCampaign(campaign, recipients, baseUrl, randomUUID());
-      await mailDb.collection("mailingHistory").add({
-        kind: campaign.kind, subject: campaign.subject, headline: campaign.headline,
-        requested: recipients.length, sent: result.sent, failed: result.failures.length,
-        failures: result.failures.slice(0, 100), sentAt: FieldValue.serverTimestamp(), sentBy: adminId,
-      });
-      return Response.json({ sent: result.sent, failed: result.failures.length, failures: result.failures.slice(0, 20) });
+      const audience = parseCampaignAudience(body.audienceMode, body.recipientIds, body.audienceSince);
+      if (typeof audience === "string") return Response.json({ error: audience }, { status: 400 });
+      return await recordDelivery(request, mailDb, adminId, campaign, audience);
     }
 
     if (body.action === "schedule") {
+      const audience = parseCampaignAudience(body.audienceMode, body.recipientIds, body.audienceSince);
+      if (typeof audience === "string") return Response.json({ error: audience }, { status: 400 });
       if (!process.env.RESEND_API_KEY || !process.env.RESEND_FROM_EMAIL) {
         return Response.json({ error: "Configure RESEND_API_KEY and RESEND_FROM_EMAIL before scheduling email." }, { status: 503 });
       }
@@ -151,6 +221,9 @@ export async function POST(request: Request) {
       const startsAt = new Date(body.startsAt);
       const schedule = await mailDb.collection("mailingSchedules").add({
         ...campaign,
+        audienceMode: audience.mode,
+        recipientIds: audience.recipientIds,
+        audienceSince: audience.since,
         label: typeof body.label === "string" ? body.label.slice(0, 100) : campaign.subject,
         repeat: body.repeat,
         startsAt: startsAt.toISOString(),
@@ -178,6 +251,10 @@ export async function PATCH(request: Request) {
     const body = await request.json() as ScheduleInput & { collection?: string; id?: string; status?: string };
     if (!body || typeof body !== "object" || Array.isArray(body)) return Response.json({ error: "Invalid request body." }, { status: 400 });
     if (!body.id || body.id.length > 150) return Response.json({ error: "Choose a valid record." }, { status: 400 });
+    if (body.collection === "history" && body.status === "delete") {
+      await mailDb.collection("mailingHistory").doc(body.id).delete();
+      return Response.json({ ok: true });
+    }
     if (body.collection === "schedules" && body.status === "cancelled") {
       await mailDb.collection("mailingSchedules").doc(body.id).update({ active: false, status: "cancelled", nextSendAt: FieldValue.delete() });
       return Response.json({ ok: true });
@@ -185,6 +262,8 @@ export async function PATCH(request: Request) {
     if (body.collection === "schedules" && body.status === "scheduled") {
       const campaign = parseCampaign(body);
       if (typeof campaign === "string") return Response.json({ error: campaign }, { status: 400 });
+      const audience = parseCampaignAudience(body.audienceMode, body.recipientIds, body.audienceSince);
+      if (typeof audience === "string") return Response.json({ error: audience }, { status: 400 });
       if (!body.startsAt || !Number.isFinite(Date.parse(body.startsAt)) || !["once", "daily", "weekly", "monthly"].includes(body.repeat ?? "")) {
         return Response.json({ error: "Choose a valid date, time, and repeat frequency." }, { status: 400 });
       }
@@ -200,6 +279,9 @@ export async function PATCH(request: Request) {
         const startsAt = new Date(body.startsAt!);
         transaction.update(ref, {
           ...campaign,
+          audienceMode: audience.mode,
+          recipientIds: audience.recipientIds,
+          audienceSince: audience.since,
           repeat: body.repeat,
           startsAt: startsAt.toISOString(),
           endsAt: body.repeat === "once" ? "" : body.endsAt ?? "",

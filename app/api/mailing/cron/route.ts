@@ -1,4 +1,7 @@
-import { FieldValue, getMailDb, Timestamp, type Campaign, deliverCampaign } from "@/lib/mailing-server";
+import {
+  FieldValue, getCampaignRecipients, getEmailsSentCount, getMailDb, parseCampaignAudience, Timestamp,
+  type Campaign, deliverCampaign,
+} from "@/lib/mailing-server";
 
 export const maxDuration = 300;
 
@@ -8,6 +11,9 @@ type MailSchedule = Campaign & {
   endsAt: string;
   timeZone: string;
   active: boolean;
+  audienceMode?: "all" | "selected" | "new";
+  recipientIds?: string[];
+  audienceSince?: string;
 };
 
 function zonedParts(date: Date, timeZone: string) {
@@ -84,21 +90,44 @@ export async function GET(request: Request) {
           results.push({ id: ref.id, status: "configuration-error" });
           continue;
         }
-        const audience = await mailDb.collection(claim.data.kind === "meeting" ? "onlineMeetingMembers" : "newsletterSubscribers")
-          .where("status", "==", claim.data.kind === "meeting" ? "verified" : "active")
-          .limit(10000).get();
-        const recipients = audience.docs.map((item) => ({ id: item.id, email: String(item.get("email") ?? "") })).filter((item) => item.email);
         const campaign: Campaign = {
           kind: claim.data.kind, subject: claim.data.subject, headline: claim.data.headline,
+          letterTitle: claim.data.letterTitle || (claim.data.kind === "meeting" ? "Online meeting reminder" : "A letter for your journey"),
           preheader: claim.data.preheader, body: claim.data.body, buttonLabel: claim.data.buttonLabel,
           buttonUrl: claim.data.buttonUrl, videoUrl: claim.data.videoUrl,
         };
+        const audience = parseCampaignAudience(claim.data.audienceMode, claim.data.recipientIds, claim.data.audienceSince);
+        if (typeof audience === "string") {
+          await ref.update({
+            active: false, status: "error", nextSendAt: FieldValue.delete(),
+            processingUntil: FieldValue.delete(), lastError: audience,
+          });
+          results.push({ id: ref.id, status: "invalid-audience" });
+          continue;
+        }
+        const recipients = await getCampaignRecipients(mailDb, campaign, audience);
+        if (!recipients.length) {
+          await ref.update({
+            active: false, status: "error", nextSendAt: FieldValue.delete(),
+            processingUntil: FieldValue.delete(), lastError: "No eligible recipients match this selection.",
+          });
+          results.push({ id: ref.id, status: "no-eligible-recipients" });
+          continue;
+        }
+        await getEmailsSentCount(mailDb);
         const delivery = await deliverCampaign(campaign, recipients, baseUrl, `${ref.id}:${claim.scheduledAt.toMillis()}`);
-        await mailDb.collection("mailingHistory").add({
+        const historyRef = mailDb.collection("mailingHistory").doc();
+        const batch = mailDb.batch();
+        batch.set(historyRef, {
           scheduleId: ref.id, kind: campaign.kind, subject: campaign.subject, headline: campaign.headline,
+          campaign, audienceMode: audience.mode,
           requested: recipients.length, sent: delivery.sent, failed: delivery.failures.length,
           failures: delivery.failures.slice(0, 100), sentAt: FieldValue.serverTimestamp(), scheduledFor: claim.scheduledAt.toDate().toISOString(),
         });
+        batch.set(mailDb.collection("mailingStats").doc("summary"), {
+          emailsSent: FieldValue.increment(delivery.sent),
+        }, { merge: true });
+        await batch.commit();
         const retryCount = claim.data.retryCount ?? 0;
         if (delivery.failures.some((failure) => failure.retryable) && retryCount < 3) {
           await ref.update({

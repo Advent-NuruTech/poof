@@ -8,12 +8,13 @@ type RichTextEditorProps = {
   placeholder: string;
   value?: string;
   maxTextLength?: number;
+  allowImages?: boolean;
   onChange?: (value: string) => void;
   className?: string;
 };
 
 const RichTextEditor = forwardRef<HTMLDivElement, RichTextEditorProps>(function RichTextEditor(
-  { label, placeholder, value, maxTextLength, onChange, className = "" },
+  { label, placeholder, value, maxTextLength, allowImages = false, onChange, className = "" },
   forwardedRef,
 ) {
   const editor = useRef<HTMLDivElement>(null);
@@ -64,6 +65,25 @@ const RichTextEditor = forwardRef<HTMLDivElement, RichTextEditorProps>(function 
     if (editor.current) updateContent(editor.current);
   }
 
+  function insertImage() {
+    const source = window.prompt("Paste an image URL (HTTPS):")?.trim();
+    if (!source) return;
+    let url: URL;
+    try {
+      url = new URL(source);
+    } catch {
+      window.alert("Enter a valid HTTPS image URL.");
+      return;
+    }
+    if (url.protocol !== "https:") {
+      window.alert("Image links must use HTTPS.");
+      return;
+    }
+    editor.current?.focus();
+    document.execCommand("insertHTML", false, `<img src="${url.toString()}" alt="">`);
+    if (editor.current) updateContent(editor.current);
+  }
+
   return <>
     <div className="rich-toolbar" role="toolbar" aria-label={`${label} formatting`}>
       <button type="button" title="Bold" aria-label="Bold" onMouseDown={(event) => event.preventDefault()} onClick={() => runCommand("bold")}><b>B</b></button>
@@ -81,6 +101,7 @@ const RichTextEditor = forwardRef<HTMLDivElement, RichTextEditorProps>(function 
       </label>
       <button type="button" aria-label="Bulleted list" title="Bulleted list" onMouseDown={(event) => event.preventDefault()} onClick={() => runCommand("insertUnorderedList")}>• List</button>
       <button type="button" aria-label="Numbered list" title="Numbered list" onMouseDown={(event) => event.preventDefault()} onClick={() => runCommand("insertOrderedList")}>1. List</button>
+      {allowImages && <button type="button" aria-label="Insert image" title="Insert image from an HTTPS URL" onMouseDown={(event) => event.preventDefault()} onClick={insertImage}>Image</button>}
     </div>
     <div
       ref={editor}
