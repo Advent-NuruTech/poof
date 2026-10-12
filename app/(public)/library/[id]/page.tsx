@@ -1,5 +1,6 @@
 import type { Metadata } from "next";
 import LibraryPage from "@/components/home/library-page";
+import { createPageMetadata } from "@/lib/seo";
 import { getPublicLibraryDocument } from "@/lib/public-library";
 
 export async function generateMetadata({ params }: PageProps<"/library/[id]">): Promise<Metadata> {
@@ -7,13 +8,13 @@ export async function generateMetadata({ params }: PageProps<"/library/[id]">): 
   const study = await getPublicLibraryDocument(id);
   if (!study) return { title: "Study unavailable" };
   const description = study.description || `Read ${study.title} in the Faith of the Pioneers library.`;
-  const images = study.previewUrl ? [{ url: study.previewUrl }] : undefined;
-  return {
+  return createPageMetadata({
     title: study.title,
     description,
-    openGraph: { title: study.title, description, type: "article", ...(images ? { images } : {}) },
-    twitter: { card: study.previewUrl ? "summary_large_image" : "summary", title: study.title, description, ...(study.previewUrl ? { images: [study.previewUrl] } : {}) },
-  };
+    path: `/library/${encodeURIComponent(id)}`,
+    image: study.previewUrl,
+    type: "article",
+  });
 }
 
 // `params` is runtime data, so the reader cannot be prerendered without a

@@ -1,5 +1,6 @@
 import type { Metadata } from "next";
 import MeetingDetail from "@/components/home/meeting-detail";
+import { createPageMetadata } from "@/lib/seo";
 
 type MeetingDocument = {
   fields?: { title?: { stringValue?: string }; description?: { stringValue?: string }; posterUrl?: { stringValue?: string } };
@@ -26,13 +27,12 @@ export async function generateMetadata({ params }: PageProps<"/meetings/[id]">):
   if (!title) return { title: "Meeting unavailable" };
   const description = fields?.description?.stringValue;
   const poster = fields?.posterUrl?.stringValue;
-  const images = poster ? [{ url: poster }] : [];
-  return {
+  return createPageMetadata({
     title,
-    ...(description ? { description } : {}),
-    openGraph: { title, ...(description ? { description } : {}), type: "website", ...(images.length ? { images } : {}) },
-    twitter: { card: poster ? "summary_large_image" : "summary", title, ...(description ? { description } : {}), ...(poster ? { images: [poster] } : {}) },
-  };
+    description: description || `Join ${title}, an online Bible meeting from Faith of the Pioneers.`,
+    path: `/meetings/${encodeURIComponent(id)}`,
+    image: poster,
+  });
 }
 
 // `params` is runtime data, so this route cannot be prerendered without a

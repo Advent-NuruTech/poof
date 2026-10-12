@@ -2,12 +2,15 @@
 
 import { onAuthStateChanged, signOut, type User } from "firebase/auth";
 import { addDoc, collection, deleteDoc, doc, getDoc, limit, onSnapshot, query, updateDoc, deleteField } from "firebase/firestore";
-import { useEffect, useMemo, useState } from "react";
+import { useEffect, useState } from "react";
 import type { FormEvent } from "react";
 import { auth, db } from "@/lib/firebase";
 import { signInWithGoogle } from "@/lib/sign-in";
 import { endAdminSession } from "@/lib/admin-session";
 import { deviceTimeZone, formatMeetingDate, formatMeetingTime, type Meeting } from "@/lib/meetings";
+import { readApiResponse } from "@/lib/api-response";
+import RichTextEditor from "@/components/admin/rich-text-editor";
+import { sanitizeRichText } from "@/lib/rich-text";
 
 const blank = { title: "", description: "", posterUrl: "", date: "", start: "", end: "", timeZone: "", meetingType: "online" as "online" | "onsite", meetingUrl: "", venue: "", repeats: false, repeatDays: [] as number[], repeatUntil: "never" as "never" | "date", untilDate: "" };
 const weekdays = ["Sunday", "Monday", "Tuesday", "Wednesday", "Thursday", "Friday", "Saturday"];
@@ -59,14 +62,11 @@ export default function MeetingsManager() {
   const [isAdmin, setIsAdmin] = useState(false);
   const [meetings, setMeetings] = useState<Meeting[]>([]);
   const [form, setForm] = useState(blank);
-  const [timeZoneSearch, setTimeZoneSearch] = useState("");
   const [editingId, setEditingId] = useState<string | null>(null);
   const [busy, setBusy] = useState(false);
   const [uploadingPoster, setUploadingPoster] = useState(false);
   const [error, setError] = useState("");
   const [notice, setNotice] = useState("");
-  const filteredTimeZones = useMemo(() => timeZones.filter((zone) => zone.replaceAll("_", " ").toLowerCase().includes(timeZoneSearch.trim().toLowerCase())), [timeZoneSearch]);
-
   useEffect(() => onAuthStateChanged(auth, (current) => { setUser(current); setReady(true); setForm((form) => form.timeZone ? form : { ...form, timeZone: preferredTimeZone() }); if (!current) setIsAdmin(false); }), []);
   useEffect(() => {
     if (!user) return;
@@ -109,7 +109,7 @@ export default function MeetingsManager() {
       setBusy(true);
       if (form.meetingType === "onsite" && !form.venue.trim()) throw new Error("Enter the meeting venue.");
       const recurrence = form.repeats ? { frequency: "weekly" as const, days: form.repeatDays, ...(form.repeatUntil === "date" ? { until: form.untilDate } : {}) } : undefined;
-      const data = { title: form.title.trim(), description: form.description.trim(), posterUrl: form.posterUrl.trim(), startsAt, endsAt, timeZone, meetingType: form.meetingType, meetingUrl: form.meetingType === "online" ? form.meetingUrl.trim() : "", venue: form.meetingType === "onsite" ? form.venue.trim() : "" };
+      const data = { title: form.title.trim(), description: sanitizeRichText(form.description).trim(), posterUrl: form.posterUrl.trim(), startsAt, endsAt, timeZone, meetingType: form.meetingType, meetingUrl: form.meetingType === "online" ? form.meetingUrl.trim() : "", venue: form.meetingType === "onsite" ? form.venue.trim() : "" };
       if (editingId) {
         await updateDoc(doc(db, "meetings", editingId), { ...data, recurrence: recurrence ?? deleteField() });
         setNotice("Meeting updated.");
@@ -131,8 +131,8 @@ export default function MeetingsManager() {
       if (!token) throw new Error("Sign in again to upload a poster.");
       const body = new FormData(); body.set("file", file);
       const response = await fetch("/api/meetings/poster", { method: "POST", headers: { Authorization: `Bearer ${token}` }, body });
-      const result = await response.json() as { secureUrl?: string; error?: string };
-      if (!response.ok || !result.secureUrl) throw new Error(result.error ?? "Poster upload failed.");
+      const result = await readApiResponse<{ secureUrl?: string }>(response, "Poster upload");
+      if (!result.secureUrl) throw new Error("Poster upload did not return a file URL.");
       setForm((current) => ({ ...current, posterUrl: result.secureUrl! }));
       setNotice("Poster uploaded to Cloudinary.");
     } catch (reason) { setError(reason instanceof Error ? reason.message : "Poster upload failed."); }
@@ -145,12 +145,12 @@ export default function MeetingsManager() {
         <section className="admin-panel"><div className="section-heading"><div><span className="eyebrow">{editingId ? "EDIT MEETING" : "NEW MEETING"}</span><h2>Meeting details</h2></div><span className="secure-label">● Private admin access</span></div>
           <form className="meeting-admin-form" onSubmit={(event) => void saveMeeting(event)}>
             <label>Title<input required maxLength={140} value={form.title} onChange={(event) => setForm({ ...form, title: event.target.value })} placeholder="Weekly Bible study"/></label>
-            <label>Description <span>Optional</span><textarea rows={3} maxLength={1200} value={form.description} onChange={(event) => setForm({ ...form, description: event.target.value })} placeholder="A few details about the meeting"/></label>
+            <div className="meeting-description-field"><strong>Description <span>Optional</span></strong><RichTextEditor label="Meeting description" placeholder="A few details about the meeting" value={form.description} maxTextLength={1200} onChange={(value) => setForm((current) => ({ ...current, description: value }))} className="rich-editor-compact"/></div>
             <label>Poster image <span>Optional · upload to Cloudinary</span><input type="file" accept="image/*" disabled={uploadingPoster} onChange={(event) => void uploadPoster(event.target.files?.[0])}/></label>
             {form.posterUrl && <div className="meeting-poster-preview"><img src={form.posterUrl} alt="Meeting poster preview"/><button type="button" className="outline-button" onClick={() => setForm({ ...form, posterUrl: "" })}>Remove poster</button></div>}
             <label>Meeting format<select value={form.meetingType} onChange={(event) => setForm({ ...form, meetingType: event.target.value as "online" | "onsite" })}><option value="online">Online</option><option value="onsite">Onsite</option></select></label>
             {form.meetingType === "online" ? <label>Meeting link <span>Optional · visible one hour before start</span><input type="url" value={form.meetingUrl} onChange={(event) => setForm({ ...form, meetingUrl: event.target.value })} placeholder="https://zoom.us/j/…"/></label> : <label>Venue<input required value={form.venue} onChange={(event) => setForm({ ...form, venue: event.target.value })} placeholder="Address or venue name"/></label>}
-            <div className="meeting-timezone-picker"><label htmlFor="meeting-time-zone-search">Search time zones<input id="meeting-time-zone-search" type="search" value={timeZoneSearch} onChange={(event) => setTimeZoneSearch(event.target.value)} placeholder="City, region, or UTC" autoComplete="off"/></label><label htmlFor="meeting-time-zone">Scheduling time zone<select id="meeting-time-zone" required value={form.timeZone || deviceTimeZone()} onChange={(event) => setForm({ ...form, timeZone: event.target.value })}>{!filteredTimeZones.includes(form.timeZone || deviceTimeZone()) && <option value={form.timeZone}>{form.timeZone}</option>}{filteredTimeZones.map((zone) => <option key={zone} value={zone}>{zone.replaceAll("_", " ")}</option>)}</select></label>{filteredTimeZones.length === 0 && <span className="meeting-timezone-empty">No time zones match your search.</span>}</div>
+            <div className="meeting-timezone-picker"><label htmlFor="meeting-time-zone">Scheduling time zone<select id="meeting-time-zone" required value={form.timeZone || deviceTimeZone()} onChange={(event) => setForm({ ...form, timeZone: event.target.value })}>{!timeZones.includes(form.timeZone || deviceTimeZone()) && <option value={form.timeZone}>{form.timeZone}</option>}{timeZones.map((zone) => <option key={zone} value={zone}>{zone.replaceAll("_", " ")}</option>)}</select></label></div>
             <div className="meeting-time-fields"><label>Date<input required type="date" value={form.date} onChange={(event) => setForm({ ...form, date: event.target.value })}/></label><label>Starts at<input required type="time" value={form.start} onChange={(event) => setForm({ ...form, start: event.target.value })}/></label><label>Ends at<input required type="time" value={form.end} onChange={(event) => setForm({ ...form, end: event.target.value })}/></label></div>
             <p className="meeting-timezone-note">Meeting times are scheduled in <strong>{form.timeZone || deviceTimeZone()}</strong>. Everyone will see the corresponding time in their own local timezone. Your choice is saved on this device for next time.</p>
             <fieldset className="meeting-recurrence"><legend>Does this repeat?</legend><label className="repeat-choice"><input type="radio" name="repeats" checked={!form.repeats} onChange={() => setForm({ ...form, repeats: false })}/> No</label><label className="repeat-choice"><input type="radio" name="repeats" checked={form.repeats} onChange={() => setForm({ ...form, repeats: true })}/> Yes</label>{form.repeats && <div className="repeat-options"><label>Repeat<select value="weekly" disabled><option value="weekly">Weekly</option></select></label><div><span className="repeat-label">Days</span><div className="repeat-days">{weekdays.map((day, index) => <label key={day}><input type="checkbox" checked={form.repeatDays.includes(index)} onChange={() => setForm({ ...form, repeatDays: form.repeatDays.includes(index) ? form.repeatDays.filter((value) => value !== index) : [...form.repeatDays, index] })}/>{day}</label>)}</div></div><label>Until<select value={form.repeatUntil} onChange={(event) => setForm({ ...form, repeatUntil: event.target.value as "never" | "date" })}><option value="never">Never</option><option value="date">A date</option></select></label>{form.repeatUntil === "date" && <label>End date<input required type="date" min={form.date || undefined} value={form.untilDate} onChange={(event) => setForm({ ...form, untilDate: event.target.value })}/></label>}</div>}</fieldset>
@@ -159,7 +159,7 @@ export default function MeetingsManager() {
           </form>
         </section>
         <div className="channel-list-heading"><h2>Scheduled meetings <span>{meetings.length}</span></h2></div>
-        {!meetings.length ? <section className="admin-panel empty-state"><h3>No meetings yet</h3><p>Published meetings will appear here.</p></section> : <div className="admin-channel-list">{meetings.map((meeting) => <article className="admin-channel" key={meeting.id}>{meeting.posterUrl && <img className="channel-avatar meeting-admin-poster" src={meeting.posterUrl} alt=""/>}<div className="channel-details"><div className="channel-title-row"><h3>{meeting.title}</h3></div><p>{formatMeetingDate(meeting.startsAt)} · {formatMeetingTime(meeting)}</p>{meeting.description && <small>{meeting.description}</small>}</div><div className="channel-actions"><button type="button" className="outline-button" disabled={busy || uploadingPoster} onClick={() => editMeeting(meeting)}>Edit</button><button className="icon-action remove-action" title={`Delete ${meeting.title}`} onClick={() => { if (window.confirm(`Delete “${meeting.title}”?`)) void deleteDoc(doc(db, "meetings", meeting.id)).catch((reason) => setError(reason instanceof Error ? reason.message : "Could not delete meeting.")); }}>×</button></div></article>)}</div>}
+        {!meetings.length ? <section className="admin-panel empty-state"><h3>No meetings yet</h3><p>Published meetings will appear here.</p></section> : <div className="admin-channel-list">{meetings.map((meeting) => <article className="admin-channel" key={meeting.id}>{meeting.posterUrl && <img className="channel-avatar meeting-admin-poster" src={meeting.posterUrl} alt=""/>}<div className="channel-details"><div className="channel-title-row"><h3>{meeting.title}</h3></div><p>{formatMeetingDate(meeting.startsAt)} · {formatMeetingTime(meeting)}</p>{meeting.description && <div className="meeting-description-preview" dangerouslySetInnerHTML={{ __html: sanitizeRichText(meeting.description) }}/>}</div><div className="channel-actions"><button type="button" className="outline-button" disabled={busy || uploadingPoster} onClick={() => editMeeting(meeting)}>Edit</button><button className="icon-action remove-action" title={`Delete ${meeting.title}`} onClick={() => { if (window.confirm(`Delete “${meeting.title}”?`)) void deleteDoc(doc(db, "meetings", meeting.id)).catch((reason) => setError(reason instanceof Error ? reason.message : "Could not delete meeting.")); }}>×</button></div></article>)}</div>}
       </>}
     </div>
   </main>;

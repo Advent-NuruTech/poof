@@ -1,3 +1,12 @@
+import { createPageMetadata } from "@/lib/seo";
+
+export const metadata = createPageMetadata({
+  title: "Fundamental Principles",
+  description:
+    "Explore the Bible-centered fundamental principles and present truth held by the pioneers of our faith.",
+  path: "/doctrine/fundermentalprinciples",
+});
+
 export default function FundamentalPrinciplesPage() {
   return (
     <main className="doctrine-page">

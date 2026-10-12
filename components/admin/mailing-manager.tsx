@@ -7,6 +7,9 @@ import type { FormEvent } from "react";
 import { auth, db } from "@/lib/firebase";
 import { endAdminSession } from "@/lib/admin-session";
 import { signInWithGoogle } from "@/lib/sign-in";
+import { readApiResponse } from "@/lib/api-response";
+import { automaticPreviewText, sanitizeRichText } from "@/lib/rich-text";
+import RichTextEditor from "@/components/admin/rich-text-editor";
 
 type MailingTab = "meeting" | "newsletter";
 type CampaignForm = {
@@ -74,6 +77,7 @@ export default function MailingManager() {
   const [authorized, setAuthorized] = useState(false);
   const [tab, setTab] = useState<MailingTab>("meeting");
   const [campaign, setCampaign] = useState<CampaignForm>(initialCampaign);
+  const [preheaderEdited, setPreheaderEdited] = useState(false);
   const [memberEmail, setMemberEmail] = useState("");
   const [editingScheduleId, setEditingScheduleId] = useState<string | null>(null);
   const [data, setData] = useState<MailingData>({ members: [], subscribers: [], schedules: [], history: [], counts: { verified: 0, pending: 0, active: 0, unsubscribed: 0 } });
@@ -99,9 +103,7 @@ export default function MailingManager() {
       headers,
       cache: "no-store",
     });
-    const result = await response.json() as ApiResult;
-    if (!response.ok) throw new Error(result.error ?? "Mailing request failed.");
-    return result;
+    return readApiResponse<ApiResult>(response, "Mailing request");
   }, [user]);
 
   const refresh = useCallback(async () => {
@@ -110,8 +112,7 @@ export default function MailingManager() {
     try {
       const token = await user.getIdToken();
       const response = await fetch("/api/mailing", { headers: { Authorization: `Bearer ${token}` }, cache: "no-store" });
-      const result = await response.json() as MailingData & { error?: string };
-      if (!response.ok) throw new Error(result.error ?? "Could not load mailing lists.");
+      const result = await readApiResponse<MailingData & { error?: string }>(response, "Could not load mailing lists");
       setData(result);
     } catch (reason) {
       setError(reason instanceof Error ? reason.message : "Could not load mailing lists.");
@@ -143,6 +144,7 @@ export default function MailingManager() {
 
   function updateCampaign(field: Exclude<keyof CampaignForm, "repeat">, value: string) {
     setCampaign((current) => ({ ...current, [field]: value }));
+    if (field === "preheader") setPreheaderEdited(true);
   }
 
   async function addMember(event: FormEvent<HTMLFormElement>) {
@@ -177,6 +179,7 @@ export default function MailingManager() {
       const timeZone = Intl.DateTimeFormat().resolvedOptions().timeZone || "UTC";
       const payload = {
         action, kind: tab, ...campaign,
+        preheader: preheaderEdited ? campaign.preheader : "",
         startsAt: campaign.startsAt ? new Date(campaign.startsAt).toISOString() : "",
         endsAt: campaign.endsAt ? new Date(campaign.endsAt).toISOString() : "",
         timeZone,
@@ -190,6 +193,7 @@ export default function MailingManager() {
         setNotice(editingScheduleId ? "Your scheduled email was updated." : "Your email is scheduled. The system will send it automatically.");
         setEditingScheduleId(null);
         setCampaign(initialCampaign);
+        setPreheaderEdited(false);
       }
       await refresh();
     } catch (reason) {
@@ -213,12 +217,15 @@ export default function MailingManager() {
       endsAt: localDateTime(schedule.endsAt),
       repeat,
     });
+    setPreheaderEdited(Boolean(schedule.preheader));
     setError(""); setNotice("Editing this schedule. Save changes or cancel editing.");
     window.scrollTo({ top: 0, behavior: "smooth" });
   }
 
   const previewVideo = videoId(campaign.videoUrl);
   const greeting = tab === "meeting" ? "Meeting invitation" : "Faith of the Pioneers newsletter";
+  const automaticPreheader = automaticPreviewText(campaign.body);
+  const previewPreheader = preheaderEdited ? campaign.preheader : automaticPreheader;
 
   return <main className="admin-shell mailing-admin">
     <header className="admin-top"><span className="admin-mark">POOF <span>MAILING</span></span><div className="admin-top-actions"><button className="text-button" onClick={() => void endAdminSession().finally(() => signOut(auth))}>Sign out</button></div></header>
@@ -234,7 +241,7 @@ export default function MailingManager() {
             <article><span>{tab === "meeting" ? "Pending verification" : "Unsubscribed"}</span><strong>{secondaryCount.toLocaleString()}</strong></article>
             <article><span>Scheduled sends</span><strong>{currentSchedules.filter((item) => item.active === true).length.toLocaleString()}</strong></article>
           </section>
-          <nav className="mailing-tabs" aria-label="Mailing lists">{tabs.map((item) => <button type="button" key={item.id} className={tab === item.id ? "active" : ""} onClick={() => { setTab(item.id); setEditingScheduleId(null); setCampaign(initialCampaign); setError(""); setNotice(""); }}>{item.label}</button>)}</nav>
+          <nav className="mailing-tabs" aria-label="Mailing lists">{tabs.map((item) => <button type="button" key={item.id} className={tab === item.id ? "active" : ""} onClick={() => { setTab(item.id); setEditingScheduleId(null); setCampaign(initialCampaign); setPreheaderEdited(false); setError(""); setNotice(""); }}>{item.label}</button>)}</nav>
           <section className="mailing-grid">
             <div className="mailing-people">
               <div className="mailing-section-heading"><div><span className="eyebrow">{tab === "meeting" ? "ONLINE MEETING MEMBERS" : "NEWSLETTER AUDIENCE"}</span><h2>{tab === "meeting" ? "Email list" : "Subscribers"}</h2></div><button className="text-button" onClick={() => void refresh()} disabled={loading}>{loading ? "Refreshing…" : "Refresh"}</button></div>
@@ -252,8 +259,9 @@ export default function MailingManager() {
               <form className="mailing-form" onSubmit={(event) => void submitCampaign(event, "send")}>
                 <label>Subject<input required maxLength={180} value={campaign.subject} onChange={(event) => updateCampaign("subject", event.target.value)} placeholder={tab === "meeting" ? "This week's online meeting" : "A note from Faith of the Pioneers"}/></label>
                 <label>Headline<input required maxLength={180} value={campaign.headline} onChange={(event) => updateCampaign("headline", event.target.value)} placeholder={tab === "meeting" ? "You're invited to join us" : "Encouragement for your week"}/></label>
-                <label>Inbox preview text<input maxLength={180} value={campaign.preheader} onChange={(event) => updateCampaign("preheader", event.target.value)} placeholder="A short summary shown beside the subject"/></label>
-                <label>Message<textarea required={tab === "newsletter"} rows={7} maxLength={12000} value={campaign.body} onChange={(event) => updateCampaign("body", event.target.value)} placeholder={tab === "meeting" ? "Write your meeting announcement…" : "Write your newsletter. Separate paragraphs with a blank line."}/></label>
+                <label>Inbox preview text<input maxLength={180} value={preheaderEdited ? campaign.preheader : automaticPreheader} onChange={(event) => updateCampaign("preheader", event.target.value)} placeholder="Automatically generated from your message"/><small>Suggested from your message. Edit it here if you prefer different text.</small></label>
+                {preheaderEdited && <button type="button" className="text-button" onClick={() => { setCampaign((current) => ({ ...current, preheader: "" })); setPreheaderEdited(false); }}>Use message preview</button>}
+                <div className="mailing-rich-field"><strong>Message</strong><RichTextEditor label="Message" placeholder={tab === "meeting" ? "Write your meeting announcement…" : "Write your newsletter…"} value={campaign.body} maxTextLength={12000} onChange={(value) => updateCampaign("body", value)} className="rich-editor-compact"/></div>
                 <label>{tab === "meeting" ? "Meeting link (HTTPS)" : "Button link (optional)"}<input type="url" required={tab === "meeting"} value={campaign.buttonUrl} onChange={(event) => updateCampaign("buttonUrl", event.target.value)} placeholder="https://…"/></label>
                 {tab === "newsletter" && <><label>Button label<input maxLength={80} value={campaign.buttonLabel} onChange={(event) => updateCampaign("buttonLabel", event.target.value)} placeholder="Read the full story"/></label><label>Featured video URL (optional)<input type="url" value={campaign.videoUrl} onChange={(event) => updateCampaign("videoUrl", event.target.value)} placeholder="https://www.youtube.com/watch?v=…"/><small>Email apps block embedded playback; subscribers get a clickable video preview.</small></label>{campaign.videoUrl && (previewVideo ? <div className="mailing-video-preview"><img src={`https://img.youtube.com/vi/${previewVideo}/hqdefault.jpg`} alt="Video thumbnail preview"/><span>Clickable video preview in your newsletter</span></div> : <div className="mailing-generic-video">▶ <span>Featured video preview</span></div>)}</>}
                 <div className="mailing-form-actions"><button className="primary-button" type="submit" disabled={busy}>{busy ? "Sending…" : `Send to ${activeCount.toLocaleString()}`}</button></div>
@@ -263,10 +271,10 @@ export default function MailingManager() {
                 <p className="mailing-helper">Hobby plan: the scheduler checks once a day around 09:00 UTC. Vercel may start that check up to 59 minutes before or after; emails scheduled after it may wait until the next daily check.</p>
                 <div className="mailing-schedule-fields"><label>First send<input type="datetime-local" required value={campaign.startsAt} onChange={(event) => updateCampaign("startsAt", event.target.value)}/></label><label>Repeat<select value={campaign.repeat} onChange={(event) => { const value = event.target.value; if (value === "once" || value === "daily" || value === "weekly" || value === "monthly") setCampaign((current) => ({ ...current, repeat: value })); }}><option value="once">One time</option><option value="daily">Daily</option><option value="weekly">Weekly</option><option value="monthly">Monthly</option></select></label></div>
                 {campaign.repeat !== "once" && <label>Repeat through (optional)<input type="datetime-local" value={campaign.endsAt} onChange={(event) => updateCampaign("endsAt", event.target.value)}/><small>Leave blank to repeat until you cancel the schedule.</small></label>}
-                {editingScheduleId && <button type="button" className="text-button" onClick={() => { setEditingScheduleId(null); setCampaign(initialCampaign); setNotice(""); }}>Cancel editing</button>}
+                {editingScheduleId && <button type="button" className="text-button" onClick={() => { setEditingScheduleId(null); setCampaign(initialCampaign); setPreheaderEdited(false); setNotice(""); }}>Cancel editing</button>}
                 <button className="outline-button" disabled={busy}>{busy ? "Saving…" : editingScheduleId ? "Update schedule" : "Schedule email"}</button>
               </form>
-              <aside className="mailing-template-preview"><span className="eyebrow">TEMPLATE PREVIEW</span><div><small>{greeting} · {campaign.preheader || "Your preview text appears here."}</small><h3>{campaign.headline || "Your headline appears here"}</h3><p>{campaign.body || "Your email message preview will appear here as you write."}</p>{campaign.buttonUrl && <span className="mailing-preview-button">{campaign.buttonLabel || (tab === "meeting" ? "Join the meeting" : "Learn more")}</span>}{previewVideo ? <img src={`https://img.youtube.com/vi/${previewVideo}/hqdefault.jpg`} alt="Featured video thumbnail"/> : campaign.videoUrl && <div className="mailing-generic-video">▶ <span>Featured video preview</span></div>}</div></aside>
+              <aside className="mailing-template-preview"><span className="eyebrow">TEMPLATE PREVIEW</span><div><small>{greeting} · {previewPreheader || "Your preview text appears here."}</small><h3>{campaign.headline || "Your headline appears here"}</h3>{campaign.body ? <div className="mailing-preview-body" dangerouslySetInnerHTML={{ __html: sanitizeRichText(campaign.body) }}/>: <p>Your email message preview will appear here as you write.</p>}{campaign.buttonUrl && <span className="mailing-preview-button">{campaign.buttonLabel || (tab === "meeting" ? "Join the meeting" : "Learn more")}</span>}{previewVideo ? <img src={`https://img.youtube.com/vi/${previewVideo}/hqdefault.jpg`} alt="Featured video thumbnail"/> : campaign.videoUrl && <div className="mailing-generic-video">▶ <span>Featured video preview</span></div>}</div></aside>
             </div>
           </section>
           <section className="mailing-history">

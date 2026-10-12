@@ -163,5 +163,5 @@ export function formatMeetingTime(meeting: Meeting) {
   const options: Intl.DateTimeFormatOptions = { hour: "numeric", minute: "2-digit", timeZone };
   const formatter = new Intl.DateTimeFormat(undefined, options);
   const zoneLabel = new Intl.DateTimeFormat(undefined, { timeZone, timeZoneName: "short" }).formatToParts(new Date(meeting.startsAt)).find((part) => part.type === "timeZoneName")?.value ?? timeZone;
-  return `${formatter.format(new Date(meeting.startsAt))} – ${formatter.format(new Date(meeting.endsAt))} (${zoneLabel})`;
+  return `${formatter.format(new Date(meeting.startsAt))} – ${formatter.format(new Date(meeting.endsAt))} (${zoneLabel}, your local time)`;
 }

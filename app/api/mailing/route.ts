@@ -1,5 +1,6 @@
 import { createHash, randomUUID } from "node:crypto";
 import { FieldValue, getMailDb, requireMailAdmin, Timestamp, type Campaign, deliverCampaign } from "@/lib/mailing-server";
+import { richTextToPlainText, sanitizeRichText } from "@/lib/rich-text";
 
 export const maxDuration = 300;
 
@@ -26,14 +27,30 @@ function parseCampaign(body: ScheduleInput): Campaign | string {
     if (typeof body[field] !== "string") return "Complete every message field.";
   }
   const campaign = Object.fromEntries(fields.map((field) => [field, body[field]!.trim()])) as Omit<Campaign, "kind">;
-  const result: Campaign = { ...campaign, kind: body.kind };
-  if (!result.subject || result.subject.length > 180 || !result.headline || result.headline.length > 180 || result.body.length > 12000) {
+  const result: Campaign = {
+    ...campaign,
+    kind: body.kind,
+    preheader: campaign.preheader,
+    body: sanitizeRichText(campaign.body),
+  };
+  if (!result.subject || result.subject.length > 180 || !result.headline || result.headline.length > 180 || result.body.length > 60000) {
     return "Add a subject and headline, and keep the message within 12,000 characters.";
   }
   if (!validUrl(result.buttonUrl) || !validUrl(result.videoUrl)) return "Links must use HTTPS.";
+  if (result.preheader.length > 180 || richTextToPlainText(result.body).length > 12000) {
+    return "Keep the inbox preview within 180 characters and the message within 12,000 characters.";
+  }
   if (result.kind === "meeting" && !result.buttonUrl) return "Add the meeting link before sending.";
-  if (result.kind === "newsletter" && !result.body) return "Write the newsletter message before sending.";
+  if (result.kind === "newsletter" && !richTextToPlainText(result.body)) return "Write the newsletter message before sending.";
   return result;
+}
+
+function isFirestoreReadLimit(error: unknown) {
+  if (!error || typeof error !== "object") return false;
+  const code = "code" in error ? error.code : undefined;
+  const message = error instanceof Error ? error.message : "";
+  return code === 8 || code === 429 || code === "resource-exhausted" ||
+    /RESOURCE_EXHAUSTED|quota exceeded/i.test(message);
 }
 
 export async function GET(request: Request) {
@@ -66,7 +83,12 @@ export async function GET(request: Request) {
     }, { headers: { "Cache-Control": "no-store" } });
   } catch (error) {
     console.error("Mailing admin list failed", error);
-    return Response.json({ error: "Could not load mailing lists and history." }, { status: 500 });
+    const rateLimited = isFirestoreReadLimit(error);
+    return Response.json({
+      error: rateLimited
+        ? "Firestore is temporarily rate-limited (read quota exceeded). Check the Firebase usage and billing limits, then try again."
+        : "Could not load mailing lists and history.",
+    }, { status: rateLimited ? 429 : 500, headers: { "Cache-Control": "no-store" } });
   }
 }
 

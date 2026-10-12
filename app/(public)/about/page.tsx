@@ -1,5 +1,13 @@
+import { createPageMetadata } from "@/lib/seo";
 import Link from "next/link";
 import AboutMostViewed from "@/components/home/about-most-viewed";
+
+export const metadata = createPageMetadata({
+  title: "About Our Ministry",
+  description:
+    "Learn about Faith of the Pioneers, an online fellowship for Bible study, Christian ministry, and present truth rooted in Scripture and the pioneers' faith.",
+  path: "/about",
+});
 
 const CSS = `
 .about-page{

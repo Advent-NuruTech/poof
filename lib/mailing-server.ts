@@ -3,6 +3,7 @@ import { applicationDefault, cert, getApp, getApps, initializeApp, type ServiceA
 import { getAuth } from "firebase-admin/auth";
 import { FieldValue, getFirestore, Timestamp, type Firestore } from "firebase-admin/firestore";
 import { Resend } from "resend";
+import { automaticPreviewText, richTextToPlainText, sanitizeRichText } from "@/lib/rich-text";
 
 function parseServiceAccount(value: string): ServiceAccount {
   let parsed: unknown;
@@ -97,7 +98,11 @@ function safeUrl(value: string) {
 }
 
 function bodyHtml(value: string) {
-  return value.split(/\n{2,}/).map((paragraph) => `<p style="margin:0 0 18px;line-height:1.75;color:#4b5563">${escapeHtml(paragraph).replace(/\n/g, "<br>")}</p>`).join("");
+  const richTags = /<\/?(?:a|b|blockquote|br|div|em|font|h[1-4]|i|li|ol|p|span|strong|u|ul)\b/i;
+  if (!richTags.test(value)) {
+    return value.split(/\n{2,}/).map((paragraph) => `<p style="margin:0 0 18px;line-height:1.75;color:#4b5563">${escapeHtml(paragraph).replace(/\n/g, "<br>")}</p>`).join("");
+  }
+  return sanitizeRichText(value).replace(/<p>/g, '<p style="margin:0 0 18px;line-height:1.75;color:#4b5563">');
 }
 
 export function renderCampaign(campaign: Campaign, unsubscribeUrl = "") {
@@ -114,8 +119,8 @@ export function renderCampaign(campaign: Campaign, unsubscribeUrl = "") {
     ? `<p style="margin:24px 0 0;color:#788078;font-size:12px">You received this newsletter because you subscribed to Faith of the Pioneers. <a href="${escapeHtml(unsubscribeUrl)}" style="color:#788078">Unsubscribe</a></p>`
     : "";
   return {
-    html: `<!doctype html><html><body style="margin:0;background:#f4f5f2;font-family:Arial,Helvetica,sans-serif;color:#172126"><div style="display:none;max-height:0;overflow:hidden;opacity:0">${escapeHtml(campaign.preheader)}</div><table role="presentation" width="100%" cellspacing="0" cellpadding="0" style="background:#f4f5f2;padding:32px 12px"><tr><td align="center"><table role="presentation" width="600" cellspacing="0" cellpadding="0" style="width:100%;max-width:600px;background:#fff;border-radius:16px;overflow:hidden"><tr><td style="padding:25px 34px;background:#172126;color:#fff"><div style="font-size:11px;letter-spacing:2px;color:#e9d891">FAITH OF THE PIONEERS</div><div style="font-size:12px;margin-top:7px;color:#d8dddb">A letter for your journey</div></td></tr><tr><td style="padding:34px"><div style="height:3px;width:40px;background:#c51c31;margin-bottom:20px"></div><h1 style="font-size:30px;line-height:1.15;letter-spacing:-.6px;margin:0 0 22px;color:#172126">${escapeHtml(campaign.headline)}</h1>${bodyHtml(campaign.body)}${preview}${button}${unsubscribe}</td></tr><tr><td style="padding:18px 34px;background:#f8f9f6;color:#788078;font-size:12px">Faith of the Pioneers · Online fellowship, study, and worship</td></tr></table></td></tr></table></body></html>`,
-    text: [campaign.headline, campaign.body, videoUrl ? `Watch: ${videoUrl}` : "", buttonUrl ? `${campaign.buttonLabel || "Learn more"}: ${buttonUrl}` : "", unsubscribeUrl ? `Unsubscribe: ${unsubscribeUrl}` : ""].filter(Boolean).join("\n\n"),
+    html: `<!doctype html><html><body style="margin:0;background:#f4f5f2;font-family:Arial,Helvetica,sans-serif;color:#172126"><div style="display:none;max-height:0;overflow:hidden;opacity:0">${escapeHtml(campaign.preheader || automaticPreviewText(campaign.body))}</div><table role="presentation" width="100%" cellspacing="0" cellpadding="0" style="background:#f4f5f2;padding:32px 12px"><tr><td align="center"><table role="presentation" width="600" cellspacing="0" cellpadding="0" style="width:100%;max-width:600px;background:#fff;border-radius:16px;overflow:hidden"><tr><td style="padding:25px 34px;background:#172126;color:#fff"><div style="font-size:11px;letter-spacing:2px;color:#e9d891">FAITH OF THE PIONEERS</div><div style="font-size:12px;margin-top:7px;color:#d8dddb">A letter for your journey</div></td></tr><tr><td style="padding:34px"><div style="height:3px;width:40px;background:#c51c31;margin-bottom:20px"></div><h1 style="font-size:30px;line-height:1.15;letter-spacing:-.6px;margin:0 0 22px;color:#172126">${escapeHtml(campaign.headline)}</h1>${bodyHtml(campaign.body)}${preview}${button}${unsubscribe}</td></tr><tr><td style="padding:18px 34px;background:#f8f9f6;color:#788078;font-size:12px">Faith of the Pioneers · Online fellowship, study, and worship</td></tr></table></td></tr></table></body></html>`,
+    text: [campaign.headline, richTextToPlainText(campaign.body), videoUrl ? `Watch: ${videoUrl}` : "", buttonUrl ? `${campaign.buttonLabel || "Learn more"}: ${buttonUrl}` : "", unsubscribeUrl ? `Unsubscribe: ${unsubscribeUrl}` : ""].filter(Boolean).join("\n\n"),
   };
 }
 

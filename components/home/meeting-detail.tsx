@@ -7,6 +7,7 @@ import { feedMeetings, usePublicCatalog } from "@/lib/use-catalog";
 import { formatMeetingDate, formatMeetingTime, meetingJoinVisible, meetingStatus, type Meeting } from "@/lib/meetings";
 import MeetingCountdown from "@/components/home/meeting-countdown";
 import { sharePublicUrl } from "@/lib/share";
+import { sanitizeRichText } from "@/lib/rich-text";
 
 const CSS = `
 .md-page{
@@ -397,7 +398,7 @@ export default function MeetingDetail({ id }: { id: string }) {
                 <section>
                   <h2 className="md-section-title">About this meeting</h2>
                   {meeting.description ? (
-                    <p className="md-lead">{meeting.description}</p>
+                    <div className="md-lead" dangerouslySetInnerHTML={{ __html: sanitizeRichText(meeting.description) }}/>
                   ) : (
                     <p className="md-desc-empty">
                       No description has been provided for this meeting yet.

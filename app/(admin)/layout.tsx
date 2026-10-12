@@ -1,6 +1,16 @@
+import type { Metadata } from "next";
 import Link from "next/link";
 import { cookies } from "next/headers";
 import AdminSidebar from "@/components/admin/admin-sidebar";
+
+export const metadata: Metadata = {
+  title: "Administrator",
+  robots: {
+    index: false,
+    follow: false,
+    noarchive: true,
+  },
+};
 
 const SESSION_COOKIE = "poof_admin_session";
 

@@ -6,6 +6,8 @@ import { onAuthStateChanged } from "firebase/auth";
 import { useEffect, useRef, useState } from "react";
 import { auth, db } from "@/lib/firebase";
 import type { LibraryCategory, LibraryDocument } from "@/lib/library";
+import RichTextEditor from "@/components/admin/rich-text-editor";
+import { sanitizeRichText } from "@/lib/rich-text";
 
 export default function LibraryManager() {
   const [categories, setCategories] = useState<LibraryCategory[]>([]);
@@ -20,26 +22,7 @@ export default function LibraryManager() {
   const [error, setError] = useState("");
   const [notice, setNotice] = useState("");
   const editor = useRef<HTMLDivElement>(null);
-  const savedSelection = useRef<Range | null>(null);
   const seededDefaults = useRef(false);
-
-  function rememberEditorSelection() {
-    const selection = window.getSelection();
-    if (selection?.rangeCount) savedSelection.current = selection.getRangeAt(0).cloneRange();
-  }
-
-  function applyTextColor(color: string) {
-    const currentEditor = editor.current;
-    if (!currentEditor) return;
-
-    currentEditor.focus();
-    const selection = window.getSelection();
-    if (selection && savedSelection.current) {
-      selection.removeAllRanges();
-      selection.addRange(savedSelection.current);
-    }
-    document.execCommand("foreColor", false, color);
-  }
 
   useEffect(() => {
     const stopSnapshot = onSnapshot(collection(db, "libraryCategories"), (snapshot) => {
@@ -89,7 +72,7 @@ export default function LibraryManager() {
     setTitle(item.title);
     setDescription(item.description ?? "");
     setCategoryId(item.categoryId);
-    if (editor.current) editor.current.innerHTML = item.kind === "note" ? item.contentHtml ?? "" : "";
+    if (editor.current) editor.current.innerHTML = item.kind === "note" ? sanitizeRichText(item.contentHtml ?? "") : "";
     setError("");
     setNotice("");
   }
@@ -104,7 +87,7 @@ export default function LibraryManager() {
 
   async function saveNote(event: React.FormEvent) {
     event.preventDefault();
-    const contentHtml = editor.current?.innerHTML ?? "";
+    const contentHtml = sanitizeRichText(editor.current?.innerHTML ?? "");
     if (!title.trim() || !categoryId || (editingDocument?.kind === "note" || !editingDocument) && !contentHtml.trim()) { setError("Add a title, category, and note content."); return; }
     const selected = categories.find((item) => item.id === categoryId);
     setBusy(true); setError(""); setNotice("");
@@ -158,24 +141,7 @@ export default function LibraryManager() {
       <label>Category<select value={categoryId} onChange={(e) => setCategoryId(e.target.value)} required>{categories.map((item) => <option key={item.id} value={item.id}>{item.name}</option>)}</select></label>
       <label>Description<input value={description} onChange={(e) => setDescription(e.target.value)} placeholder="Optional summary"/></label>
       {(!editingDocument || editingDocument.kind === "note") && <><div className="library-editor-label"><strong>Write a note</strong><span>Paste formatted text from Word or Google Docs. Bold, headings, links, lists, and inline styling are retained.</span></div>
-      <div className="rich-toolbar" role="toolbar" aria-label="Note formatting">
-        <button type="button" title="Bold" aria-label="Bold" onMouseDown={(e) => e.preventDefault()} onClick={() => document.execCommand("bold")}><b>B</b></button>
-        <button type="button" title="Italic" aria-label="Italic" onMouseDown={(e) => e.preventDefault()} onClick={() => document.execCommand("italic")}><i>I</i></button>
-        <button type="button" title="Underline" aria-label="Underline" onMouseDown={(e) => e.preventDefault()} onClick={() => document.execCommand("underline")}><u>U</u></button>
-        <select aria-label="Text style" defaultValue="p" onMouseDown={(e) => e.preventDefault()} onChange={(e) => { editor.current?.focus(); document.execCommand("formatBlock", false, e.target.value); }}>
-          <option value="p">Paragraph</option><option value="h2">Heading</option><option value="h3">Subheading</option><option value="blockquote">Quote</option>
-        </select>
-        <select aria-label="Font family" defaultValue="Times New Roman" onMouseDown={(e) => e.preventDefault()} onChange={(e) => { editor.current?.focus(); document.execCommand("fontName", false, e.target.value); }}>
-          <option value="Times New Roman">Times New Roman</option><option value="Arial">Arial</option><option value="Georgia">Georgia</option>
-        </select>
-        <label className="rich-color-control" title="Text color">
-          <span aria-hidden="true">A</span>
-          <input type="color" aria-label="Text color" defaultValue="#000000" onMouseDown={rememberEditorSelection} onChange={(e) => applyTextColor(e.target.value)}/>
-        </label>
-        <button type="button" aria-label="Bulleted list" title="Bulleted list" onMouseDown={(e) => e.preventDefault()} onClick={() => document.execCommand("insertUnorderedList")}>• List</button>
-        <button type="button" aria-label="Numbered list" title="Numbered list" onMouseDown={(e) => e.preventDefault()} onClick={() => document.execCommand("insertOrderedList")}>1. List</button>
-      </div>
-      <div ref={editor} className="rich-editor" contentEditable suppressContentEditableWarning role="textbox" aria-label="Note content" aria-multiline="true" data-placeholder="Start writing or paste formatted text here…"/></>}
+      <RichTextEditor ref={editor} label="Note content" placeholder="Start writing or paste formatted text here…"/></>}
       {editingDocument?.kind !== "doc" && editingDocument?.kind !== "pdf" && <div className="library-form-actions"><button className="primary-button" type="submit" disabled={busy}>{busy ? "Saving…" : editingDocument ? "Save changes" : "Publish note"}</button>{editingDocument && <button className="outline-button" type="button" disabled={busy} onClick={cancelEditing}>Cancel edit</button>}</div>}
       {(editingDocument?.kind === "doc" || editingDocument?.kind === "pdf") && <p className="library-help">File contents cannot be replaced here. You can edit the title, description, and category for this resource.</p>}
       {editingDocument?.kind === "doc" || editingDocument?.kind === "pdf" ? <div className="library-form-actions"><button className="primary-button" type="submit" disabled={busy}>{busy ? "Saving…" : "Save changes"}</button><button className="outline-button" type="button" disabled={busy} onClick={cancelEditing}>Cancel edit</button></div> : null}

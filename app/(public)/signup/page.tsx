@@ -7,6 +7,7 @@ import { useRouter } from "next/navigation";
 import { useState, type FormEvent } from "react";
 import { auth } from "@/lib/firebase";
 import { startAdminSession } from "@/lib/admin-session";
+import { readApiResponse } from "@/lib/api-response";
 
 export default function SignupPage() {
 const router = useRouter();
@@ -32,11 +33,7 @@ try {
     body: JSON.stringify({ code, email, password }),
   });
 
-  const result = await response.json() as { error?: string };
-
-  if (!response.ok) {
-    throw new Error(result.error ?? "Could not create your account.");
-  }
+  await readApiResponse<{ error?: string }>(response, "Account creation");
 
   const credential = await signInWithEmailAndPassword(auth, email, password);
   await startAdminSession(credential.user);

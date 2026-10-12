@@ -4,6 +4,7 @@ import Link from "next/link";
 import MeetingCountdown from "@/components/home/meeting-countdown";
 import { formatMeetingDate, formatMeetingTime, meetingHref, meetingJoinVisible, meetingStatus, type Meeting } from "@/lib/meetings";
 import { sharePublicUrl } from "@/lib/share";
+import { sanitizeRichText } from "@/lib/rich-text";
 
 export function MeetingIcon({ name }: { name: "calendar" | "clock" | "arrow" | "search" }) {
   const props = {
@@ -195,7 +196,7 @@ export default function MeetingCard({ meeting, now }: { meeting: Meeting; now: n
           <span className={`mc-status is-${status}`}>{status}</span>
 
           <h2 className="mc-title">{meeting.title}</h2>
-          {meeting.description && <p className="mc-desc">{meeting.description}</p>}
+          {meeting.description && <div className="mc-desc" dangerouslySetInnerHTML={{ __html: sanitizeRichText(meeting.description) }}/>}
 
           <div className="mc-meta">
             <span className="mc-meta-row">

@@ -264,3 +264,13 @@ body{font-size:16px}.home-section-title h2{font-size:25px}.latest-card .video-co
 .about-card-copy .about-card-link:hover{color:#1d4ed8}
 .about-card-copy .about-card-cta{background:#0b3d91;color:#fff;box-shadow:none}
 .about-card-copy .about-card-cta:hover{background:#1d4ed8;color:#fff}
+.meeting-timezone-picker{grid-template-columns:minmax(0,1fr)}
+.meeting-description-field,.mailing-rich-field{display:grid;gap:7px;font-size:13px}
+.meeting-description-field>strong,.mailing-rich-field>strong{font-weight:650}
+.rich-editor-compact{min-height:160px;margin-top:0;font:14px/1.6 Arial,Helvetica,sans-serif}
+.meeting-description-preview{margin-top:7px;color:var(--muted);font-size:12px;line-height:1.5}
+.meeting-description-preview p,.mailing-preview-body p{margin:0 0 8px}
+.meeting-description-preview p:last-child,.mailing-preview-body p:last-child{margin-bottom:0}
+.mailing-preview-body{line-height:1.65;overflow-wrap:anywhere}
+.mailing-preview-body ul,.mailing-preview-body ol{padding-left:22px}
+.mc-desc{white-space:pre-wrap}
