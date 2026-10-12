@@ -218,6 +218,7 @@ export default function ContactPage({ mode = "contact" }: ContactPageProps) {
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState("");
   const [sent, setSent] = useState(false);
+  const [confirmationEmailError, setConfirmationEmailError] = useState("");
 
   const eyebrow = isMeetingLink
     ? "Zoom Link Request"
@@ -249,6 +250,7 @@ export default function ContactPage({ mode = "contact" }: ContactPageProps) {
     event.preventDefault();
     setBusy(true);
     setError("");
+    setConfirmationEmailError("");
     try {
       const name = form.name.trim();
       const email = form.email.trim();
@@ -260,8 +262,11 @@ export default function ContactPage({ mode = "contact" }: ContactPageProps) {
           headers: { "Content-Type": "application/json" },
           body: JSON.stringify({ name, email, phone, message }),
         });
-        const result = await response.json() as { error?: string };
+        const result = await response.json() as { error?: string; confirmationEmailSent?: boolean; confirmationEmailError?: string };
         if (!response.ok) throw new Error(result.error ?? "Your request could not be sent. Please try again.");
+        if (!result.confirmationEmailSent) {
+          setConfirmationEmailError(result.confirmationEmailError ?? "Your request was received, but we could not send the confirmation email. We will still follow up with the meeting link soon.");
+        }
         setForm(emptyForm);
         setSent(true);
         return;
@@ -294,7 +299,7 @@ export default function ContactPage({ mode = "contact" }: ContactPageProps) {
     : "Message sent";
 
   const successBody = isMeetingLink
-    ? "Thank you for reaching out. We'll send you the next Zoom meeting link soon."
+    ? "Thank you for requesting the meeting link. We will send it to your email soon. Please wait patiently and check your email frequently, including your spam folder."
     : isPrayer
     ? "Thank you for trusting us with your request. We'll be praying with you."
     : "Thank you for reaching out. We'll be in touch soon.";
@@ -377,10 +382,11 @@ export default function ContactPage({ mode = "contact" }: ContactPageProps) {
               </div>
               <h2 className="zm-display">{successTitle}</h2>
               <p>{successBody}</p>
+              {confirmationEmailError && <p role="alert">{confirmationEmailError}</p>}
               <button
                 type="button"
                 className="zm-submit"
-                onClick={() => setSent(false)}
+                onClick={() => { setSent(false); setConfirmationEmailError(""); }}
               >
                 Send another {isPrayer ? "request" : "message"}
               </button>

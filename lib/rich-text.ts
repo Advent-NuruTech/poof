@@ -85,6 +85,37 @@ export function extractFeaturedVideoUrl(value: string) {
   return "";
 }
 
+export function personalizedGreeting(name: string | undefined, date = new Date()) {
+  const hour = date.getHours();
+  const salutation = hour < 12 ? "Good morning" : hour < 17 ? "Good afternoon" : "Good evening";
+  const firstName = name?.trim().split(/\s+/)[0];
+  return firstName ? `${salutation} ${firstName},` : "Hello,";
+}
+
+export function inlineVideoLinks(value: string) {
+  const preview = (value: string) => {
+    const url = extractFeaturedVideoUrl(value);
+    const id = url.match(/(?:youtu\.be\/|youtube\.com\/(?:watch\?v=|embed\/|shorts\/))([\w-]{11})/)?.[1];
+    if (!id) return "";
+    return `<a href="${escapeAttribute(url)}" rel="noopener noreferrer"><img src="https://img.youtube.com/vi/${id}/hqdefault.jpg" alt="Watch the video" width="560"></a>`;
+  };
+  const replaceUrl = (candidate: string) => {
+    const punctuation = candidate.match(/[),.;!?]+$/)?.[0] ?? "";
+    const url = candidate.slice(0, candidate.length - punctuation.length);
+    const markup = preview(url);
+    return markup ? `${markup}${escapeAttribute(punctuation)}` : candidate;
+  };
+  const linked = value.replace(/<a\b([^>]*)>([\s\S]*?)<\/a>/gi, (whole, attributes: string) => {
+    const href = attributes.match(/\bhref\s*=\s*"([^"]*)"/i)?.[1];
+    if (!href || /<img\b/i.test(whole)) return whole;
+    return preview(href) || whole;
+  });
+  const videoUrlPattern = /(?:https?:\/\/)?(?:www\.)?(?:youtube\.com\/(?:watch\?[^\s<>"']*|embed\/|shorts\/)|youtu\.be\/)[^\s<>"']+/gi;
+  return linked.replace(/>([^<>]+)</g, (whole, text: string) =>
+    `>${text.replace(videoUrlPattern, replaceUrl)}<`,
+  );
+}
+
 export function richTextToPlainText(value: string) {
   return sanitizeRichText(value)
     .replace(/<(?:br|\/(?:p|div|h[1-4]|li|blockquote))\s*>/gi, "\n")

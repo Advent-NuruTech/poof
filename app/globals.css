@@ -307,6 +307,7 @@ body{font-size:16px}.home-section-title h2{font-size:25px}.latest-card .video-co
 .mailing-template-card>header span{padding-top:9px;border-top:1px solid #d8b84d;font-size:14px;font-style:italic}
 .mailing-template-card>section{padding:20px}
 .mailing-template-card>section>small{font-size:12px;line-height:1.5}
+.mailing-preview-greeting{margin:10px 0;color:#46504d;font-size:12px;font-weight:600}
 .mailing-template-preview h3{font-size:25px;line-height:1.2}
 .mailing-preview-body{font-size:16px;line-height:1.7}
 .mailing-preview-body img{display:block;width:100%;height:auto;margin:18px auto;border-radius:8px}

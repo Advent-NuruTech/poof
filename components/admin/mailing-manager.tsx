@@ -8,7 +8,7 @@ import { auth, db } from "@/lib/firebase";
 import { endAdminSession } from "@/lib/admin-session";
 import { signInWithGoogle } from "@/lib/sign-in";
 import { readApiResponse } from "@/lib/api-response";
-import { automaticPreviewText, extractFeaturedVideoUrl, sanitizeRichText } from "@/lib/rich-text";
+import { automaticPreviewText, extractFeaturedVideoUrl, inlineVideoLinks, personalizedGreeting, sanitizeRichText } from "@/lib/rich-text";
 import RichTextEditor from "@/components/admin/rich-text-editor";
 
 type MailingTab = "meeting" | "newsletter";
@@ -96,6 +96,7 @@ export default function MailingManager() {
   const [audienceSince, setAudienceSince] = useState("");
   const [historySourceId, setHistorySourceId] = useState("");
   const [memberEmail, setMemberEmail] = useState("");
+  const [memberName, setMemberName] = useState("");
   const [editingScheduleId, setEditingScheduleId] = useState<string | null>(null);
   const [data, setData] = useState<MailingData>({ members: [], subscribers: [], schedules: [], history: [], counts: { verified: 0, pending: 0, active: 0, unsubscribed: 0, totalMembers: 0, totalSubscribers: 0, emailsSent: 0 } });
   const [loading, setLoading] = useState(false);
@@ -169,8 +170,9 @@ export default function MailingManager() {
     event.preventDefault();
     setError(""); setNotice(""); setBusy(true);
     try {
-      const result = await request("/api/mailing", { method: "POST", body: JSON.stringify({ action: "add-member", email: memberEmail }) });
+      const result = await request("/api/mailing", { method: "POST", body: JSON.stringify({ action: "add-member", email: memberEmail, name: memberName }) });
       setMemberEmail("");
+      setMemberName("");
       setNotice(result.status === "already-verified" ? "That email is already verified." : "Email added and marked verified.");
       await refresh();
     } catch (reason) {
@@ -328,6 +330,7 @@ export default function MailingManager() {
   const effectiveVideoUrl = inlineVideoUrl || campaign.videoUrl;
   const previewVideo = videoId(effectiveVideoUrl);
   const greeting = tab === "meeting" ? "Meeting invitation" : "Faith of the Pioneers newsletter";
+  const greetingPreview = personalizedGreeting("Byron");
   const automaticPreheader = automaticPreviewText(campaign.body);
   const previewPreheader = preheaderEdited ? campaign.preheader : automaticPreheader;
 
@@ -350,7 +353,7 @@ export default function MailingManager() {
           <section className="mailing-grid">
             <div className="mailing-people">
               <div className="mailing-section-heading"><div><span className="eyebrow">{tab === "meeting" ? "ONLINE MEETING MEMBERS" : "NEWSLETTER AUDIENCE"}</span><h2>{tab === "meeting" ? "Email list" : "Subscribers"}</h2></div><button className="text-button" onClick={() => void refresh()} disabled={loading}>{loading ? "Refreshing…" : "Refresh"}</button></div>
-              {tab === "meeting" && <form className="mailing-add-form" onSubmit={(event) => void addMember(event)}><label htmlFor="add-member-email">Add an email as verified</label><div><input id="add-member-email" type="email" required maxLength={254} value={memberEmail} onChange={(event) => setMemberEmail(event.target.value)} placeholder="person@example.com"/><button className="primary-button" disabled={busy}>Add email</button></div></form>}
+              {tab === "meeting" && <form className="mailing-add-form" onSubmit={(event) => void addMember(event)}><label htmlFor="add-member-name">First name (optional)<input id="add-member-name" type="text" maxLength={120} value={memberName} onChange={(event) => setMemberName(event.target.value)} placeholder="Byron"/></label><label htmlFor="add-member-email">Email address<input id="add-member-email" type="email" required maxLength={254} value={memberEmail} onChange={(event) => setMemberEmail(event.target.value)} placeholder="person@example.com"/></label><button className="primary-button" disabled={busy}>Add email as verified</button></form>}
               {currentMembers.length > 0 && <p className="mailing-helper">Showing up to the 500 most recent addresses. All-audience sends include every eligible contact.</p>}
               {audienceMode === "selected" && currentMembers.length > 0 && <button type="button" className="text-button mailing-select-visible" onClick={() => {
                 const eligible = currentMembers.filter((member) => member.status === (tab === "meeting" ? "verified" : "active")).map((member) => member.id);
@@ -365,20 +368,20 @@ export default function MailingManager() {
             </div>
             <div className="mailing-compose">
               <div className="mailing-section-heading"><div><span className="eyebrow">{tab === "meeting" ? "MEETING NOTIFICATION" : "NEWSLETTER EDITOR"}</span><h2>{tab === "meeting" ? "Compose an email" : "Create a newsletter"}</h2></div></div>
-              <p className="mailing-helper">{tab === "meeting" ? "Only verified meeting members receive these messages. The join link becomes a secure, styled button." : "A responsive, inbox-friendly template includes your featured story, linked video preview, and unsubscribe link."}</p>
+              <p className="mailing-helper">{tab === "meeting" ? "Only verified meeting members receive these messages. The join link becomes a secure, styled button." : "A responsive, inbox-friendly template includes your featured story, linked video preview, and unsubscribe link."} Emails use the recipient&apos;s first name when available and greet them according to the send time.</p>
               <form className="mailing-form" onSubmit={(event) => void submitCampaign(event, "send")}>
                 <label>Subject<input required maxLength={180} value={campaign.subject} onChange={(event) => updateCampaign("subject", event.target.value)} placeholder={tab === "meeting" ? "This week's online meeting" : "A note from Faith of the Pioneers"}/></label>
                 <label>Letter header<input required maxLength={140} value={campaign.letterTitle} onChange={(event) => updateCampaign("letterTitle", event.target.value)} placeholder={tab === "meeting" ? "Online meeting reminder" : "A letter for your journey"}/><small>This is the short line beneath the ministry name in the email banner.</small></label>
                 <label>Headline<input required maxLength={180} value={campaign.headline} onChange={(event) => updateCampaign("headline", event.target.value)} placeholder={tab === "meeting" ? "You're invited to join us" : "Encouragement for your week"}/></label>
                 <label>Inbox preview text<input maxLength={180} value={preheaderEdited ? campaign.preheader : automaticPreheader} onChange={(event) => updateCampaign("preheader", event.target.value)} placeholder="Automatically generated from your message"/><small>Suggested from your message. Edit it here if you prefer different text.</small></label>
                 {preheaderEdited && <button type="button" className="text-button" onClick={() => { setCampaign((current) => ({ ...current, preheader: "" })); setPreheaderEdited(false); }}>Use message preview</button>}
-                <div className="mailing-rich-field"><strong>Message</strong><RichTextEditor label="Message" placeholder={tab === "meeting" ? "Write your meeting announcement…" : "Write your newsletter…"} value={campaign.body} maxTextLength={12000} allowImages onChange={(value) => updateCampaign("body", value)} className="rich-editor-compact"/><small>Add an image from a public HTTPS URL, or paste a YouTube link into your message for an automatic thumbnail.</small></div>
+                <div className="mailing-rich-field"><strong>Message</strong><RichTextEditor label="Message" placeholder={tab === "meeting" ? "Write your meeting announcement…" : "Write your newsletter…"} value={campaign.body} maxTextLength={12000} allowImages onChange={(value) => updateCampaign("body", value)} className="rich-editor-compact"/><small>Add an image from a public HTTPS URL, or paste a YouTube link into your message for a clickable thumbnail at that position. Email apps do not support reliable embedded playback.</small></div>
                 <label>{tab === "meeting" ? "Meeting link (HTTPS)" : "Button link (optional)"}<input type="url" required={tab === "meeting"} value={campaign.buttonUrl} onChange={(event) => updateCampaign("buttonUrl", event.target.value)} placeholder="https://…"/></label>
                 {tab === "newsletter" && <><label>Button label<input maxLength={80} value={campaign.buttonLabel} onChange={(event) => updateCampaign("buttonLabel", event.target.value)} placeholder="Read the full story"/></label><label>Featured video URL (optional)<input type="url" value={campaign.videoUrl} onChange={(event) => updateCampaign("videoUrl", event.target.value)} placeholder="https://www.youtube.com/watch?v=…"/><small>Email apps block embedded playback; subscribers get a clickable video preview. A YouTube link in the message takes priority automatically.</small></label>{effectiveVideoUrl && (previewVideo ? <div className="mailing-video-preview"><img src={`https://img.youtube.com/vi/${previewVideo}/hqdefault.jpg`} alt="Video thumbnail preview"/><span>Clickable video preview in your newsletter</span></div> : <div className="mailing-generic-video">▶ <span>Featured video preview</span></div>)}</>}
                 <label>Recipients<select value={audienceMode} onChange={(event) => {
                   const value = event.target.value;
                   if (value === "all" || value === "selected" || value === "new") setAudienceMode(value);
-                }}><option value="all">All eligible {tab === "meeting" ? "members" : "subscribers"}</option><option value="selected">Only selected addresses shown in the list</option>{audienceSince && <option value="new">{historySourceId ? "New members since the original email" : "New members since the saved date"}</option>}</select><small>{audienceMode === "all" ? `${activeCount.toLocaleString()} eligible recipients across the full list.` : audienceMode === "selected" ? `${recipientIds.length.toLocaleString()} selected from the most recent addresses shown.` : `Eligible contacts added after ${dateLabel(audienceSince)}.`}</small></label>
+                }}><option value="all">All eligible {tab === "meeting" ? "members" : "subscribers"}</option><option value="selected">Custom selection (choose members below)</option>{audienceSince && <option value="new">{historySourceId ? "New members since the original email" : "New members since the saved date"}</option>}</select><small>{audienceMode === "all" ? `${activeCount.toLocaleString()} eligible recipients across the full list.` : audienceMode === "selected" ? `${recipientIds.length.toLocaleString()} selected from up to 500 recent addresses shown below.` : `Eligible contacts added after ${dateLabel(audienceSince)}.`}</small></label>
                 {audienceMode === "selected" && recipientIds.length === 0 && <p className="mailing-audience-warning">Choose eligible email addresses from the list before sending or scheduling.</p>}
                 <div className="mailing-form-actions"><button className="primary-button" type="submit" disabled={busy || (audienceMode === "selected" && recipientIds.length === 0)}>{busy ? "Sending…" : audienceMode === "selected" ? `Send to ${recipientIds.length.toLocaleString()} selected` : audienceMode === "new" ? "Send to new members" : `Send to ${activeCount.toLocaleString()}`}</button></div>
               </form>
@@ -390,7 +393,7 @@ export default function MailingManager() {
                 {editingScheduleId && <button type="button" className="text-button" onClick={() => { setEditingScheduleId(null); setCampaign({ ...initialCampaign, letterTitle: tab === "meeting" ? "Online meeting reminder" : "A letter for your journey" }); setPreheaderEdited(false); setAudienceMode("all"); setRecipientIds([]); setAudienceSince(""); setHistorySourceId(""); setNotice(""); }}>Cancel editing</button>}
                 <button className="outline-button" disabled={busy || (audienceMode === "selected" && recipientIds.length === 0)}>{busy ? "Saving…" : editingScheduleId ? "Update schedule" : "Schedule email"}</button>
               </form>
-              <aside className="mailing-template-preview"><span className="eyebrow">TEMPLATE PREVIEW</span><div className="mailing-template-card"><header><img src="/images/logo.jpeg" alt="Faith of the Pioneers"/><strong>FAITH OF THE PIONEERS</strong><span>{campaign.letterTitle || "Your letter header"}</span></header><section><small>{greeting} · {previewPreheader || "Your preview text appears here."}</small><h3>{campaign.headline || "Your headline appears here"}</h3>{campaign.body ? <div className="mailing-preview-body" dangerouslySetInnerHTML={{ __html: sanitizeRichText(campaign.body) }}/>: <p>Your email message preview will appear here as you write.</p>}{campaign.buttonUrl && <span className="mailing-preview-button">{campaign.buttonLabel || (tab === "meeting" ? "Join the meeting" : "Learn more")}</span>}{previewVideo ? <img src={`https://img.youtube.com/vi/${previewVideo}/hqdefault.jpg`} alt="Featured video thumbnail"/> : effectiveVideoUrl && <div className="mailing-generic-video">▶ <span>Featured video preview</span></div>}</section></div></aside>
+              <aside className="mailing-template-preview"><span className="eyebrow">TEMPLATE PREVIEW</span><div className="mailing-template-card"><header><img src="/images/logo.jpeg" alt="Faith of the Pioneers"/><strong>FAITH OF THE PIONEERS</strong><span>{campaign.letterTitle || "Your letter header"}</span></header><section><small>{greeting} · {previewPreheader || "Your preview text appears here."}</small><p className="mailing-preview-greeting">{greetingPreview}</p><h3>{campaign.headline || "Your headline appears here"}</h3>{campaign.body ? <div className="mailing-preview-body" dangerouslySetInnerHTML={{ __html: inlineVideoLinks(sanitizeRichText(campaign.body)) }}/>: <p>Your email message preview will appear here as you write.</p>}{campaign.buttonUrl && <span className="mailing-preview-button">{campaign.buttonLabel || (tab === "meeting" ? "Join the meeting" : "Learn more")}</span>}{!inlineVideoUrl && (previewVideo ? <img src={`https://img.youtube.com/vi/${previewVideo}/hqdefault.jpg`} alt="Featured video thumbnail"/> : effectiveVideoUrl && <div className="mailing-generic-video">▶ <span>Featured video preview</span></div>)}</section></div></aside>
             </div>
           </section>
           <section className="mailing-history">

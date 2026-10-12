@@ -2,6 +2,13 @@
 ## Ongoing working preference
 - Whenever project changes are made, record the major change and any build/runtime errors with their verified fixes in this file before finishing. When the user asks, provide the exact suggested Git commit message; do not create a commit unless explicitly requested.
 
+## 2026-10-13: Personalize mailing and confirm meeting-link requests
+- **Major changes:** YouTube links in campaign messages now render as clickable thumbnails at the inline link position instead of only as a separate featured-video block; separate featured-video rendering remains when no inline link exists. Campaign email greetings use the recipient's first name and send-time greeting, with a generic fallback. Newsletter signup and administrator-added meeting members can now supply a first name.
+- **Meeting requests:** Successful meeting-link requests now send a confirmation email using the same latest-three-video selection and thumbnail logic as the newsletter welcome email. The form confirms that the link will be sent soon and asks requesters to check email; email delivery failures are logged and shown without losing the saved request.
+- **Recipients:** The mailing editor keeps its existing all/custom eligible-recipient delivery support and clarifies selection of custom members from the displayed address list.
+- **Lint issue and fix:** The first focused ESLint pass flagged an unescaped apostrophe in new JSX text; changed it to `&apos;`. The follow-up lint pass completed with zero errors and three existing external-image warnings.
+- **Verification:** Focused TypeScript diagnostics and `npx.cmd --no-install tsc --noEmit` passed. `npm.cmd run build` passed and generated the mailing routes. Rendered-email checks verified inline video position, no duplicate bottom preview, first-name greeting, and the standalone featured-video fallback. `git diff --check` passed. Live Firebase/Resend delivery was not exercised.
+
 ## 2026-10-12: Work around production Firebase Auth runtime crash
 - **Bug:** The live Vercel `/api/mailing` and `/api/mailing/subscribe` endpoints still return empty HTTP 500 responses. A prior Node `22.x` engine pin did not resolve the live crash; prior Vercel logs traced the failure to Firebase Admin Auth loading `jwks-rsa`/ESM-only `jose` before route handlers could respond.
 - **Fix:** Removed the Firebase Admin Auth dependency from the shared mailing server module. Admin ID tokens are now validated by Firebase's `accounts:lookup` API using the configured public Firebase API key; the admin Firestore record and enabled/expiry checks remain unchanged. Documented the required Vercel API-key setting.

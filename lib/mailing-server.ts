@@ -2,7 +2,7 @@ import { createHash, createHmac } from "node:crypto";
 import { applicationDefault, cert, getApp, getApps, initializeApp, type ServiceAccount } from "firebase-admin/app";
 import { AggregateField, FieldValue, getFirestore, Timestamp, type Firestore } from "firebase-admin/firestore";
 import { Resend } from "resend";
-import { automaticPreviewText, extractFeaturedVideoUrl, richTextToPlainText, sanitizeRichText } from "@/lib/rich-text";
+import { automaticPreviewText, extractFeaturedVideoUrl, inlineVideoLinks, personalizedGreeting, richTextToPlainText, sanitizeRichText } from "@/lib/rich-text";
 import { getPublicCatalog, type FeedVideo } from "@/lib/catalog-feed";
 
 function parseServiceAccount(value: string): ServiceAccount {
@@ -165,7 +165,7 @@ export async function getCampaignRecipients(db: Firestore, campaign: Campaign, a
       const snapshots = await db.getAll(...refs);
       recipients.push(...snapshots
         .filter((item) => item.exists && item.get("status") === eligibleStatus)
-        .map((item) => ({ id: item.id, email: String(item.get("email") ?? "") }))
+        .map((item) => ({ id: item.id, email: String(item.get("email") ?? ""), name: String(item.get("name") ?? "") }))
         .filter((item) => item.email));
     }
     return recipients;
@@ -176,7 +176,7 @@ export async function getCampaignRecipients(db: Firestore, campaign: Campaign, a
   const snapshot = await query.limit(10000).get();
   return snapshot.docs
     .filter((item) => item.get("status") === eligibleStatus)
-    .map((item) => ({ id: item.id, email: String(item.get("email") ?? "") }))
+    .map((item) => ({ id: item.id, email: String(item.get("email") ?? ""), name: String(item.get("name") ?? "") }))
     .filter((item) => item.email);
 }
 
@@ -195,10 +195,10 @@ function safeUrl(value: string) {
 
 function bodyHtml(value: string) {
   const richTags = /<\/?(?:a|b|blockquote|br|div|em|font|h[1-4]|i|img|li|ol|p|span|strong|u|ul)\b/i;
-  if (!richTags.test(value)) {
-    return value.split(/\n{2,}/).map((paragraph) => `<p style="margin:0 0 20px;line-height:1.75;color:#46504d;font-size:18px">${escapeHtml(paragraph).replace(/\n/g, "<br>")}</p>`).join("");
-  }
-  return sanitizeRichText(value)
+  const html = !richTags.test(value)
+    ? value.split(/\n{2,}/).map((paragraph) => `<p style="margin:0 0 20px;line-height:1.75;color:#46504d;font-size:18px">${escapeHtml(paragraph).replace(/\n/g, "<br>")}</p>`).join("")
+    : sanitizeRichText(value);
+  return inlineVideoLinks(html)
     .replace(/<p>/g, '<p style="margin:0 0 20px;line-height:1.75;color:#46504d;font-size:18px">')
     .replace(/<img\b([^>]*)>/gi, '<img$1 style="display:block;width:100%;max-width:640px;height:auto;margin:24px auto;border:0;border-radius:8px">');
 }
@@ -207,15 +207,17 @@ export function renderCampaign(
   campaign: Campaign,
   unsubscribeUrl = "",
   brandLogoUrl = "",
-  options: { includeFeaturedVideo?: boolean; textSuffix?: string } = {},
+  options: { includeFeaturedVideo?: boolean; textSuffix?: string; recipientName?: string } = {},
 ) {
   const buttonUrl = safeUrl(campaign.buttonUrl);
-  const videoUrl = options.includeFeaturedVideo === false ? "" : safeUrl(campaign.videoUrl || extractFeaturedVideoUrl(campaign.body));
+  const inlineVideoUrl = safeUrl(extractFeaturedVideoUrl(campaign.body));
+  const videoUrl = options.includeFeaturedVideo === false ? "" : safeUrl(inlineVideoUrl || campaign.videoUrl);
   const logoUrl = safeUrl(brandLogoUrl);
   const youtubeId = videoUrl.match(/(?:youtu\.be\/|youtube\.com\/(?:watch\?v=|embed\/|shorts\/))([\w-]{11})/)?.[1];
-  const preview = youtubeId
+  const preview = inlineVideoUrl ? "" : youtubeId
     ? `<a href="${escapeHtml(videoUrl)}" style="display:block;margin:26px 0;text-decoration:none"><img src="https://img.youtube.com/vi/${youtubeId}/hqdefault.jpg" alt="Watch the featured video" width="560" style="display:block;width:100%;max-width:560px;border:0;border-radius:12px"><span style="display:block;padding:12px;color:#c51c31;font-weight:700">▶ Watch the video</span></a>`
     : videoUrl ? `<a href="${escapeHtml(videoUrl)}" style="display:block;margin:26px 0;padding:42px 20px;border-radius:12px;background:#172126;color:#fff;text-align:center;text-decoration:none"><span style="display:inline-block;padding:12px 17px;border:1px solid #ffffff80;border-radius:50%;font-size:20px">▶</span><strong style="display:block;margin-top:13px">Watch the featured video</strong></a>` : "";
+  const greeting = `<p style="margin:0 0 16px;color:#46504d;font-size:17px;line-height:1.5">${escapeHtml(personalizedGreeting(options.recipientName))}</p>`;
   const button = buttonUrl
     ? `<p style="margin:28px 0"><a href="${escapeHtml(buttonUrl)}" style="display:inline-block;background:#172126;color:#fff;padding:14px 24px;border-radius:28px;text-decoration:none;font-weight:700">${escapeHtml(campaign.buttonLabel || "Learn more")}</a></p>`
     : "";
@@ -229,8 +231,8 @@ export function renderCampaign(
   const siteUrl = logoUrl ? new URL(logoUrl).origin : "";
   const footerSite = siteUrl ? `<a href="${escapeHtml(siteUrl)}" style="color:#263e69;text-decoration:underline">Visit Faith of the Pioneers</a>` : "Faith of the Pioneers";
   return {
-    html: `<!doctype html><html><head><meta name="viewport" content="width=device-width,initial-scale=1"><style>@media only screen and (max-width:600px){.email-outer{padding:0!important}.email-card{border-radius:0!important}.email-content{padding:24px 20px!important}.email-brand{padding:25px 18px!important}.email-headline{font-size:29px!important}.email-body{font-size:18px!important}}</style></head><body style="margin:0;background:#f1f3f2;font-family:Arial,Helvetica,sans-serif;color:#172126"><div style="display:none;max-height:0;overflow:hidden;opacity:0">${escapeHtml(campaign.preheader || automaticPreviewText(campaign.body))}</div><table role="presentation" class="email-outer" width="100%" cellspacing="0" cellpadding="0" style="background:#f1f3f2;padding:24px 14px"><tr><td align="center"><table role="presentation" class="email-card" width="720" cellspacing="0" cellpadding="0" style="width:100%;max-width:720px;background:#fff;border:1px solid #e5e8e6;border-radius:12px;overflow:hidden"><tr><td class="email-brand" align="center" style="padding:28px 24px;background:#082d63;background-image:linear-gradient(145deg,#0c3978,#061e49);color:#fff">${logo}<div style="font-size:12px;letter-spacing:3px;font-weight:700;color:#f3d875">FAITH OF THE PIONEERS</div><div style="height:1px;width:64px;background:#d8b84d;margin:15px auto 11px"></div><div style="font-size:17px;line-height:1.4;font-style:italic;color:#fff">${letterTitle}</div></td></tr><tr><td class="email-content" style="padding:36px 48px 40px"><div style="height:3px;width:42px;background:#c51c31;margin:0 0 20px"></div><h1 class="email-headline" style="font-size:34px;line-height:1.18;letter-spacing:-.5px;margin:0 0 24px;color:#172126">${escapeHtml(campaign.headline)}</h1><div class="email-body">${bodyHtml(campaign.body)}</div>${preview}${button}${unsubscribe}</td></tr><tr><td style="padding:22px 28px;background:#f7f8f6;border-top:1px solid #e8ebe8;color:#68736e;font-size:13px;line-height:1.7;text-align:center"><strong style="color:#243b64;letter-spacing:1.5px">FAITH OF THE PIONEERS</strong><br>Online fellowship, Bible study, and worship<br>${footerSite}<br><span style="font-size:11px;color:#84908a">© Faith of the Pioneers</span></td></tr></table></td></tr></table></body></html>`,
-    text: [letterTitle, campaign.headline, richTextToPlainText(campaign.body), videoUrl ? `Watch: ${videoUrl}` : "", buttonUrl ? `${campaign.buttonLabel || "Learn more"}: ${buttonUrl}` : "", options.textSuffix, unsubscribeUrl ? `Unsubscribe: ${unsubscribeUrl}` : "", siteUrl ? `Visit Faith of the Pioneers: ${siteUrl}` : ""].filter(Boolean).join("\n\n"),
+    html: `<!doctype html><html><head><meta name="viewport" content="width=device-width,initial-scale=1"><style>@media only screen and (max-width:600px){.email-outer{padding:0!important}.email-card{border-radius:0!important}.email-content{padding:24px 20px!important}.email-brand{padding:25px 18px!important}.email-headline{font-size:29px!important}.email-body{font-size:18px!important}}</style></head><body style="margin:0;background:#f1f3f2;font-family:Arial,Helvetica,sans-serif;color:#172126"><div style="display:none;max-height:0;overflow:hidden;opacity:0">${escapeHtml(campaign.preheader || automaticPreviewText(campaign.body))}</div><table role="presentation" class="email-outer" width="100%" cellspacing="0" cellpadding="0" style="background:#f1f3f2;padding:24px 14px"><tr><td align="center"><table role="presentation" class="email-card" width="720" cellspacing="0" cellpadding="0" style="width:100%;max-width:720px;background:#fff;border:1px solid #e5e8e6;border-radius:12px;overflow:hidden"><tr><td class="email-brand" align="center" style="padding:28px 24px;background:#082d63;background-image:linear-gradient(145deg,#0c3978,#061e49);color:#fff">${logo}<div style="font-size:12px;letter-spacing:3px;font-weight:700;color:#f3d875">FAITH OF THE PIONEERS</div><div style="height:1px;width:64px;background:#d8b84d;margin:15px auto 11px"></div><div style="font-size:17px;line-height:1.4;font-style:italic;color:#fff">${letterTitle}</div></td></tr><tr><td class="email-content" style="padding:36px 48px 40px"><div style="height:3px;width:42px;background:#c51c31;margin:0 0 20px"></div>${greeting}<h1 class="email-headline" style="font-size:34px;line-height:1.18;letter-spacing:-.5px;margin:0 0 24px;color:#172126">${escapeHtml(campaign.headline)}</h1><div class="email-body">${bodyHtml(campaign.body)}</div>${preview}${button}${unsubscribe}</td></tr><tr><td style="padding:22px 28px;background:#f7f8f6;border-top:1px solid #e8ebe8;color:#68736e;font-size:13px;line-height:1.7;text-align:center"><strong style="color:#243b64;letter-spacing:1.5px">FAITH OF THE PIONEERS</strong><br>Online fellowship, Bible study, and worship<br>${footerSite}<br><span style="font-size:11px;color:#84908a">© Faith of the Pioneers</span></td></tr></table></td></tr></table></body></html>`,
+    text: [personalizedGreeting(options.recipientName), letterTitle, campaign.headline, richTextToPlainText(campaign.body), inlineVideoUrl ? "" : videoUrl ? `Watch: ${videoUrl}` : "", buttonUrl ? `${campaign.buttonLabel || "Learn more"}: ${buttonUrl}` : "", options.textSuffix, unsubscribeUrl ? `Unsubscribe: ${unsubscribeUrl}` : "", siteUrl ? `Visit Faith of the Pioneers: ${siteUrl}` : ""].filter(Boolean).join("\n\n"),
   };
 }
 
@@ -254,7 +256,7 @@ function createSignature(value: string, secret: string) {
 
 export async function deliverCampaign(
   campaign: Campaign,
-  recipients: Array<{ id: string; email: string }>,
+  recipients: Array<{ id: string; email: string; name?: string }>,
   baseUrl: string,
   idempotencyPrefix: string,
   options: { includeFeaturedVideo?: boolean; textSuffix?: string } = {},
@@ -273,7 +275,10 @@ export async function deliverCampaign(
     const results = await Promise.all(group.map(async (recipient) => {
       const unsubscribe = campaign.kind === "newsletter" ? unsubscribeLink(recipient.id, baseUrl) : "";
       const oneClickUnsubscribe = campaign.kind === "newsletter" ? oneClickUnsubscribeLink(recipient.id, baseUrl) : "";
-      const content = renderCampaign(campaign, unsubscribe, `${baseUrl.replace(/\/$/, "")}/images/logo.jpeg`, options);
+      const content = renderCampaign(campaign, unsubscribe, `${baseUrl.replace(/\/$/, "")}/images/logo.jpeg`, {
+        ...options,
+        recipientName: recipient.name,
+      });
       try {
         const { error } = await resend.emails.send({
           from,
@@ -305,18 +310,32 @@ function welcomeVideoMarkup(videos: FeedVideo[]) {
     if (!/^[\w-]{11}$/.test(video.id)) return "";
     const watchUrl = `https://www.youtube.com/watch?v=${encodeURIComponent(video.id)}`;
     const thumbnailUrl = `https://img.youtube.com/vi/${encodeURIComponent(video.id)}/hqdefault.jpg`;
-    return `<p><a href="${watchUrl}"><img src="${thumbnailUrl}" alt="Watch ${escapeHtml(video.title)}"></a><br><a href="${watchUrl}"><strong>${escapeHtml(video.title || "Watch the latest video")}</strong></a></p>`;
+    return `<p><a href="${watchUrl}"><img src="${thumbnailUrl}" alt="Watch ${escapeHtml(video.title)}"></a><br><strong>${escapeHtml(video.title || "Watch the latest video")}</strong></p>`;
   }).filter(Boolean).join("");
 }
 
-export async function sendNewsletterWelcome(subscriber: { id: string; email: string }, baseUrl: string) {
+async function latestWelcomeVideos() {
   const feed = await getPublicCatalog();
-  const videos = feed.videos
+  return feed.videos
     .filter((video) => video.availability !== "unavailable" && video.website?.hidden !== true && /^[\w-]{11}$/.test(video.id))
     .sort((first, second) => Date.parse(second.publishedAt) - Date.parse(first.publishedAt))
     .slice(0, 3);
-  const videoSection = videos.length
+}
+
+function welcomeVideoSection(videos: FeedVideo[]) {
+  return videos.length
     ? `<p>Here are three of our latest videos to enjoy:</p>${welcomeVideoMarkup(videos)}`
+    : `<p>We share Bible studies, encouragement, and fellowship through our latest videos and updates. Visit our website to explore what is new.</p>`;
+}
+
+function welcomeVideoText(videos: FeedVideo[]) {
+  return videos.map((video) => `Latest video: ${video.title} — https://www.youtube.com/watch?v=${encodeURIComponent(video.id)}`).join("\n");
+}
+
+export async function sendNewsletterWelcome(subscriber: { id: string; email: string; name?: string }, baseUrl: string) {
+  const videos = await latestWelcomeVideos();
+  const videoSection = videos.length
+    ? welcomeVideoSection(videos)
     : `<p>We share Bible studies, encouragement, and fellowship through our latest videos and updates. Visit our website to explore what is new.</p>`;
   const campaign: Campaign = {
     kind: "newsletter",
@@ -329,12 +348,34 @@ export async function sendNewsletterWelcome(subscriber: { id: string; email: str
     buttonUrl: baseUrl,
     videoUrl: "",
   };
-  const videoText = videos.map((video) => `Latest video: ${video.title} — https://www.youtube.com/watch?v=${encodeURIComponent(video.id)}`).join("\n");
+  const videoText = welcomeVideoText(videos);
   return deliverCampaign(
     campaign,
     [subscriber],
     baseUrl,
     `newsletter-welcome:${subscriber.id}:${Date.now()}`,
     { includeFeaturedVideo: false, textSuffix: videoText },
+  );
+}
+
+export async function sendMeetingRequestWelcome(requester: { id: string; email: string; name: string }, baseUrl: string) {
+  const videos = await latestWelcomeVideos();
+  const campaign: Campaign = {
+    kind: "meeting",
+    subject: "Thank you for requesting a meeting link",
+    letterTitle: "Online meeting link request",
+    headline: "Thank you for reaching out",
+    preheader: "We will send the meeting link soon. Please check your email regularly.",
+    body: `<p>Thank you for requesting the online meeting link. We will send the link to this email address soon. Please wait patiently and check your email regularly.</p>${welcomeVideoSection(videos)}<p>We look forward to welcoming you to our online fellowship.</p>`,
+    buttonLabel: "Visit our website",
+    buttonUrl: baseUrl,
+    videoUrl: "",
+  };
+  return deliverCampaign(
+    campaign,
+    [requester],
+    baseUrl,
+    `meeting-request-welcome:${requester.id}:${Date.now()}`,
+    { includeFeaturedVideo: false, textSuffix: welcomeVideoText(videos) },
   );
 }

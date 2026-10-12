@@ -1,5 +1,5 @@
 import { createHash, randomUUID } from "node:crypto";
-import { getMailDb, FieldValue } from "@/lib/mailing-server";
+import { getMailDb, FieldValue, sendMeetingRequestWelcome } from "@/lib/mailing-server";
 
 export async function POST(request: Request) {
   try {
@@ -26,9 +26,35 @@ export async function POST(request: Request) {
         transaction.create(member, { email, name, status: "pending", source: "meeting-request", createdAt: now });
         return "pending";
       }
+      transaction.update(member, { name });
       return prior.get("status") === "verified" ? "verified" : "pending";
     });
-    return Response.json({ received: true, status: result }, { status: 201 });
+    const baseUrl = process.env.NEXT_PUBLIC_SITE_URL?.replace(/\/$/, "") ||
+      `https://${process.env.VERCEL_URL ?? new URL(request.url).host}`;
+    try {
+      const delivery = await sendMeetingRequestWelcome({ id: memberId, email, name }, baseUrl);
+      if (delivery.failures.length) {
+        console.error("Meeting request confirmation email delivery failed", {
+          memberId,
+          error: delivery.failures[0].error,
+        });
+        return Response.json({
+          received: true,
+          status: result,
+          confirmationEmailSent: false,
+          confirmationEmailError: "Your request was received, but we could not send the confirmation email. We will still follow up with the meeting link soon.",
+        }, { status: 201 });
+      }
+      return Response.json({ received: true, status: result, confirmationEmailSent: true }, { status: 201 });
+    } catch (error) {
+      console.error("Meeting request confirmation email failed", { memberId, error });
+      return Response.json({
+        received: true,
+        status: result,
+        confirmationEmailSent: false,
+        confirmationEmailError: "Your request was received, but we could not send the confirmation email. We will still follow up with the meeting link soon.",
+      }, { status: 201 });
+    }
   } catch (error) {
     console.error("Meeting link request failed", error);
     return Response.json({ error: "Your request could not be sent. Please try again." }, { status: 500 });

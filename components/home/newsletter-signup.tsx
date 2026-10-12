@@ -14,6 +14,7 @@ const GENERIC_ERROR =
 "We could not save your subscription. Please try again.";
 
 export default function NewsletterSignup() {
+const [name, setName] = useState("");
 const [email, setEmail] = useState("");
 const [busy, setBusy] = useState(false);
 const [message, setMessage] = useState("");
@@ -35,7 +36,7 @@ try {
     headers: {
       "Content-Type": "application/json",
     },
-    body: JSON.stringify({ email: email.trim() }),
+    body: JSON.stringify({ name: name.trim(), email: email.trim() }),
   });
 
   let result: SubscribeResponse;
@@ -64,6 +65,7 @@ try {
   }
 
   setEmail("");
+  setName("");
 } catch (error) {
   setFailed(true);
   setMessage(
@@ -98,6 +100,19 @@ SUBSCRIBE TO OUR NEWSLETTER
   </div>
 
   <form className="newsletter-form" onSubmit={submit}>
+    <label htmlFor="newsletter-name">First name (optional)</label>
+    <input
+      className="newsletter-name-input"
+      id="newsletter-name"
+      name="given-name"
+      type="text"
+      maxLength={120}
+      autoComplete="given-name"
+      value={name}
+      onChange={(event) => setName(event.target.value)}
+      placeholder="Byron"
+      disabled={busy}
+    />
     <label htmlFor="newsletter-email">Email address</label>
 
     <div className="newsletter-input-group">
@@ -218,11 +233,29 @@ SUBSCRIBE TO OUR NEWSLETTER
         box-shadow 160ms ease;
     }
 
+    .newsletter-name-input {
+      width: 100%;
+      min-height: 48px;
+      padding: 12px 14px;
+      color: #0f172a;
+      background: #ffffff;
+      border: 1px solid #bfdbfe;
+      border-radius: 8px;
+      outline: none;
+      font: inherit;
+      font-size: 0.95rem;
+    }
+
     .newsletter-input-group input::placeholder {
       color: #64748b;
     }
 
     .newsletter-input-group input:focus-visible {
+      border-color: #93c5fd;
+      box-shadow: 0 0 0 3px rgba(191, 219, 254, 0.35);
+    }
+
+    .newsletter-name-input:focus-visible {
       border-color: #93c5fd;
       box-shadow: 0 0 0 3px rgba(191, 219, 254, 0.35);
     }
@@ -257,7 +290,8 @@ SUBSCRIBE TO OUR NEWSLETTER
     }
 
     .newsletter-input-group button:disabled,
-    .newsletter-input-group input:disabled {
+    .newsletter-input-group input:disabled,
+    .newsletter-name-input:disabled {
       opacity: 0.65;
       cursor: not-allowed;
     }
