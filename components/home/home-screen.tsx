@@ -14,6 +14,7 @@ import PublicHeader from "@/components/home/public-header";
 import SiteFooter from "@/components/home/site-footer";
 import NewsletterSignup from "@/components/home/newsletter-signup";
 import HomeHero from "@/components/home/home-hero";
+import AboutMeetingCarousel from "@/components/home/about-meeting-carousel";
 import { CardGridSkeleton, MeetingListSkeleton, VideoListSkeleton } from "@/components/home/skeleton";
 
 // How many cards each homepage section renders. These caps, not the size of the
@@ -178,11 +179,14 @@ export default function HomeScreen() {
       <section className="home-section latest-section" id="latest"><SectionTitle icon="list" title={search ? "Search results" : "Latest Videos"} onViewAll={() => setShowAllVideos(!showAllVideos)}/>
         {!videosLoaded ? <VideoListSkeleton/> : visibleVideos.length ? <div className="latest-list">{visibleVideos.map((video) => <article className="latest-card" key={video.id}><button className="video-thumb" onClick={() => setWatching(video)} aria-label={`Watch ${video.title}`}><img src={video.thumbnail} alt=""/><span className="duration-tag">{formatDuration(video.duration)}</span><span className="thumb-play"><Icon name="play" size={17}/></span></button><button className="video-copy" onClick={() => setWatching(video)}><strong>{video.website?.displayTitle || video.title}</strong><time>{formatDate(video.publishedAt)}</time><span className="video-description">{video.description?.trim() || video.channelTitle}</span></button><button className="more-button" aria-label={`Share ${video.title}`} title="Share video" onClick={() => void shareVideo(video)}><Icon name="menu"/></button></article>)}</div> : <div className="empty-home"><span className="empty-video-icon"><Icon name="play" size={19}/></span><div><strong>{search ? "No videos found" : "Videos will appear here soon"}</strong><p>{search ? "Try another title, topic, or channel." : "New videos and messages will be added to the library as they become available."}</p></div></div>}</section>
         <aside className="about-card" aria-labelledby="about-card-title">
-          <span className="about-card-eyebrow"><i/> About the ministry</span>
-          <h2 id="about-card-title">A faith rooted in Scripture.</h2>
-          <p>Faith of the Pioneers is an online fellowship devoted to Scripture, personal testimonies, and the simple, Bible-centered faith of the early Adventist pioneers.</p>
-          <p>Join believers around the world for weekly study, worship, and fellowship.</p>
-          <div className="about-card-actions"><Link className="about-card-link" href="/about">Discover our ministry <Icon name="chevron" size={15}/></Link><Link className="about-card-cta" href="/meeting-link-request">Join the next meeting</Link></div>
+          <AboutMeetingCarousel meetings={meetings} loaded={meetingsLoaded} now={now}/>
+          <div className="about-card-copy">
+            <span className="about-card-eyebrow"><i/> About the ministry</span>
+            <h2 id="about-card-title">A faith rooted in Scripture.</h2>
+            <p>Faith of the Pioneers is an online fellowship devoted to Scripture, personal testimonies, and the simple, Bible-centered faith of the early Adventist pioneers.</p>
+            <p>Join believers around the world for weekly study, worship, and fellowship.</p>
+            <div className="about-card-actions"><Link className="about-card-link" href="/about">Discover our ministry <Icon name="chevron" size={15}/></Link><Link className="about-card-cta" href="/meeting-link-request">Join the next meeting</Link></div>
+          </div>
         </aside>
       </div>
       {(!meetingsLoaded || meetingGroupsShown.length > 0) && <section className="home-section meetings-section" id="meetings"><SectionTitle icon="calendar" title="Meetings" href="/meetings"/>{!meetingsLoaded ? <MeetingListSkeleton/> : <div className="meeting-groups">{meetingGroupsShown.map((group) => <div className="meeting-group" key={group.status}>

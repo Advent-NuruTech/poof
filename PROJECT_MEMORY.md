@@ -1,4 +1,17 @@
 # Project Memory
+## 2026-10-12: Correct homepage hero styling, media alignment, and About panel
+- **Bug:** Hero child styles were scoped to the hero root by `styled-jsx`, but the media/layout/control markup is returned from a helper function and did not receive the generated scope class. As a result, global legacy hero rules left the grid and media unstyled, allowing long titles and carousel controls to overlap.
+- **Fix:** Switched the hero's styles to `style jsx global` so its helper-rendered descendants receive the intended grid, typography, image-frame, and control positioning. Moved carousel controls into the media frame, bounded long headlines, and aligned contained meeting posters/video thumbnails in a stable 16:9 frame. Kept hero, About card, poster carousel, and related controls square; made meeting "See details" red. The homepage About copy now sits on a white panel below its meeting poster.
+- **Verification:** `npx.cmd --no-install tsc --noEmit`, focused ESLint, and `git diff --check` passed (ESLint: 0 errors; warnings are existing homepage warnings plus the hero's existing `<img>` warning). Browser checks at desktop and 375px mobile confirmed the poster loads, media controls stay within the media, meeting details are red, and the page has no horizontal overflow. No build/runtime errors were encountered.
+
+## 2026-10-12: Recover public routes after stale development server
+- **Runtime issue:** The active Next.js dev server returned 404 for `/about` and API routes even though their route files and generated manifests existed; `/` still returned 200. A production build had run while the older development server was still running, leaving its router state stale.
+- **Verified fix:** Restarted the existing `next dev` process and started a fresh development server. Verified `/`, `/about`, `/api/catalog`, and `/api/library` all return HTTP 200. No route source changes were needed.
+
+## 2026-10-12: Put rotating meeting posters in homepage About card
+- **Correction and major change:** Meeting posters belong in the homepage About card, not the standalone About page. The card now rotates through every catalog meeting with a poster (upcoming, ongoing, and past), with previous/next controls, date/title/status, and an animated image transition. Poster artwork uses `object-fit:contain` in a height-limited frame to avoid cropping or taking over the desktop layout. Replaced the card's lingering gradient background shorthand with solid `#0b3d91`, matching the newsletter.
+- **Verification:** `npx.cmd tsc --noEmit`, focused ESLint (zero errors; nine existing homepage warnings), `npm.cmd run build`, and `git diff --check` passed. No build/runtime errors were encountered.
+
 ## 2026-10-12: Independent homepage hero, matching About colors, and meeting poster
 - **Major changes:** Extracted the homepage hero carousel, slide timing, and meeting/video actions into `components/home/home-hero.tsx`. The featured About card now uses the newsletter form's exact blue palette. The About page now displays the nearest upcoming meeting's poster above its About heading when that meeting has a poster, falling back to an ongoing meeting only when no upcoming one exists; the poster reads the shared public catalog cache.
 - **Verification:** `npx.cmd tsc --noEmit`, focused ESLint, and `git diff --check` passed. ESLint reported zero errors and nine existing homepage warnings. No build or runtime errors were encountered.
