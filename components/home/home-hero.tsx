@@ -383,6 +383,12 @@ key={heroSlideKey}
       order: 1;
     }
 
+    .hero-layout.hero-reversed {
+      grid-template-columns:
+        minmax(0, 0.88fr)
+        minmax(0, 1.12fr);
+    }
+
     .hero-media {
       position: relative;
       display: flex;
@@ -558,15 +564,15 @@ key={heroSlideKey}
     }
 
     .hero-secondary-button {
-      color: #ffffff;
-      background: #c51c31;
-      border-color: #c51c31;
+      color: var(--hero-blue);
+      background: #d4af37;
+      border-color: #d4af37;
     }
 
     .hero-secondary-button:hover {
-      color: #ffffff;
-      background: #a31526;
-      border-color: #a31526;
+      color: var(--hero-blue);
+      background: #e5c65a;
+      border-color: #e5c65a;
     }
 
     .hero-arrow {
@@ -707,6 +713,10 @@ key={heroSlideKey}
       .hero-layout {
         grid-template-columns: minmax(0, 1fr);
         min-height: auto;
+      }
+
+      .hero-layout.hero-reversed {
+        grid-template-columns: minmax(0, 1fr);
       }
 
       .hero-layout.hero-reversed .hero-media,
