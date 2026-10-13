@@ -2,13 +2,8 @@
 "use client";
 
 import { useState, type FormEvent } from "react";
-import {
-  addDoc,
-  collection,
-  serverTimestamp,
-  Timestamp,
-} from "firebase/firestore";
-import { db } from "@/lib/firebase";
+import { auth } from "@/lib/firebase";
+import { readApiResponse } from "@/lib/api-response";
 
 export default function AdminInvites() {
   const [email, setEmail] = useState("");
@@ -27,20 +22,21 @@ export default function AdminInvites() {
     try {
       const normalizedEmail = email.trim().toLowerCase();
 
-      const invitation = await addDoc(collection(db, "adminInvites"), {
-        email: normalizedEmail,
-        createdAt: serverTimestamp(),
-        expiresAt: Timestamp.fromMillis(
-          Date.now() + 2 * 60 * 60 * 1000
-        ),
-        used: false,
+      const currentUser = auth.currentUser;
+      if (!currentUser) {
+        throw new Error("Your administrator session is no longer available. Sign in again and retry.");
+      }
+      const idToken = await currentUser.getIdToken();
+      const response = await fetch("/api/admin/invites", {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+          Authorization: `Bearer ${idToken}`,
+        },
+        body: JSON.stringify({ email: normalizedEmail }),
       });
-
-      setInviteUrl(
-        `${window.location.origin}/signup?invite=${encodeURIComponent(
-          invitation.id
-        )}`
-      );
+      const result = await readApiResponse<{ inviteUrl: string }>(response, "Invitation");
+      setInviteUrl(result.inviteUrl);
     } catch (reason) {
       setError(
         reason instanceof Error
@@ -81,8 +77,7 @@ export default function AdminInvites() {
             <div>
               <h2>Invite an administrator</h2>
               <p>
-                Create a secure invitation for someone who needs administrator
-                access.
+                Send a secure administrator invitation directly to their email.
               </p>
             </div>
           </div>
@@ -127,11 +122,11 @@ export default function AdminInvites() {
           {busy ? (
             <>
               <span className="button-spinner" aria-hidden="true" />
-              Creating invite…
+              Sending invitation…
             </>
           ) : (
             <>
-              Create invitation
+              Send invitation
               <span aria-hidden="true">→</span>
             </>
           )}
@@ -159,7 +154,7 @@ export default function AdminInvites() {
 
           <div className="preview-copy">
             <div className="preview-header">
-              <strong>Invitation ready</strong>
+              <strong>Invitation email sent</strong>
               <span className="expiry-badge">2 HOURS</span>
             </div>
 
@@ -167,13 +162,16 @@ export default function AdminInvites() {
               {email.trim().toLowerCase()}
             </span>
 
+            <small className="invite-sent-message">
+              A secure, one-time invitation link has been emailed to this address.
+            </small>
+
             <div className="invite-url">
               <span>{inviteUrl}</span>
             </div>
 
             <small>
-              Share this link with the administrator. It will expire
-              automatically after 2 hours.
+              The invitation expires in 2 hours. You can also copy the link to share it securely.
             </small>
           </div>
 

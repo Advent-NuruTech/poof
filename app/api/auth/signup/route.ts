@@ -30,18 +30,17 @@ export async function POST(request: Request) {
     return NextResponse.json({ error: "Invalid request origin." }, { status: 403 });
   }
 
-  let body: { email?: unknown; password?: unknown; invite?: unknown; idToken?: unknown };
+  let body: { email?: unknown; password?: unknown; invite?: unknown };
   try {
     body = await request.json() as typeof body;
   } catch {
     return NextResponse.json({ error: "Invalid request." }, { status: 400 });
   }
-  const { email, password, invite, idToken: providedIdToken } = body;
-  if (typeof email !== "string" || typeof invite !== "string" ||
-      (providedIdToken !== undefined && (typeof providedIdToken !== "string" || providedIdToken.length > 10000))) {
+  const { email, password, invite } = body;
+  if (typeof email !== "string" || typeof invite !== "string") {
     return NextResponse.json({ error: "Use a valid administrator invitation and account credentials." }, { status: 400 });
   }
-  if (email.length > 254 || (providedIdToken === undefined && (typeof password !== "string" || password.length < 6 || password.length > 128))) {
+  if (email.length > 254 || typeof password !== "string" || password.length < 6 || password.length > 128) {
     return NextResponse.json({ error: "Enter a valid email and a password of at least 6 characters." }, { status: 400 });
   }
   if (invite.length < 16 || invite.length > 128 || !/^[A-Za-z0-9_-]+$/.test(invite)) {
@@ -62,45 +61,30 @@ export async function POST(request: Request) {
     }
 
     let credentials: { idToken?: string; localId?: string };
-    if (typeof providedIdToken === "string") {
-      const identityResponse = await fetch(`https://identitytoolkit.googleapis.com/v1/accounts:lookup?key=${encodeURIComponent(apiKey)}`, {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ idToken: providedIdToken }),
-        cache: "no-store",
-      });
-      const identity = await identityResponse.json() as { users?: Array<{ localId?: string; email?: string }> };
-      const account = identity.users?.[0];
-      if (!identityResponse.ok || !account?.localId || account.email?.toLowerCase() !== normalizedEmail) {
-        return NextResponse.json({ error: "Sign in with the invited email address to accept this invitation." }, { status: 403 });
-      }
-      credentials = { idToken: providedIdToken, localId: account.localId };
+    const createResponse = await fetch(`https://identitytoolkit.googleapis.com/v1/accounts:signUp?key=${encodeURIComponent(apiKey)}`, {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ email: normalizedEmail, password, returnSecureToken: true }),
+      cache: "no-store",
+    });
+    if (createResponse.ok) {
+      credentials = await createResponse.json() as typeof credentials;
     } else {
-      const createResponse = await fetch(`https://identitytoolkit.googleapis.com/v1/accounts:signUp?key=${encodeURIComponent(apiKey)}`, {
+      const result = await createResponse.json() as { error?: { message?: string } };
+      if (result.error?.message !== "EMAIL_EXISTS") {
+        const message = result.error?.message === "INVALID_EMAIL"
+          ? "Enter a valid email address."
+          : "Could not create the account. Check the details and try again.";
+        return NextResponse.json({ error: message }, { status: 400 });
+      }
+      const signInResponse = await fetch(`https://identitytoolkit.googleapis.com/v1/accounts:signInWithPassword?key=${encodeURIComponent(apiKey)}`, {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ email: normalizedEmail, password, returnSecureToken: true }),
         cache: "no-store",
       });
-      if (createResponse.ok) {
-        credentials = await createResponse.json() as typeof credentials;
-      } else {
-        const result = await createResponse.json() as { error?: { message?: string } };
-        if (result.error?.message !== "EMAIL_EXISTS") {
-          const message = result.error?.message === "INVALID_EMAIL"
-            ? "Enter a valid email address."
-            : "Could not create the account. Check the details and try again.";
-          return NextResponse.json({ error: message }, { status: 400 });
-        }
-        const signInResponse = await fetch(`https://identitytoolkit.googleapis.com/v1/accounts:signInWithPassword?key=${encodeURIComponent(apiKey)}`, {
-          method: "POST",
-          headers: { "Content-Type": "application/json" },
-          body: JSON.stringify({ email: normalizedEmail, password, returnSecureToken: true }),
-          cache: "no-store",
-        });
-        if (!signInResponse.ok) return NextResponse.json({ error: "An account already exists for this email. Sign in or continue with the invited Google account." }, { status: 400 });
-        credentials = await signInResponse.json() as typeof credentials;
-      }
+      if (!signInResponse.ok) return NextResponse.json({ error: "An account already exists. Enter its current password to accept this invitation." }, { status: 400 });
+      credentials = await signInResponse.json() as typeof credentials;
     }
     const { idToken, localId } = credentials;
     if (!idToken || !localId) {

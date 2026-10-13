@@ -1,6 +1,6 @@
 "use client";
 
-import { GoogleAuthProvider, signInWithEmailAndPassword, signInWithPopup } from "firebase/auth";
+import { signInWithEmailAndPassword } from "firebase/auth";
 import Image from "next/image";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
@@ -62,37 +62,6 @@ try {
 
 }
 
-async function acceptWithGoogle() {
-if (busy) return;
-const inviteId = invite.current;
-if (!inviteId) {
-  setError("An administrator invitation is required to create an admin account.");
-  return;
-}
-
-setBusy(true);
-setError("");
-try {
-  const credential = await signInWithPopup(auth, new GoogleAuthProvider());
-  const email = credential.user.email;
-  if (!email) throw new Error("The Google account does not have an email address.");
-  const idToken = await credential.user.getIdToken();
-  const response = await fetch("/api/auth/signup", {
-    method: "POST",
-    headers: { "Content-Type": "application/json" },
-    body: JSON.stringify({ invite: inviteId, email, idToken }),
-  });
-  await readApiResponse<{ error?: string }>(response, "Invitation acceptance");
-  await startAdminSession(credential.user);
-  router.replace("/poof/admin");
-  router.refresh();
-} catch (reason) {
-  setError(reason instanceof Error ? reason.message : "Could not accept this invitation.");
-} finally {
-  setBusy(false);
-}
-}
-
 return ( <main className="auth-page"> <section className="auth-card"> <Link href="/" className="brand" aria-label="POOF home"> <Image
          src="/images/logo.jpeg"
          alt="Pioneers of Our Faith logo"
@@ -139,10 +108,6 @@ return ( <main className="auth-page"> <section className="auth-card"> <Link href
         {busy ? "Creating account..." : "Accept invitation"}
       </button>
     </form>
-    <button className="outline-button" type="button" onClick={() => void acceptWithGoogle()} disabled={busy}>
-      Accept with Google
-    </button>
-
     <p className="auth-switch">
       Already have an account? <Link href="/signin">Sign in</Link>
     </p>

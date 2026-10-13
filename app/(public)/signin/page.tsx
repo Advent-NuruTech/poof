@@ -1,6 +1,6 @@
 "use client";
 
-import { GoogleAuthProvider, onAuthStateChanged, signInWithEmailAndPassword, signInWithPopup, signOut, type User } from "firebase/auth";
+import { onAuthStateChanged, signInWithEmailAndPassword, signOut, type User } from "firebase/auth";
 import Image from "next/image";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
@@ -57,21 +57,6 @@ async function completeSignIn(user: User) {
   await startAdminSession(user);
   router.replace(adminDestination());
   router.refresh();
-}
-
-async function signInWithGoogle() {
-  if (busy) return;
-  submitting.current = true;
-  setBusy(true);
-  setError("");
-  try {
-    const credential = await signInWithPopup(auth, new GoogleAuthProvider());
-    await completeSignIn(credential.user);
-  } catch (reason) {
-    setError(reason instanceof Error ? reason.message : "Unable to sign in with Google.");
-  } finally {
-    setBusy(false);
-  }
 }
 
 async function submit(event: FormEvent<HTMLFormElement>) {
@@ -168,10 +153,6 @@ return (
         {busy ? "Signing in..." : "Sign in"}
       </button>
     </form>
-    <button className="outline-button" type="button" onClick={() => void signInWithGoogle()} disabled={busy}>
-      Continue with Google
-    </button>
-
     <p className="auth-switch">
       Need an account? <Link href="/signup">Sign up</Link>
     </p>

@@ -392,3 +392,26 @@ export async function sendMeetingRequestWelcome(requester: { id: string; email: 
     { includeFeaturedVideo: false, textSuffix: welcomeVideoText(videos) },
   );
 }
+
+export async function sendAdminInvitationEmail(invitation: { id: string; email: string }, baseUrl: string) {
+  const inviteUrl = `${baseUrl.replace(/\/$/, "")}/signup?invite=${encodeURIComponent(invitation.id)}`;
+  const campaign: Campaign = {
+    kind: "meeting",
+    subject: "You're invited to administer Faith of the Pioneers",
+    letterTitle: "Administrator invitation",
+    headline: "Help manage Faith of the Pioneers",
+    preheader: "You have a secure invitation to become an administrator.",
+    body: `<p>An existing administrator has invited you to help manage Faith of the Pioneers.</p><p>This secure, one-time invitation was sent to <strong>${escapeHtml(invitation.email)}</strong> and expires in two hours. Create your account using the button below and this email address.</p><p>If you already have an account, use its current password when accepting the invitation. If you were not expecting this invitation, you can ignore this email.</p>`,
+    buttonLabel: "Accept administrator invitation",
+    buttonUrl: inviteUrl,
+    videoUrl: "",
+  };
+
+  return deliverCampaign(
+    campaign,
+    [invitation],
+    baseUrl,
+    `admin-invitation:${invitation.id}`,
+    { includeFeaturedVideo: false },
+  );
+}

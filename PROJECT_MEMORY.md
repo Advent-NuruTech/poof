@@ -2,6 +2,13 @@
 ## Ongoing working preference
 - Whenever project changes are made, record the major change and any build/runtime errors with their verified fixes in this file before finishing. When the user asks, provide the exact suggested Git commit message; do not create a commit unless explicitly requested.
 
+## 2026-10-13: Email-based administrator invitations
+
+- **Invitation authorization and delivery:** Replaced the client-side Firestore write with `/api/admin/invites`, which verifies the caller using the shared active-admin check, creates the two-hour invitation with the server Firestore client, and emails the single-use signup link through the existing branded Resend campaign template. Failed sends are logged and the unused invitation is removed; cleanup failures are surfaced explicitly.
+- **Invitation experience:** The admin panel now confirms delivery to the entered address and retains copy-link as a fallback. The email names the invited address, explains expiration and existing-account use, and provides the accept link.
+- **Authentication options:** Removed Google sign-in and Google invitation acceptance from the auth pages, deleted the unused Google sign-in helper/provider, and simplified the invitation signup endpoint to email/password only. Updated setup documentation to require Email/Password.
+- **Verification:** `npx.cmd --no-install tsc --noEmit`, focused ESLint, `git diff --check`, and `npm.cmd run build` passed. The build generated `/api/admin/invites` and all existing routes. Email delivery and production Firestore configuration were not exercised against external services.
+
 ## 2026-10-13: Fix administrator invitation authorization
 
 - **Root cause:** The Firestore root-admin helper had been renamed to `isRootCAdmin` while its callers still referenced `isRootAdmin`. Invitation activation also sent Firestore REST PATCH requests whose update masks omitted `sessionMigrated`, a field required by the admin-record rules.

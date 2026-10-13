@@ -5,7 +5,7 @@ A responsive YouTube catalog. YouTube owns source video and playlist metadata; t
 ## Local setup
 
 1. Create a Firebase project and register a Web app. Set the existing `NEXT_PUBLIC_FIREBASE_*` variables in `.env.local` from that app's config.
-2. Enable **Google** and **Email/Password** under Firebase Authentication → Sign-in method. Public signups are disabled; additional administrators must accept an invitation from an existing administrator using the invited email. Add the deployed hostname to Authentication → Settings → Authorized domains.
+2. Enable **Email/Password** under Firebase Authentication → Sign-in method. Public signups are disabled; additional administrators must accept an invitation sent by an existing administrator to the invited email. Add the deployed hostname to Authentication → Settings → Authorized domains.
 3. Create the default Cloud Firestore database and publish the rules and indexes in this repo:
 
    ```sh
@@ -14,7 +14,7 @@ A responsive YouTube catalog. YouTube owns source video and playlist metadata; t
 
 4. Create a Google Cloud API key with the YouTube Data API v3 enabled. Set it as `YOUTUBE_DATA_API_KEY` in `.env.local` and your deployment's server environment. Do not add a `NEXT_PUBLIC_` prefix. Restrict the key to the YouTube Data API and the server environments that need it.
 5. Start the app with `npm run dev`.
-6. Sign in at `/poof/admin` with the initial administrator account (Firebase UID `3H3BclyO2FePQ59KYIO2kKSirnx2`). On first sign-in, the app creates `admins/{uid}` automatically. Only this UID can bootstrap the first admin; additional administrators must accept an invitation. Existing enabled administrator records, including legacy `codeHash` records, remain active without re-invitation. Every active administrator receives the same website management permissions. The former `/admin` route is not available.
+6. Sign in at `/poof/admin` with the initial administrator account (Firebase UID `3H3BclyO2FePQ59KYIO2kKSirnx2`). On first sign-in, the app creates `admins/{uid}` automatically. Only this UID can bootstrap the first admin; any active administrator can invite another administrator by email. Existing enabled administrator records, including legacy `codeHash` records, remain active without re-invitation. Every active administrator receives the same website management permissions. The former `/admin` route is not available.
 7. Add a channel by URL, handle, or channel ID. The initial sync discovers playlists, playlist order, and unique video records. The homepage reads the shared cached public catalog; its Most Viewed shelf uses the bounded per-channel view-count query described below.
 
 8. Configure the email environment variables below, deploy to Vercel, and verify your sending domain in Resend. Open `/poof/admin/mailing` to verify meeting requests, add meeting members, and create or schedule emails.
