@@ -1,4 +1,5 @@
 import { createHash } from "node:crypto";
+import { isAdminIdentity } from "@/lib/admin-access";
 
 // Route segment config (`runtime`, `dynamic`, `revalidate`) is not allowed while
 // `nextConfig.cacheComponents` is enabled. Node is the default runtime here.
@@ -19,8 +20,13 @@ export async function POST(request: Request) {
     if (!uid || uid.length > 128) return Response.json({ error: "Invalid administrator session." }, { status: 401 });
     const adminResponse = await fetch(`https://firestore.googleapis.com/v1/projects/${encodeURIComponent(projectId)}/databases/(default)/documents/admins/${encodeURIComponent(uid)}`, { headers: { Authorization: `Bearer ${token}` }, cache: "no-store" });
     if (!adminResponse.ok) return Response.json({ error: "Administrator access is required to upload a poster." }, { status: 403 });
-    const admin = await adminResponse.json() as { fields?: { enabled?: { booleanValue?: boolean }; expiresAt?: { timestampValue?: string } } };
-    if (admin.fields?.enabled?.booleanValue !== true || Date.parse(admin.fields?.expiresAt?.timestampValue ?? "") <= Date.now()) return Response.json({ error: "Administrator access is required to upload a poster." }, { status: 403 });
+    const admin = await adminResponse.json() as { fields?: { enabled?: { booleanValue?: boolean }; expiresAt?: { timestampValue?: string }; inviteId?: { stringValue?: string }; codeHash?: { stringValue?: string } } };
+    if (!isAdminIdentity(uid, {
+      enabled: admin.fields?.enabled?.booleanValue,
+      expiresAt: Date.parse(admin.fields?.expiresAt?.timestampValue ?? ""),
+      inviteId: admin.fields?.inviteId?.stringValue,
+      codeHash: admin.fields?.codeHash?.stringValue,
+    })) return Response.json({ error: "Administrator access is required to upload a poster." }, { status: 403 });
 
     const form = await request.formData();
     const file = form.get("file");

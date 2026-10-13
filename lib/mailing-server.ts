@@ -5,6 +5,7 @@ import { getStorage } from "firebase-admin/storage";
 import { Resend } from "resend";
 import { automaticPreviewText, extractFeaturedVideoUrl, inlineVideoLinks, personalizedGreeting, richTextToPlainText, sanitizeRichText } from "@/lib/rich-text";
 import { getPublicCatalog, type FeedVideo } from "@/lib/catalog-feed";
+import { isAdminIdentity } from "@/lib/admin-access";
 
 function parseServiceAccount(value: string): ServiceAccount {
   let parsed: unknown;
@@ -121,7 +122,12 @@ export async function requireMailAdmin(request: Request) {
   const app = getAdminApp();
   const admin = await getFirestore(app).collection("admins").doc(uid).get();
   const data = admin.data();
-  return data?.enabled === true && data.expiresAt instanceof Timestamp && data.expiresAt.toMillis() > Date.now()
+  return data?.expiresAt instanceof Timestamp && isAdminIdentity(uid, {
+    enabled: data.enabled,
+    expiresAt: data.expiresAt.toMillis(),
+    inviteId: data.inviteId,
+    codeHash: data.codeHash,
+  })
     ? uid
     : null;
 }

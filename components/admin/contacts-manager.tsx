@@ -1,11 +1,12 @@
 "use client";
 
 import { onAuthStateChanged, signOut, type User } from "firebase/auth";
+import Link from "next/link";
 import { collection, deleteDoc, doc, getDoc, limit, onSnapshot, query, updateDoc } from "firebase/firestore";
 import { useEffect, useState } from "react";
 import { auth, db } from "@/lib/firebase";
-import { signInWithGoogle } from "@/lib/sign-in";
 import { endAdminSession } from "@/lib/admin-session";
+import { isAdminIdentity } from "@/lib/admin-access";
 import NotificationBell from "./notification-bell";
 
 type Category = "contact" | "prayer" | "meeting-link";
@@ -37,8 +38,13 @@ export default function ContactsManager({ mode = "all", initialTab = "contact" }
     if (!user) return;
     let active = true;
     getDoc(doc(db, "admins", user.uid)).then((snapshot) => {
-      const expiresAt = snapshot.data()?.expiresAt?.toMillis?.() ?? 0;
-      if (active) setIsAdmin(snapshot.exists() && snapshot.data()?.enabled === true && expiresAt > Date.now());
+      const admin = snapshot.data();
+      if (active) setIsAdmin(snapshot.exists() && isAdminIdentity(user.uid, {
+        enabled: admin?.enabled,
+        expiresAt: admin?.expiresAt?.toMillis?.() ?? 0,
+        inviteId: admin?.inviteId,
+        codeHash: admin?.codeHash,
+      }));
     }).catch((reason) => { if (active) setError(reason instanceof Error ? reason.message : "Could not verify admin access."); });
     return () => { active = false; };
   }, [user]);
@@ -63,9 +69,9 @@ export default function ContactsManager({ mode = "all", initialTab = "contact" }
     : statusFilter === "pending"
       ? `No pending ${activeTab.label.toLowerCase()} submissions right now.`
       : `No ${activeTab.label.toLowerCase()} submissions yet.`;
-  return <main className="admin-shell"><header className="admin-top"><a className="back-link" href="/admin">← Channel admin</a><span className="admin-mark">POOF <span>INBOX</span></span><div className="admin-top-actions"><NotificationBell user={user}/><a className="text-button" href={mode === "meeting-link" ? "/meeting-link-request" : "/contact"} target="_blank">View public form ↗</a><button className="text-button" onClick={() => void endAdminSession().finally(() => signOut(auth))}>Sign out</button></div></header>
+  return <main className="admin-shell"><header className="admin-top"><a className="back-link" href="/poof/admin">← Channel admin</a><span className="admin-mark">POOF <span>INBOX</span></span><div className="admin-top-actions"><NotificationBell user={user}/><a className="text-button" href={mode === "meeting-link" ? "/meeting-link-request" : "/contact"} target="_blank">View public form ↗</a><button className="text-button" onClick={() => void endAdminSession().then(() => signOut(auth)).catch((reason) => setError(reason instanceof Error ? reason.message : "Could not sign out."))}>Sign out</button></div></header>
     <div className="admin-content"><div className="admin-heading"><span className="eyebrow">INBOX</span><h1>{title}</h1><p>{mode === "meeting-link" ? "Review requests from visitors who would like to join an upcoming Zoom meeting." : "Messages, prayer requests, and Zoom link requests submitted through the public forms."}</p></div>
-      {!ready ? <section className="admin-panel loading-card">Checking administrator access...</section> : !user || !isAdmin ? <section className="admin-panel sign-in-panel"><div className="panel-icon">◉</div><h2>{user ? "Admin access required" : "Administrator sign in"}</h2><p>{user ? "This Google account is not authorized to view these messages." : "Sign in with your administrator Google account."}</p>{error && <p className="notice error-notice">{error}</p>}{!user && <button className="primary-button" onClick={() => void signInWithGoogle().catch((reason) => setError(reason instanceof Error ? reason.message : "Google sign-in failed."))}>Continue with Google</button>}</section> : <>
+      {!ready ? <section className="admin-panel loading-card">Checking administrator access...</section> : !user || !isAdmin ? <section className="admin-panel sign-in-panel"><div className="panel-icon">◉</div><h2>{user ? "Admin access required" : "Administrator sign in"}</h2><p>{user ? "This account is not authorized to view these messages." : "Sign in with your administrator email and password."}</p>{error && <p className="notice error-notice">{error}</p>}<Link className="primary-button" href="/signin">Sign in</Link></section> : <>
         <div className="inbox-tabs" role="tablist" aria-label="Inbox categories">{tabs.map((entry) => <button key={entry.id} type="button" role="tab" aria-selected={tab === entry.id} className={`inbox-tab${tab === entry.id ? " is-active" : ""}`} onClick={() => setTab(entry.id)}>{entry.label}<span className="inbox-tab-count">{countFor(entry.id, "all")}</span></button>)}</div>
         <div className="inbox-filter" role="group" aria-label="Filter by status">{statusFilters.map((entry) => <button key={entry.id} type="button" aria-pressed={statusFilter === entry.id} className={`inbox-filter-button${statusFilter === entry.id ? " is-active" : ""}`} onClick={() => setStatusFilter(entry.id)}>{entry.label}<span className="inbox-tab-count">{countFor(tab, entry.id)}</span></button>)}</div>
         <div className="channel-list-heading"><h2>{activeTab.label} <span>{visible.length}</span></h2><span>{statusFilter === "all" ? "Showing every submission" : statusFilter === "pending" ? "Awaiting a response" : "Already handled"}</span></div>

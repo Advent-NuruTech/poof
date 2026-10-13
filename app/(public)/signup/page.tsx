@@ -1,10 +1,10 @@
 "use client";
 
-import { signInWithEmailAndPassword } from "firebase/auth";
+import { GoogleAuthProvider, signInWithEmailAndPassword, signInWithPopup } from "firebase/auth";
 import Image from "next/image";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
-import { useState, type FormEvent } from "react";
+import { useEffect, useRef, useState, type FormEvent } from "react";
 import { auth } from "@/lib/firebase";
 import { startAdminSession } from "@/lib/admin-session";
 import { readApiResponse } from "@/lib/api-response";
@@ -13,6 +13,11 @@ export default function SignupPage() {
 const router = useRouter();
 const [busy, setBusy] = useState(false);
 const [error, setError] = useState("");
+const invite = useRef("");
+
+useEffect(() => {
+  invite.current = new URLSearchParams(window.location.search).get("invite") ?? "";
+}, []);
 
 async function submit(event: FormEvent<HTMLFormElement>) {
 event.preventDefault();
@@ -24,20 +29,25 @@ setError("");
 const form = new FormData(event.currentTarget);
 const email = String(form.get("email") ?? "").trim();
 const password = String(form.get("password") ?? "");
-const code = String(form.get("code") ?? "");
+const inviteId = invite.current;
+if (!inviteId) {
+  setError("An administrator invitation is required to create an admin account.");
+  setBusy(false);
+  return;
+}
 
 try {
   const response = await fetch("/api/auth/signup", {
     method: "POST",
     headers: { "Content-Type": "application/json" },
-    body: JSON.stringify({ code, email, password }),
+    body: JSON.stringify({ invite: inviteId, email, password }),
   });
 
   await readApiResponse<{ error?: string }>(response, "Account creation");
 
   const credential = await signInWithEmailAndPassword(auth, email, password);
   await startAdminSession(credential.user);
-  router.replace("/admin");
+  router.replace("/poof/admin");
   router.refresh();
 } catch (reason) {
   setError(
@@ -52,6 +62,37 @@ try {
 
 }
 
+async function acceptWithGoogle() {
+if (busy) return;
+const inviteId = invite.current;
+if (!inviteId) {
+  setError("An administrator invitation is required to create an admin account.");
+  return;
+}
+
+setBusy(true);
+setError("");
+try {
+  const credential = await signInWithPopup(auth, new GoogleAuthProvider());
+  const email = credential.user.email;
+  if (!email) throw new Error("The Google account does not have an email address.");
+  const idToken = await credential.user.getIdToken();
+  const response = await fetch("/api/auth/signup", {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({ invite: inviteId, email, idToken }),
+  });
+  await readApiResponse<{ error?: string }>(response, "Invitation acceptance");
+  await startAdminSession(credential.user);
+  router.replace("/poof/admin");
+  router.refresh();
+} catch (reason) {
+  setError(reason instanceof Error ? reason.message : "Could not accept this invitation.");
+} finally {
+  setBusy(false);
+}
+}
+
 return ( <main className="auth-page"> <section className="auth-card"> <Link href="/" className="brand" aria-label="POOF home"> <Image
          src="/images/logo.jpeg"
          alt="Pioneers of Our Faith logo"
@@ -62,22 +103,11 @@ return ( <main className="auth-page"> <section className="auth-card"> <Link href
 
 
     <div className="welcome-heading">
-      <span className="eyebrow">CREATE AN ACCOUNT</span>
-      <p className="intro">Enter your signup code to create your account.</p>
+      <span className="eyebrow">ADMINISTRATOR INVITATION</span>
+      <p className="intro">A valid administrator invitation link is required. Use the email address the invitation was sent to.</p>
     </div>
 
     <form className="auth-form" onSubmit={(event) => void submit(event)}>
-      <label htmlFor="code">Signup code</label>
-      <input
-        id="code"
-        name="code"
-        type="password"
-        autoComplete="off"
-        placeholder="Enter your signup code"
-        required
-        disabled={busy}
-      />
-
       <label htmlFor="email">Email address</label>
       <input
         id="email"
@@ -106,9 +136,12 @@ return ( <main className="auth-page"> <section className="auth-card"> <Link href
       {error && <p className="auth-error" role="alert">{error}</p>}
 
       <button className="primary-button" type="submit" disabled={busy}>
-        {busy ? "Creating account..." : "Create account"}
+        {busy ? "Creating account..." : "Accept invitation"}
       </button>
     </form>
+    <button className="outline-button" type="button" onClick={() => void acceptWithGoogle()} disabled={busy}>
+      Accept with Google
+    </button>
 
     <p className="auth-switch">
       Already have an account? <Link href="/signin">Sign in</Link>

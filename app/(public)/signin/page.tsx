@@ -1,43 +1,90 @@
 "use client";
 
-import { signInWithEmailAndPassword } from "firebase/auth";
+import { GoogleAuthProvider, onAuthStateChanged, signInWithEmailAndPassword, signInWithPopup, signOut, type User } from "firebase/auth";
 import Image from "next/image";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
-import { useEffect, useState, type FormEvent } from "react";
+import { useEffect, useRef, useState, type FormEvent } from "react";
 import { auth } from "@/lib/firebase";
-import { startAdminSession } from "@/lib/admin-session";
+import { restoreAdminSession, startAdminSession } from "@/lib/admin-session";
 
 const REMEMBERED_EMAIL_KEY = "poof-remembered-email";
 
 export default function SigninPage() {
 const router = useRouter();
-const [email, setEmail] = useState("");
-const [rememberMe, setRememberMe] = useState(false);
 const [error, setError] = useState("");
 const [busy, setBusy] = useState(false);
+const resumeAttempted = useRef(false);
+const submitting = useRef(false);
+const emailInput = useRef<HTMLInputElement>(null);
+const rememberInput = useRef<HTMLInputElement>(null);
 
 useEffect(() => {
 try {
 const savedEmail = localStorage.getItem(REMEMBERED_EMAIL_KEY);
-if (savedEmail) {
-setEmail(savedEmail);
-setRememberMe(true);
+if (savedEmail && emailInput.current && rememberInput.current) {
+emailInput.current.value = savedEmail;
+rememberInput.current.checked = true;
 }
 } catch {}
 }, []);
+
+useEffect(() => onAuthStateChanged(auth, (current) => {
+  if (!current || resumeAttempted.current || submitting.current) return;
+  resumeAttempted.current = true;
+  void restoreAdminSession(current).then(() => {
+    if (submitting.current) return;
+    const requested = new URLSearchParams(window.location.search).get("next");
+    const destination = requested?.startsWith("/poof/admin") && !requested.startsWith("//") ? requested : "/poof/admin";
+    router.replace(destination);
+    router.refresh();
+  }).catch((reason: unknown) => {
+    if (typeof reason === "object" && reason !== null && "message" in reason &&
+      String(reason.message).includes("Your admin session expired")) {
+      if (!submitting.current) void signOut(auth);
+      return;
+    }
+    setError(reason instanceof Error ? reason.message : "Could not restore the admin session.");
+  });
+}), [router]);
+
+function adminDestination() {
+  const requested = new URLSearchParams(window.location.search).get("next");
+  return requested?.startsWith("/poof/admin") && !requested.startsWith("//") ? requested : "/poof/admin";
+}
+
+async function completeSignIn(user: User) {
+  await startAdminSession(user);
+  router.replace(adminDestination());
+  router.refresh();
+}
+
+async function signInWithGoogle() {
+  if (busy) return;
+  submitting.current = true;
+  setBusy(true);
+  setError("");
+  try {
+    const credential = await signInWithPopup(auth, new GoogleAuthProvider());
+    await completeSignIn(credential.user);
+  } catch (reason) {
+    setError(reason instanceof Error ? reason.message : "Unable to sign in with Google.");
+  } finally {
+    setBusy(false);
+  }
+}
 
 async function submit(event: FormEvent<HTMLFormElement>) {
 event.preventDefault();
 if (busy) return;
 
-
+submitting.current = true;
 setBusy(true);
 setError("");
 
 try {
-  const normalizedEmail = email.trim();
   const form = new FormData(event.currentTarget);
+  const normalizedEmail = String(form.get("email") ?? "").trim();
   const credential = await signInWithEmailAndPassword(
     auth,
     normalizedEmail,
@@ -45,13 +92,11 @@ try {
   );
 
   try {
-    if (rememberMe) localStorage.setItem(REMEMBERED_EMAIL_KEY, normalizedEmail);
+    if (rememberInput.current?.checked) localStorage.setItem(REMEMBERED_EMAIL_KEY, normalizedEmail);
     else localStorage.removeItem(REMEMBERED_EMAIL_KEY);
   } catch {}
 
-  await startAdminSession(credential.user);
-  router.replace("/admin");
-  router.refresh();
+  await completeSignIn(credential.user);
 } catch (reason) {
   const code =
     typeof reason === "object" && reason !== null && "code" in reason
@@ -92,8 +137,7 @@ return (
         type="email"
         autoComplete="username"
         placeholder="you@example.com"
-        value={email}
-        onChange={(event) => setEmail(event.target.value)}
+        ref={emailInput}
         required
         disabled={busy}
       />
@@ -112,8 +156,7 @@ return (
       <label className="remember-option">
         <input
           type="checkbox"
-          checked={rememberMe}
-          onChange={(event) => setRememberMe(event.target.checked)}
+          ref={rememberInput}
           disabled={busy}
         />
         Remember me
@@ -125,6 +168,9 @@ return (
         {busy ? "Signing in..." : "Sign in"}
       </button>
     </form>
+    <button className="outline-button" type="button" onClick={() => void signInWithGoogle()} disabled={busy}>
+      Continue with Google
+    </button>
 
     <p className="auth-switch">
       Need an account? <Link href="/signup">Sign up</Link>

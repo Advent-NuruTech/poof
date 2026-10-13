@@ -1,7 +1,9 @@
 import type { Metadata } from "next";
-import Link from "next/link";
 import { cookies } from "next/headers";
+import { redirect } from "next/navigation";
+import AdminSessionHeartbeat from "@/components/admin/admin-session-heartbeat";
 import AdminSidebar from "@/components/admin/admin-sidebar";
+import { isAdminIdentity } from "@/lib/admin-access";
 
 export const metadata: Metadata = {
   title: "Administrator",
@@ -12,38 +14,55 @@ export const metadata: Metadata = {
   },
 };
 
-const SESSION_COOKIE = "poof_admin_session";
+const ACCESS_COOKIE = "poof_admin_access";
 
-// The admin workspace is authenticated per request (session cookie + Firestore
-// admin record), so it can never have a static shell. `instant = false` is the
-// documented Cache Components opt-out for such a route; without it the build
-// fails static-shell validation for every /admin page.
+// Keep authentication request-bound under Cache Components.
 export const instant = false;
 
 async function getAdminSession() {
-  const token = (await cookies()).get(SESSION_COOKIE)?.value;
+  const idToken = (await cookies()).get(ACCESS_COOKIE)?.value;
   const apiKey = process.env.NEXT_PUBLIC_FIREBASE_API_KEY;
   const projectId = process.env.NEXT_PUBLIC_FIREBASE_PROJECT_ID;
-  if (!token || !apiKey || !projectId) return false;
+  if (!idToken || !apiKey || !projectId) return false;
+
   try {
     const identityResponse = await fetch(`https://identitytoolkit.googleapis.com/v1/accounts:lookup?key=${encodeURIComponent(apiKey)}`, {
-      method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ idToken: token }), cache: "no-store",
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ idToken }),
+      cache: "no-store",
     });
     const identity = await identityResponse.json() as { users?: Array<{ localId?: string }> };
     const uid = identity.users?.[0]?.localId;
     if (!identityResponse.ok || !uid) return false;
+
     const adminResponse = await fetch(`https://firestore.googleapis.com/v1/projects/${encodeURIComponent(projectId)}/databases/(default)/documents/admins/${encodeURIComponent(uid)}`, {
-      headers: { Authorization: `Bearer ${token}` }, cache: "no-store",
+      headers: { Authorization: `Bearer ${idToken}` },
+      cache: "no-store",
     });
     if (!adminResponse.ok) return false;
-    const admin = await adminResponse.json() as { fields?: { enabled?: { booleanValue?: boolean }; expiresAt?: { timestampValue?: string } } };
-    return admin.fields?.enabled?.booleanValue === true && Date.parse(admin.fields.expiresAt?.timestampValue ?? "") > Date.now();
-  } catch {
+
+    const admin = await adminResponse.json() as {
+      fields?: {
+        enabled?: { booleanValue?: boolean };
+        expiresAt?: { timestampValue?: string };
+        inviteId?: { stringValue?: string };
+        codeHash?: { stringValue?: string };
+      };
+    };
+    return isAdminIdentity(uid, {
+      enabled: admin.fields?.enabled?.booleanValue,
+      expiresAt: Date.parse(admin.fields?.expiresAt?.timestampValue ?? ""),
+      inviteId: admin.fields?.inviteId?.stringValue,
+      codeHash: admin.fields?.codeHash?.stringValue,
+    });
+  } catch (reason) {
+    console.error("Admin page session verification failed", reason);
     return false;
   }
 }
 
 export default async function AdminLayout({ children }: { children: React.ReactNode }) {
-  if (!await getAdminSession()) return <main className="auth-page"><section className="auth-card sign-in-panel"><div className="panel-icon">◉</div><h1>Sign in to continue</h1><p>Your admin session is missing or expired. Sign in again to open the administrator pages.</p><Link className="primary-button" href="/signin">Go to sign in</Link></section></main>;
-  return <div className="admin-workspace"><AdminSidebar/><div className="admin-workspace-page">{children}</div></div>;
+  if (!await getAdminSession()) redirect("/signin?next=%2Fpoof%2Fadmin");
+  return <div className="admin-workspace"><AdminSessionHeartbeat/><AdminSidebar/><div className="admin-workspace-page">{children}</div></div>;
 }

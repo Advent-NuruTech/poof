@@ -1,12 +1,13 @@
 "use client";
 
 import { onAuthStateChanged, signOut, type User } from "firebase/auth";
+import Link from "next/link";
 import { doc, getDoc } from "firebase/firestore";
 import { useCallback, useEffect, useMemo, useState } from "react";
 import type { FormEvent } from "react";
 import { auth, db } from "@/lib/firebase";
 import { endAdminSession } from "@/lib/admin-session";
-import { signInWithGoogle } from "@/lib/sign-in";
+import { isAdminIdentity } from "@/lib/admin-access";
 import { readApiResponse } from "@/lib/api-response";
 import { automaticPreviewText, extractFeaturedVideoUrl, inlineVideoLinks, personalizedGreeting, sanitizeRichText } from "@/lib/rich-text";
 import RichTextEditor from "@/components/admin/rich-text-editor";
@@ -161,8 +162,13 @@ export default function MailingManager() {
     if (!user) return;
     let active = true;
     getDoc(doc(db, "admins", user.uid)).then(async (snapshot) => {
-      const expiresAt = snapshot.data()?.expiresAt?.toMillis?.() ?? 0;
-      const allowed = snapshot.exists() && snapshot.data()?.enabled === true && expiresAt > Date.now();
+      const admin = snapshot.data();
+      const allowed = snapshot.exists() && isAdminIdentity(user.uid, {
+        enabled: admin?.enabled,
+        expiresAt: admin?.expiresAt?.toMillis?.() ?? 0,
+        inviteId: admin?.inviteId,
+        codeHash: admin?.codeHash,
+      });
       if (!active) return;
       setAuthorized(allowed);
       if (allowed) await refresh();
@@ -363,11 +369,11 @@ export default function MailingManager() {
   const previewPreheader = preheaderEdited ? campaign.preheader : automaticPreheader;
 
   return <main className={"admin-shell mailing-admin" + (focusedComposer ? " mailing-focus-mode" : "")}>
-    <header className="admin-top"><span className="admin-mark">POOF <span>MAILING</span></span><div className="admin-top-actions"><button className="text-button" onClick={() => void endAdminSession().finally(() => signOut(auth))}>Sign out</button></div></header>
+    <header className="admin-top"><span className="admin-mark">POOF <span>MAILING</span></span><div className="admin-top-actions"><button className="text-button" onClick={() => void endAdminSession().then(() => signOut(auth)).catch((reason) => setError(reason instanceof Error ? reason.message : "Could not sign out."))}>Sign out</button></div></header>
     <div className="admin-content">
       <div className="admin-heading"><span className="eyebrow">COMMUNICATIONS</span><h1>Mailing system</h1><p>Manage meeting contacts, create polished newsletters, and automate delivery with Resend.</p></div>
       {!ready ? <section className="admin-panel loading-card">Checking administrator access…</section>
-        : !user || !authorized ? <section className="admin-panel sign-in-panel"><div className="panel-icon">✉</div><h2>{user ? "Admin access required" : "Administrator sign in"}</h2><p>{user ? "This account is not authorized to manage email." : "Sign in with your administrator Google account."}</p>{error && <p className="notice error-notice">{error}</p>}{!user && <button className="primary-button" onClick={() => void signInWithGoogle().catch((reason: unknown) => setError(reason instanceof Error ? reason.message : "Google sign-in failed."))}>Continue with Google</button>}</section>
+        : !user || !authorized ? <section className="admin-panel sign-in-panel"><div className="panel-icon">✉</div><h2>{user ? "Admin access required" : "Administrator sign in"}</h2><p>{user ? "This account is not authorized to manage email." : "Sign in with your administrator email and password."}</p>{error && <p className="notice error-notice">{error}</p>}<Link className="primary-button" href="/signin">Sign in</Link></section>
         : <>
           {error && <p className="notice error-notice" role="alert">{error}</p>}
           {notice && <p className="notice" role="status">{notice}</p>}

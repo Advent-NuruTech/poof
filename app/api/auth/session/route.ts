@@ -1,127 +1,217 @@
 import { NextResponse } from "next/server";
-
-// Route segment config (`runtime`, `dynamic`, `revalidate`) is not allowed while
-// `nextConfig.cacheComponents` is enabled. Node is the default runtime here, so
-// removing the export changes nothing.
+import { cookies } from "next/headers";
+import { getAdminSessionExpiry, ROOT_ADMIN_UID, isAdminIdentity, isAdminSource } from "@/lib/admin-access";
 
 const COOKIE_NAME = "poof_admin_session";
-const SESSION_MS = 24 * 60 * 60 * 1000;
+const ACCESS_COOKIE_NAME = "poof_admin_access";
+const API_KEY = process.env.NEXT_PUBLIC_FIREBASE_API_KEY;
+const PROJECT_ID = process.env.NEXT_PUBLIC_FIREBASE_PROJECT_ID;
 
-type DocumentFields = {
+type AdminFields = {
   enabled?: { booleanValue?: boolean };
   expiresAt?: { timestampValue?: string };
+  inviteId?: { stringValue?: string };
   codeHash?: { stringValue?: string };
+  sessionMigrated?: { booleanValue?: boolean };
 };
 
-// Firestore rules require a non-empty codeHash on admins/{uid}. Only a hash is
-// stored so the code itself is never published; the value is a formality now
-// because sign-in no longer requires the code.
-async function hashSignupCode(code: string) {
-  const data = new TextEncoder().encode(code);
-  const digest = await crypto.subtle.digest("SHA-256", data);
-  return Array.from(new Uint8Array(digest), (byte) => byte.toString(16).padStart(2, "0")).join("");
+type RefreshedToken = {
+  id_token?: string;
+  refresh_token?: string;
+  user_id?: string;
+};
+
+function cookieOptions(maxAge: number) {
+  return {
+    httpOnly: true,
+    secure: process.env.NODE_ENV === "production",
+    sameSite: "lax" as const,
+    path: "/",
+    maxAge,
+  };
+}
+
+function adminUrl(uid: string) {
+  return `https://firestore.googleapis.com/v1/projects/${encodeURIComponent(PROJECT_ID!)}/databases/(default)/documents/admins/${encodeURIComponent(uid)}`;
+}
+
+async function refreshFirebaseToken(refreshToken: string): Promise<RefreshedToken | null> {
+  const response = await fetch(`https://securetoken.googleapis.com/v1/token?key=${encodeURIComponent(API_KEY!)}`, {
+    method: "POST",
+    headers: { "Content-Type": "application/x-www-form-urlencoded" },
+    body: new URLSearchParams({ grant_type: "refresh_token", refresh_token: refreshToken }),
+    cache: "no-store",
+  });
+  if (!response.ok) return null;
+  return await response.json() as RefreshedToken;
+}
+
+async function readAdmin(uid: string, idToken: string) {
+  const response = await fetch(adminUrl(uid), {
+    headers: { Authorization: `Bearer ${idToken}` },
+    cache: "no-store",
+  });
+  if (!response.ok) return { response, fields: null };
+  const document = await response.json() as { fields?: AdminFields };
+  return { response, fields: document.fields ?? {} };
+}
+
+async function updateAdmin(uid: string, idToken: string, expiresAt: number, create: boolean) {
+  const fields = create
+    ? `updateMask.fieldPaths=enabled&updateMask.fieldPaths=expiresAt&updateMask.fieldPaths=sessionMigrated`
+    : "updateMask.fieldPaths=expiresAt&updateMask.fieldPaths=sessionMigrated";
+  const response = await fetch(`${adminUrl(uid)}?${fields}`, {
+    method: "PATCH",
+    headers: {
+      Authorization: `Bearer ${idToken}`,
+      "Content-Type": "application/json",
+    },
+    body: JSON.stringify({
+      fields: {
+        ...(create ? { enabled: { booleanValue: true } } : {}),
+        expiresAt: { timestampValue: new Date(expiresAt).toISOString() },
+        sessionMigrated: { booleanValue: true },
+      },
+    }),
+    cache: "no-store",
+  });
+  return response;
+}
+
+function setSessionCookies(response: NextResponse, refreshToken: string, idToken: string, expiresAt: number) {
+  const maxAge = Math.max(1, Math.floor((expiresAt - Date.now()) / 1000));
+  response.cookies.set(COOKIE_NAME, refreshToken, cookieOptions(maxAge));
+  response.cookies.set(ACCESS_COOKIE_NAME, idToken, cookieOptions(maxAge));
+  return response;
+}
+
+function expiredSession() {
+  const response = NextResponse.json({ error: "Your admin session expired. Sign in again." }, { status: 401 });
+  response.cookies.set(COOKIE_NAME, "", cookieOptions(0));
+  response.cookies.set(ACCESS_COOKIE_NAME, "", cookieOptions(0));
+  return response;
+}
+
+function validOrigin(request: Request) {
+  const origin = request.headers.get("origin");
+  return !origin || origin === new URL(request.url).origin;
+}
+
+async function renewSession(refreshToken: string, mode: "active" | "restore" | "fresh-sign-in") {
+  if (!API_KEY || !PROJECT_ID) {
+    return { response: NextResponse.json({ error: "Authentication is not configured." }, { status: 503 }) };
+  }
+
+  const refreshed = await refreshFirebaseToken(refreshToken);
+  const uid = refreshed?.user_id;
+  const idToken = refreshed?.id_token;
+  if (!refreshed || !uid || !idToken) return { response: expiredSession() };
+
+  const { response: adminResponse, fields } = await readAdmin(uid, idToken);
+  const record = {
+    enabled: fields?.enabled?.booleanValue,
+    expiresAt: Date.parse(fields?.expiresAt?.timestampValue ?? ""),
+    inviteId: fields?.inviteId?.stringValue,
+    codeHash: fields?.codeHash?.stringValue,
+    sessionMigrated: fields?.sessionMigrated?.booleanValue,
+  };
+  const recognized = isAdminSource(uid, record);
+  if (adminResponse.status !== 404 && adminResponse.status !== 403 && !adminResponse.ok) {
+    return { response: NextResponse.json({ error: "Could not verify administrator access." }, { status: 502 }) };
+  }
+
+  if (adminResponse.ok && record.enabled !== true) {
+    return { response: expiredSession() };
+  }
+  if (adminResponse.ok && !recognized) {
+    return { response: expiredSession() };
+  }
+  const withinIdleWindow = adminResponse.ok && isAdminIdentity(uid, record);
+  const oneTimeLegacyRestore = mode === "restore" && adminResponse.ok &&
+    record.enabled === true && recognized && record.sessionMigrated !== true;
+  if (mode === "active" && !withinIdleWindow) {
+    return { response: expiredSession() };
+  }
+  if (mode === "restore" && !withinIdleWindow && !oneTimeLegacyRestore) {
+    return { response: expiredSession() };
+  }
+  if (!adminResponse.ok && uid !== ROOT_ADMIN_UID) {
+    return { response: expiredSession() };
+  }
+
+  const expiresAt = getAdminSessionExpiry();
+  const writeResponse = await updateAdmin(uid, idToken, expiresAt, !adminResponse.ok);
+  if (!writeResponse.ok) {
+    const detail = await writeResponse.json().catch(() => ({})) as { error?: { status?: string; message?: string } };
+    console.error("Admin session renewal failed", writeResponse.status, detail.error?.message ?? "");
+    return {
+      response: NextResponse.json({
+        error: detail.error?.status === "PERMISSION_DENIED"
+          ? "Firestore rules rejected administrator access. Deploy the current firestore.rules and try again."
+          : "Could not renew your administrator session.",
+      }, { status: 403 }),
+    };
+  }
+
+  return {
+    idToken,
+    uid,
+    refreshToken: refreshed.refresh_token ?? refreshToken,
+    expiresAt,
+    response: null,
+  };
 }
 
 export async function POST(request: Request) {
-  if (request.headers.get("origin") && request.headers.get("origin") !== new URL(request.url).origin) {
-    return NextResponse.json({ error: "Invalid request origin." }, { status: 403 });
-  }
-  const apiKey = process.env.NEXT_PUBLIC_FIREBASE_API_KEY;
-  const projectId = process.env.NEXT_PUBLIC_FIREBASE_PROJECT_ID;
-  const signupCode = process.env.SIGN_UP_CODE;
-  if (!apiKey || !projectId) return NextResponse.json({ error: "Authentication is not configured." }, { status: 503 });
+  if (!validOrigin(request)) return NextResponse.json({ error: "Invalid request origin." }, { status: 403 });
 
-  let body: { idToken?: unknown };
-  try { body = await request.json(); }
-  catch { return NextResponse.json({ error: "Invalid request." }, { status: 400 }); }
-  const { idToken } = body;
-  if (typeof idToken !== "string" || idToken.length > 10000) {
+  let body: { refreshToken?: unknown; restore?: unknown; freshSignIn?: unknown };
+  try {
+    body = await request.json() as typeof body;
+  } catch {
+    return NextResponse.json({ error: "Invalid request." }, { status: 400 });
+  }
+  const refreshToken = body.refreshToken;
+  if (typeof refreshToken !== "string" || refreshToken.length < 20 || refreshToken.length > 4096) {
     return NextResponse.json({ error: "Sign in again to continue." }, { status: 401 });
   }
-
-  const identityResponse = await fetch(`https://identitytoolkit.googleapis.com/v1/accounts:lookup?key=${encodeURIComponent(apiKey)}`, {
-    method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ idToken }), cache: "no-store",
-  });
-  const identity = await identityResponse.json().catch(() => ({})) as { users?: Array<{ localId?: string; email?: string }> };
-  const user = identity.users?.[0];
-  const uid = user?.localId;
-  if (!identityResponse.ok || !uid || !user.email) return NextResponse.json({ error: "Your sign-in expired. Sign in again." }, { status: 401 });
-
-  const root = `projects/${encodeURIComponent(projectId)}/databases/(default)/documents`;
-  const adminPath = `admins/${encodeURIComponent(uid)}`;
-  const adminUrl = `https://firestore.googleapis.com/v1/${root}/${adminPath}`;
-  const now = Date.now();
-  // The signup code is not required to sign in; the field only has to satisfy
-  // the Firestore rules, so store a hash of the configured code when present
-  // and a fixed marker otherwise.
-  const codeHash = signupCode ? await hashSignupCode(signupCode) : "password-sign-in";
-
-  const priorResponse = await readAdminDocument(idToken, adminUrl);
-  // A missing document is a normal 404. A denied read (403) is also expected on
-  // the very first sign in: the rules only grant `get` on admins/{uid} to a
-  // signed-in user, and some deployments return PERMISSION_DENIED before the
-  // document exists. Treat it as "no admin record yet" and let the write below
-  // decide, rather than failing with a misleading message. A 429 is a transient
-  // quota/rate limit, so it is retried rather than reported as an access error.
-  if (!priorResponse.ok && priorResponse.status !== 404 && priorResponse.status !== 403) {
-    return NextResponse.json({
-      error: priorResponse.status === 429
-        ? "Firestore is temporarily rate-limited (quota exceeded). Please try again in a moment."
-        : "Could not check administrator access.",
-    }, { status: 429 });
-  }
-  const prior = priorResponse.ok ? await priorResponse.json().catch(() => null) as { fields?: DocumentFields } | null : null;
-  const priorExpiresAt = Date.parse(prior?.fields?.expiresAt?.timestampValue ?? "");
-  const priorActive = prior?.fields?.enabled?.booleanValue === true && priorExpiresAt > now;
-
-  if (priorActive) {
-    // This account's admin session is still valid; keep its original deadline.
-    return setSessionCookie(idToken, priorExpiresAt - now);
+  if (body.restore === true && body.freshSignIn === true) {
+    return NextResponse.json({ error: "Invalid sign-in request." }, { status: 400 });
   }
 
-  // Email and password alone open the session: the account already passed
-  // verification when it was created, so no signup code is required here.
-  const expiresAt = now + SESSION_MS;
-  const writeResponse = await fetch(`${adminUrl}?updateMask.fieldPaths=enabled&updateMask.fieldPaths=expiresAt&updateMask.fieldPaths=codeHash`, {
-    method: "PATCH",
-    headers: { Authorization: `Bearer ${idToken}`, "Content-Type": "application/json" },
-    body: JSON.stringify({ fields: { enabled: { booleanValue: true }, expiresAt: { timestampValue: new Date(expiresAt).toISOString() }, codeHash: { stringValue: codeHash } } }),
-    cache: "no-store",
-  });
-  if (!writeResponse.ok) {
-    const detail = await writeResponse.json().catch(() => ({})) as { error?: { status?: string; message?: string } };
-    console.error("Admin session write failed", writeResponse.status, detail.error?.message ?? "");
-    return NextResponse.json({
-      error: detail.error?.status === "PERMISSION_DENIED"
-        ? "Firestore rules rejected the admin record. Deploy the current firestore.rules (firebase deploy --only firestore:rules) and try again."
-        : "Could not activate this admin session.",
-    }, { status: 403 });
+  try {
+    const mode = body.restore === true ? "restore" : body.freshSignIn === true ? "fresh-sign-in" : "restore";
+    const result = await renewSession(refreshToken, mode);
+    if (result.response) return result.response;
+    return setSessionCookies(NextResponse.json({ ok: true }), result.refreshToken, result.idToken, result.expiresAt);
+  } catch (reason) {
+    console.error("Admin sign-in session could not be created", reason);
+    return NextResponse.json({ error: "Could not verify administrator access. Please try again." }, { status: 502 });
   }
-
-  return setSessionCookie(idToken, SESSION_MS);
 }
 
-function setSessionCookie(idToken: string, maxAgeMs: number) {
-  const response = NextResponse.json({ ok: true });
-  response.cookies.set(COOKIE_NAME, idToken, { httpOnly: true, secure: process.env.NODE_ENV === "production", sameSite: "lax", path: "/", maxAge: Math.max(1, Math.floor(maxAgeMs / 1000)) });
-  return response;
-}
-
-// Firestore returns 429 RESOURCE_EXHAUSTED when the project's read quota is hit.
-// That is transient and retryable, so back off a few times before giving up.
-async function readAdminDocument(idToken: string, adminUrl: string) {
-  const delays = [0, 400, 1200];
-  let response = await fetch(adminUrl, { headers: { Authorization: `Bearer ${idToken}` }, cache: "no-store" });
-  for (const delay of delays) {
-    if (response.status !== 429) return response;
-    if (delay) await new Promise((resolve) => setTimeout(resolve, delay));
-    response = await fetch(adminUrl, { headers: { Authorization: `Bearer ${idToken}` }, cache: "no-store" });
+export async function PATCH(request: Request) {
+  if (!validOrigin(request)) return NextResponse.json({ error: "Invalid request origin." }, { status: 403 });
+  if (!API_KEY || !PROJECT_ID) {
+    return NextResponse.json({ error: "Authentication is not configured." }, { status: 503 });
   }
-  return response;
+
+  const refreshToken = (await cookies()).get(COOKIE_NAME)?.value;
+  if (!refreshToken) return expiredSession();
+
+  try {
+    const result = await renewSession(refreshToken, "active");
+    if (result.response) return result.response;
+    return setSessionCookies(NextResponse.json({ ok: true }), result.refreshToken, result.idToken, result.expiresAt);
+  } catch (reason) {
+    console.error("Admin activity session could not be renewed", reason);
+    return NextResponse.json({ error: "Could not renew your administrator session." }, { status: 502 });
+  }
 }
 
 export async function DELETE() {
   const response = NextResponse.json({ ok: true });
-  response.cookies.set(COOKIE_NAME, "", { httpOnly: true, secure: process.env.NODE_ENV === "production", sameSite: "lax", path: "/", maxAge: 0 });
+  response.cookies.set(COOKIE_NAME, "", cookieOptions(0));
+  response.cookies.set(ACCESS_COOKIE_NAME, "", cookieOptions(0));
   return response;
 }

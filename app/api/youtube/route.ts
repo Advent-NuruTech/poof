@@ -1,4 +1,5 @@
 import type { Channel, Playlist, Video } from "@/lib/catalog";
+import { isAdminIdentity } from "@/lib/admin-access";
 
 const apiKey = process.env.YOUTUBE_DATA_API_KEY;
 const projectId = process.env.NEXT_PUBLIC_FIREBASE_PROJECT_ID;
@@ -53,9 +54,13 @@ async function authorize(request: Request): Promise<string | null> {
     headers: { Authorization: `Bearer ${token}` }, cache: "no-store",
   });
   if (!admin.ok) return null;
-  const record = await admin.json() as { fields?: { enabled?: { booleanValue?: boolean }; expiresAt?: { timestampValue?: string } } };
-  const expiresAt = Date.parse(record.fields?.expiresAt?.timestampValue ?? "");
-  return record.fields?.enabled?.booleanValue === true && expiresAt > Date.now() ? uid : null;
+  const record = await admin.json() as { fields?: { enabled?: { booleanValue?: boolean }; expiresAt?: { timestampValue?: string }; inviteId?: { stringValue?: string }; codeHash?: { stringValue?: string } } };
+  return isAdminIdentity(uid, {
+    enabled: record.fields?.enabled?.booleanValue,
+    expiresAt: Date.parse(record.fields?.expiresAt?.timestampValue ?? ""),
+    inviteId: record.fields?.inviteId?.stringValue,
+    codeHash: record.fields?.codeHash?.stringValue,
+  }) ? uid : null;
 }
 
 async function allPages<T>(resource: string, params: Record<string, string>) {

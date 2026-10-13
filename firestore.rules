@@ -5,38 +5,85 @@ service cloud.firestore {
       return request.auth != null;
     }
 
-    // Email and password sign-in is all that is required: once the session
-    // endpoint verifies the account it writes an enabled, unexpired admin
-    // document and the account can open the admin pages. No signup code,
-    // invite, or bootstrap flow is involved.
+    function isRootAdmin(uid) {
+      return uid == '3H3BclyO2FePQ59KYIO2kKSirnx2';
+    }
+
+    function hasAdminSource(uid, admin) {
+      return isRootAdmin(uid)
+        || (admin.inviteId is string && admin.inviteId.size() >= 16)
+        || (admin.codeHash is string && admin.codeHash.size() > 0);
+    }
+
     function isAdmin() {
       return signedIn()
         && exists(/databases/$(database)/documents/admins/$(request.auth.uid))
         && get(/databases/$(database)/documents/admins/$(request.auth.uid)).data.enabled == true
-        && get(/databases/$(database)/documents/admins/$(request.auth.uid)).data.expiresAt > request.time;
+        && get(/databases/$(database)/documents/admins/$(request.auth.uid)).data.expiresAt > request.time
+        && hasAdminSource(
+          request.auth.uid,
+          get(/databases/$(database)/documents/admins/$(request.auth.uid)).data
+        );
+    }
+
+    function validAdminInvite(inviteId) {
+      return exists(/databases/$(database)/documents/adminInvites/$(inviteId))
+        && get(/databases/$(database)/documents/adminInvites/$(inviteId)).data.email == request.auth.token.email
+        && get(/databases/$(database)/documents/adminInvites/$(inviteId)).data.used == false
+        && get(/databases/$(database)/documents/adminInvites/$(inviteId)).data.expiresAt > request.time;
     }
 
     match /admins/{uid} {
-      // Written by the session endpoint after a verified email/password
-      // sign-in. Signed-in accounts may maintain only their own record and
-      // cannot grant access to anyone else. `codeHash` is a leftover field
-      // from the old signup-code flow: it is tolerated on existing documents
-      // but is no longer required and grants nothing by itself.
       allow get: if signedIn() && request.auth.uid == uid;
-      allow create, update: if signedIn()
+      allow create: if signedIn()
         && uid == request.auth.uid
-        && request.resource.data.keys().hasOnly(['enabled', 'expiresAt', 'codeHash'])
         && request.resource.data.enabled == true
         && request.resource.data.expiresAt > request.time
-        && request.resource.data.expiresAt <= request.time + duration.value(24, 'h')
-        && (!('codeHash' in request.resource.data)
-          || (request.resource.data.codeHash is string && request.resource.data.codeHash.size() > 0));
+        && request.resource.data.expiresAt <= request.time + duration.value(123, 'd')
+        && ((isRootAdmin(uid)
+            && request.resource.data.keys().hasOnly(['enabled', 'expiresAt', 'sessionMigrated'])
+            && request.resource.data.sessionMigrated == true)
+          || (request.resource.data.keys().hasOnly(['enabled', 'expiresAt', 'inviteId', 'sessionMigrated'])
+            && request.resource.data.inviteId is string
+            && request.resource.data.sessionMigrated == true
+            && validAdminInvite(request.resource.data.inviteId)));
+      allow update: if signedIn()
+        && uid == request.auth.uid
+        && resource.data.enabled == true
+        && request.resource.data.enabled == true
+        && request.resource.data.expiresAt > request.time
+        && request.resource.data.expiresAt <= request.time + duration.value(123, 'd')
+        && ((hasAdminSource(uid, resource.data)
+            && request.resource.data.sessionMigrated == true
+            && request.resource.data.diff(resource.data).affectedKeys().hasOnly(['expiresAt', 'sessionMigrated']))
+          || (!hasAdminSource(uid, resource.data)
+            && request.resource.data.sessionMigrated == true
+            && request.resource.data.diff(resource.data).affectedKeys().hasOnly(['expiresAt', 'inviteId', 'sessionMigrated'])
+            && request.resource.data.inviteId is string
+            && validAdminInvite(request.resource.data.inviteId)));
       allow list, delete: if false;
     }
 
-    // Signed-in accounts can maintain only their own basic profile.
-    // The signup code (used only when creating an account) is validated by
-    // /api/auth/signup and must never be published in rules.
+    match /adminInvites/{inviteId} {
+      allow get: if true;
+      allow create: if isAdmin()
+        && request.resource.data.keys().hasOnly(['email', 'createdAt', 'expiresAt', 'used'])
+        && request.resource.data.email is string
+        && request.resource.data.email.size() > 0
+        && request.resource.data.email.size() <= 254
+        && request.resource.data.createdAt == request.time
+        && request.resource.data.expiresAt > request.time
+        && request.resource.data.expiresAt <= request.time + duration.value(2, 'h')
+        && request.resource.data.used == false;
+      allow update: if signedIn()
+        && resource.data.email == request.auth.token.email
+        && resource.data.used == false
+        && resource.data.expiresAt > request.time
+        && request.resource.data.used == true
+        && request.resource.data.diff(resource.data).affectedKeys().hasOnly(['used']);
+      allow list, delete: if false;
+    }
+
     match /userProfiles/{uid} {
       allow read, create, update, delete: if signedIn() && request.auth.uid == uid;
     }
