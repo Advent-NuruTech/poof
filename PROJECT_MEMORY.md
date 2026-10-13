@@ -2,6 +2,12 @@
 ## Ongoing working preference
 - Whenever project changes are made, record the major change and any build/runtime errors with their verified fixes in this file before finishing. When the user asks, provide the exact suggested Git commit message; do not create a commit unless explicitly requested.
 
+## 2026-10-13: Fix administrator invitation authorization
+
+- **Root cause:** The Firestore root-admin helper had been renamed to `isRootCAdmin` while its callers still referenced `isRootAdmin`. Invitation activation also sent Firestore REST PATCH requests whose update masks omitted `sessionMigrated`, a field required by the admin-record rules.
+- **Changes:** Restored the `isRootAdmin` helper name, made invitation activation PATCH masks include `sessionMigrated`, and preserve an existing administrator's original invite/code identity when renewing their admin record. Every admin authorized through the shared `isAdmin` check retains the same invitation and management permissions.
+- **Verification:** `npx.cmd --no-install tsc --noEmit`, focused ESLint on `app/api/auth/signup/route.ts`, and `git diff --check` passed. Firestore rules were not emulator-tested or deployed from this environment; deploy the rules and updated application before verifying in production.
+
 ## 2026-10-13: Secure admin access and four-month idle sessions
 
 - **Root causes:** Admin records and the session cookie expired after 24 hours, which caused Firestore writes from the library editor to fail with “Missing or insufficient permissions.” The session endpoint and rules also let any signed-in account create its own admin record. The `adminInvites` UI had no matching Firestore rules, and the signup page did not pass invitation IDs through.

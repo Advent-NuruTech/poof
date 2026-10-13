@@ -1,5 +1,5 @@
 import { NextResponse } from "next/server";
-import { getAdminSessionExpiry } from "@/lib/admin-access";
+import { getAdminSessionExpiry, isAdminSource } from "@/lib/admin-access";
 
 type FirestoreDocument = {
   fields?: {
@@ -8,6 +8,7 @@ type FirestoreDocument = {
     expiresAt?: { timestampValue?: string };
     enabled?: { booleanValue?: boolean };
     inviteId?: { stringValue?: string };
+    codeHash?: { stringValue?: string };
   };
 };
 
@@ -117,30 +118,37 @@ export async function POST(request: Request) {
       if (existing.fields?.enabled?.booleanValue !== true) {
         return NextResponse.json({ error: "This account is not eligible to accept that invitation." }, { status: 403 });
       }
-      if (existingInvite !== invite) {
-        if (typeof existingInvite === "string" && existingInvite.length >= 16) {
-          return NextResponse.json({ error: "This account is already linked to a different administrator invitation." }, { status: 403 });
-        }
-        const migrationResponse = await fetch(`${adminDocumentUrl}?updateMask.fieldPaths=expiresAt&updateMask.fieldPaths=inviteId`, {
+      const alreadyAdmin = isAdminSource(localId, {
+        inviteId: existingInvite,
+        codeHash: existing.fields?.codeHash?.stringValue,
+      });
+      const adminUpdateMask = alreadyAdmin
+        ? "updateMask.fieldPaths=expiresAt&updateMask.fieldPaths=sessionMigrated"
+        : "updateMask.fieldPaths=expiresAt&updateMask.fieldPaths=inviteId&updateMask.fieldPaths=sessionMigrated";
+      const adminFields = alreadyAdmin
+        ? {
+            expiresAt: { timestampValue: new Date(getAdminSessionExpiry()).toISOString() },
+            sessionMigrated: { booleanValue: true },
+          }
+        : {
+            expiresAt: { timestampValue: new Date(getAdminSessionExpiry()).toISOString() },
+            inviteId: { stringValue: invite },
+            sessionMigrated: { booleanValue: true },
+          };
+      const migrationResponse = await fetch(`${adminDocumentUrl}?${adminUpdateMask}`, {
           method: "PATCH",
           headers: {
             Authorization: `Bearer ${idToken}`,
             "Content-Type": "application/json",
           },
-          body: JSON.stringify({
-            fields: {
-              expiresAt: { timestampValue: new Date(getAdminSessionExpiry()).toISOString() },
-              inviteId: { stringValue: invite },
-            },
-          }),
+          body: JSON.stringify({ fields: adminFields }),
           cache: "no-store",
         });
         if (!migrationResponse.ok) {
           return NextResponse.json({ error: "Could not activate this invitation for the existing administrator. Deploy the current firestore.rules and try again." }, { status: 403 });
         }
-      }
     } else if (priorAdminResponse.status === 404 || priorAdminResponse.status === 403) {
-      const adminResponse = await fetch(`${adminDocumentUrl}?updateMask.fieldPaths=enabled&updateMask.fieldPaths=expiresAt&updateMask.fieldPaths=inviteId`, {
+      const adminResponse = await fetch(`${adminDocumentUrl}?updateMask.fieldPaths=enabled&updateMask.fieldPaths=expiresAt&updateMask.fieldPaths=inviteId&updateMask.fieldPaths=sessionMigrated`, {
         method: "PATCH",
         headers: {
           Authorization: `Bearer ${idToken}`,
