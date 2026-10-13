@@ -13,8 +13,8 @@ const sections = [
 ];
 
 const inbox = [
-  { href: "/admin/contacts", label: "Contact & prayer", icon: "✉" },
-  { href: "/admin/link-requests", label: "Link requests", icon: "↗" },
+  { href: "/admin/contacts", label: "Contact , Meeting & prayer", icon: "✉" },
+  
 ];
 
 function NavItems({ items, onNavigate }: { items: typeof sections; onNavigate: () => void }) {

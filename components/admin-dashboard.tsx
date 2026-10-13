@@ -84,7 +84,7 @@ export default function AdminDashboard() {
     { label: "Total videos", value: totals.videos, href: "/admin/channels", icon: "▶", note: "Manage synced videos" },
     { label: "Playlists", value: totals.playlists, href: "/admin/channels", icon: "▤", note: "Manage synced playlists" },
     { label: "YouTube channels", value: totals.channels, href: "/admin/channels", icon: "◉", note: "Manage connected sources" },
-    { label: "Prayer & contact requests", value: totals.requests, href: "/admin/contacts", icon: "✉", note: "Review the inbox" },
+    { label: "Contact & prayer requests", value: totals.requests, href: "/admin/contacts", icon: "✉", note: "Review by category and status" },
     { label: "Total studies", value: totals.studies, href: "/admin/library", icon: "▤", note: "Manage study library" },
   ];
   const meetingCards = [
@@ -122,8 +122,8 @@ export default function AdminDashboard() {
         </Link>)}</div>
       </section>
       <section className="dashboard-shortcuts" aria-label="Admin shortcuts">
-        <Link href="/admin/link-requests"><span aria-hidden="true">↗</span><span><strong>Meeting link requests</strong><small>Review requests for Zoom links</small></span><b aria-hidden="true">→</b></Link>
-        <Link href="/admin/contacts"><span aria-hidden="true">✉</span><span><strong>Contact & prayer inbox</strong><small>Read and respond to submissions</small></span><b aria-hidden="true">→</b></Link>
+        <Link href="/admin/link-requests"><span aria-hidden="true">↗</span><span><strong>Zoom link requests</strong><small>Review requests for Zoom links</small></span><b aria-hidden="true">→</b></Link>
+        <Link href="/admin/contacts"><span aria-hidden="true">✉</span><span><strong>Contact & prayer requests</strong><small>Filter by category and status</small></span><b aria-hidden="true">→</b></Link>
         <Link href="/admin/mailing"><span aria-hidden="true">✉</span><span><strong>Mailing system</strong><small>Manage members, newsletters, and delivery</small></span><b aria-hidden="true">→</b></Link>
       </section>
     </>}

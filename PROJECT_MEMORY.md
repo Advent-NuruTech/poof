@@ -2,6 +2,15 @@
 ## Ongoing working preference
 - Whenever project changes are made, record the major change and any build/runtime errors with their verified fixes in this file before finishing. When the user asks, provide the exact suggested Git commit message; do not create a commit unless explicitly requested.
 
+## 2026-10-13: Tabbed admin inbox with request status tracking
+
+- **Major changes:** Split the admin inbox into explicit tabs — Contact, Prayer Request, and Zoom Link Request — inside `components/admin/contacts-manager.tsx`, replacing the previous mixed `mode="all"` list. Each tab shows its own submission count.
+- **Major changes:** Added status tracking. New `status` (`pending` | `handled`) and `handledAt` fields on the `contacts` documents, with Pending / Handled / All filter buttons carrying per-filter counts. Admins can toggle a submission between handled and pending from a new card footer action, and handled cards get a distinct status pill and muted treatment.
+- **Data model and routing:** Submissions without a `status` are treated as `pending`, so existing documents need no migration. `/admin/contacts` opens on the Contact tab via the new `initialTab` prop; `/admin/link-requests` keeps `mode="meeting-link"`, which now opens directly on the Zoom tab. The admin dashboard card and shortcut labels were renamed to Contact & prayer requests / Zoom link requests to match the tabs.
+- **Security:** `firestore.rules` now separates contact reads and deletes from updates. Admin updates may change only `status` and `handledAt`, must keep `status` within the allowed values, and require `handledAt` to be null when pending or equal to `request.time` when handled.
+- **Styling:** Added `inbox-tabs`, `inbox-tab`, `inbox-filter`, `inbox-status`, and card footer/`is-handled` rules to `app/globals.css`, including a mobile layout for narrow screens.
+- **Verification:** `npx.cmd tsc --noEmit` and focused ESLint on the changed files passed with zero errors. `npm.cmd run build` completed with all 46 routes, including `/admin/contacts` and `/admin/link-requests`. Firestore rules were not exercised locally (no emulator/CLI installed).
+
 ## 2026-10-13: Manage scheduled mailing with cron-job.org
 - **Scheduler:** Removed the Vercel cron entry and added `npm run cron:sync`, which uses cron-job.org's REST API to create or update the single stable-title job for every-five-minute UTC delivery. Response saving is disabled. The job uses `CRON_SECRET`; the same value must be configured in Vercel and local `.env.local`. The initial sync created the job and a second sync updated it, verifying idempotent repeat behavior.
 - **Cron route:** Preserved the Firestore claim/lock transaction. Authorization now fails closed and compares fixed-size SHA-256 digests with `timingSafeEqual`. Empty and successful runs return counts only; campaign-level errors are recorded in `lastError` and handled without exposing recipient addresses or secrets in logs or response bodies.

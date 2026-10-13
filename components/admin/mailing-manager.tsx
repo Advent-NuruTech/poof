@@ -97,6 +97,8 @@ export default function MailingManager() {
   const [historySourceId, setHistorySourceId] = useState("");
   const [memberEmail, setMemberEmail] = useState("");
   const [memberName, setMemberName] = useState("");
+  const [memberSearch, setMemberSearch] = useState("");
+  const [focusedComposer, setFocusedComposer] = useState(false);
   const [editingScheduleId, setEditingScheduleId] = useState<string | null>(null);
   const [data, setData] = useState<MailingData>({ members: [], subscribers: [], schedules: [], history: [], counts: { verified: 0, pending: 0, active: 0, unsubscribed: 0, totalMembers: 0, totalSubscribers: 0, emailsSent: 0 } });
   const [loading, setLoading] = useState(false);
@@ -171,6 +173,14 @@ export default function MailingManager() {
   }, [user, refresh]);
 
   const currentMembers = useMemo(() => tab === "meeting" ? data.members : data.subscribers, [data.members, data.subscribers, tab]);
+  const visibleMembers = useMemo(() => {
+    const query = memberSearch.trim().toLowerCase();
+    if (!query) return currentMembers;
+    return currentMembers.filter((member) =>
+      [member.email, member.name, member.status, member.source]
+        .some((value) => String(value ?? "").toLowerCase().includes(query))
+    );
+  }, [currentMembers, memberSearch]);
   const activeCount = tab === "meeting" ? data.counts.verified : data.counts.active;
   const secondaryCount = tab === "meeting" ? data.counts.pending : data.counts.unsubscribed;
   const currentSchedules = data.schedules.filter((schedule) => schedule.kind === tab);
@@ -352,7 +362,7 @@ export default function MailingManager() {
   const automaticPreheader = automaticPreviewText(campaign.body);
   const previewPreheader = preheaderEdited ? campaign.preheader : automaticPreheader;
 
-  return <main className="admin-shell mailing-admin">
+  return <main className={"admin-shell mailing-admin" + (focusedComposer ? " mailing-focus-mode" : "")}>
     <header className="admin-top"><span className="admin-mark">POOF <span>MAILING</span></span><div className="admin-top-actions"><button className="text-button" onClick={() => void endAdminSession().finally(() => signOut(auth))}>Sign out</button></div></header>
     <div className="admin-content">
       <div className="admin-heading"><span className="eyebrow">COMMUNICATIONS</span><h1>Mailing system</h1><p>Manage meeting contacts, create polished newsletters, and automate delivery with Resend.</p></div>
@@ -361,6 +371,12 @@ export default function MailingManager() {
         : <>
           {error && <p className="notice error-notice" role="alert">{error}</p>}
           {notice && <p className="notice" role="status">{notice}</p>}
+          <nav className="mailing-quick-nav" aria-label="Mailing dashboard navigation">
+            <button type="button" onClick={() => document.getElementById("mailing-audience")?.scrollIntoView({ behavior: "smooth", block: "start" })}>Subscribers & members</button>
+            <button type="button" onClick={() => document.getElementById("mailing-compose")?.scrollIntoView({ behavior: "smooth", block: "start" })}>Compose message</button>
+            <button type="button" onClick={() => document.getElementById("mailing-schedules")?.scrollIntoView({ behavior: "smooth", block: "start" })}>Scheduled emails</button>
+            <button type="button" onClick={() => document.getElementById("mailing-history")?.scrollIntoView({ behavior: "smooth", block: "start" })}>Message history</button>
+          </nav>
           <section className="mailing-stats">
             <article><span>{tab === "meeting" ? "Eligible members" : "Active subscribers"}</span><strong>{activeCount.toLocaleString()}</strong></article>
             <article><span>Total contacts</span><strong>{totalAudience.toLocaleString()}</strong><small>{secondaryCount.toLocaleString()} {tab === "meeting" ? "pending" : "unsubscribed"}</small></article>
@@ -368,24 +384,27 @@ export default function MailingManager() {
             <article><span>Scheduled sends</span><strong>{currentSchedules.filter((item) => item.active === true).length.toLocaleString()}</strong></article>
           </section>
           <nav className="mailing-tabs" aria-label="Mailing lists">{tabs.map((item) => <button type="button" key={item.id} className={tab === item.id ? "active" : ""} onClick={() => { setTab(item.id); setEditingScheduleId(null); setCampaign({ ...initialCampaign, letterTitle: item.id === "meeting" ? "Online meeting reminder" : "A letter for your journey" }); setPreheaderEdited(false); setAudienceMode("all"); setRecipientIds([]); setAudienceSince(""); setHistorySourceId(""); setError(""); setNotice(""); }}>{item.label}</button>)}</nav>
-          <section className="mailing-grid">
-            <div className="mailing-people">
+          <section className={"mailing-grid" + (focusedComposer ? " mailing-grid-focused" : "")}>
+            <div className="mailing-people" id="mailing-audience">
               <div className="mailing-section-heading"><div><span className="eyebrow">{tab === "meeting" ? "ONLINE MEETING MEMBERS" : "NEWSLETTER AUDIENCE"}</span><h2>{tab === "meeting" ? "Email list" : "Subscribers"}</h2></div><button className="text-button" onClick={() => void refresh()} disabled={loading}>{loading ? "Refreshing…" : "Refresh"}</button></div>
               {tab === "meeting" && <form className="mailing-add-form" onSubmit={(event) => void addMember(event)}><label htmlFor="add-member-name">First name (optional)<input id="add-member-name" type="text" maxLength={120} value={memberName} onChange={(event) => setMemberName(event.target.value)} placeholder="Name"/></label><label htmlFor="add-member-email">Email address<input id="add-member-email" type="email" required maxLength={254} value={memberEmail} onChange={(event) => setMemberEmail(event.target.value)} placeholder="person@example.com"/></label><button className="primary-button" disabled={busy}>Add email as verified</button></form>}
-              {currentMembers.length > 0 && <p className="mailing-helper">Showing up to the 500 most recent addresses. All-audience sends include every eligible contact.</p>}
+              <label className="mailing-search-label">Search this list
+                <input type="search" value={memberSearch} onChange={(event) => setMemberSearch(event.target.value)} placeholder="Search email, name or status…" aria-label="Search subscribers and members" />
+              </label>
+              {currentMembers.length > 0 && <p className="mailing-helper mailing-list-count">Showing {visibleMembers.length.toLocaleString()} of {currentMembers.length.toLocaleString()} loaded contacts. All-audience sends include every eligible contact.</p>}
               {audienceMode === "selected" && currentMembers.length > 0 && <button type="button" className="text-button mailing-select-visible" onClick={() => {
                 const eligible = currentMembers.filter((member) => member.status === (tab === "meeting" ? "verified" : "active")).map((member) => member.id);
                 setRecipientIds(eligible.every((id) => recipientIds.includes(id)) ? [] : [...new Set([...recipientIds, ...eligible])].slice(0, 500));
               }}>Select or clear eligible addresses shown</button>}
               {!currentMembers.length ? <div className="mailing-empty">{loading ? "Loading email addresses…" : tab === "meeting" ? "No meeting requests yet. New requests will appear here as pending." : "No newsletter subscribers yet."}</div>
-                : <div className="mailing-member-list">{currentMembers.map((member) => {
+                : !visibleMembers.length ? <div className="mailing-empty">No contacts match “{memberSearch}”. Try another search.</div> : <div className="mailing-member-list">{visibleMembers.map((member) => {
                   const status = String(member.status ?? "unknown");
                   const eligible = status === (tab === "meeting" ? "verified" : "active");
                   return <article key={member.id}>{audienceMode === "selected" && <input className="mailing-recipient-check" type="checkbox" aria-label={"Select " + String(member.email ?? "email")} checked={recipientIds.includes(member.id)} disabled={!eligible || busy} onChange={() => toggleRecipient(member.id)}/>}<div><strong>{String(member.email ?? "")}</strong><small>{String(member.name ?? (member.source === "admin" ? "Added by administrator" : "Subscriber"))} · {dateLabel(member.createdAt as DateLike)}</small></div><span className={"mailing-status " + status}>{status}</span>{tab === "meeting" && status !== "verified" && <button className="outline-button" disabled={busy} onClick={() => void updateRecord("members", member.id, "verified")}>Verify</button>}{tab === "meeting" && <button className="icon-action remove-action" aria-label={"Remove " + String(member.email ?? "email")} disabled={busy} onClick={() => void updateRecord("members", member.id, "delete")}>×</button>}</article>;
                 })}</div>}
             </div>
-            <div className="mailing-compose">
-              <div className="mailing-section-heading"><div><span className="eyebrow">{tab === "meeting" ? "MEETING NOTIFICATION" : "NEWSLETTER EDITOR"}</span><h2>{tab === "meeting" ? "Compose an email" : "Create a newsletter"}</h2></div></div>
+            <div className="mailing-compose" id="mailing-compose">
+              <div className="mailing-section-heading"><div><span className="eyebrow">{tab === "meeting" ? "MEETING NOTIFICATION" : "NEWSLETTER EDITOR"}</span><h2>{tab === "meeting" ? "Compose an email" : "Create a newsletter"}</h2></div><button type="button" className="outline-button mailing-focus-toggle" aria-pressed={focusedComposer} onClick={() => setFocusedComposer((value) => !value)}>{focusedComposer ? "Exit focus mode" : "Focus editor"}</button></div>
               <p className="mailing-helper">{tab === "meeting" ? "Only verified meeting members receive these messages. The join link becomes a secure, styled button." : "A responsive, inbox-friendly template includes your featured story, linked video preview, and unsubscribe link."} Emails use the recipient&apos;s first name when available and greet them according to the send time.</p>
               <form className="mailing-form" onSubmit={(event) => void submitCampaign(event, "send")}>
                 <label>Subject<input required maxLength={180} value={campaign.subject} onChange={(event) => updateCampaign("subject", event.target.value)} placeholder={tab === "meeting" ? "This week's online meeting" : "A note from Faith of the Pioneers"}/></label>
@@ -414,11 +433,11 @@ export default function MailingManager() {
               <aside className="mailing-template-preview"><span className="eyebrow">TEMPLATE PREVIEW</span><div className="mailing-template-card"><header><img src="/images/logo.jpeg" alt="Faith of the Pioneers"/><strong>FAITH OF THE PIONEERS</strong><span>{campaign.letterTitle || "Your letter header"}</span></header><section><small>{greeting} · {previewPreheader || "Your preview text appears here."}</small><p className="mailing-preview-greeting">{greetingPreview}</p><h3>{campaign.headline || "Your headline appears here"}</h3>{campaign.body ? <div className="mailing-preview-body" dangerouslySetInnerHTML={{ __html: inlineVideoLinks(sanitizeRichText(campaign.body)) }}/>: <p>Your email message preview will appear here as you write.</p>}{campaign.buttonUrl && <span className="mailing-preview-button">{campaign.buttonLabel || (tab === "meeting" ? "Join the meeting" : "Learn more")}</span>}{!inlineVideoUrl && (previewVideo ? <img src={"https://img.youtube.com/vi/" + previewVideo + "/hqdefault.jpg"} alt="Featured video thumbnail"/> : effectiveVideoUrl && <div className="mailing-generic-video">▶ <span>Featured video preview</span></div>)}</section></div></aside>
             </div>
           </section>
-          <section className="mailing-history">
+          <section className="mailing-history" id="mailing-schedules">
             <div className="mailing-section-heading"><div><span className="eyebrow">AUTOMATION & DELIVERY</span><h2>Scheduled emails</h2></div></div>
             {!currentSchedules.length ? <div className="mailing-empty">No scheduled emails for this list.</div> : currentSchedules.map((schedule) => <article className="mailing-history-row" key={schedule.id}><div><strong>{String(schedule.subject ?? "Email")}</strong><small>{String(schedule.repeat ?? "once")} · Next send {dateLabel(schedule.nextSendAt as DateLike)}{schedule.endsAt ? " · Ends " + dateLabel(schedule.endsAt as DateLike) : ""}</small>{typeof schedule.lastError === "string" && schedule.lastError && <small className="error-notice">{schedule.lastError}</small>}</div><span className={"mailing-status " + (schedule.active ? "active" : "completed")}>{String(schedule.status ?? (schedule.active ? "scheduled" : "completed"))}</span>{schedule.active === true && <><button className="outline-button" disabled={busy} onClick={() => editSchedule(schedule)}>Edit</button><button className="outline-button" disabled={busy} onClick={() => void updateRecord("schedules", schedule.id, "cancelled")}>Cancel</button></>}</article>)}
           </section>
-          <section className="mailing-history">
+          <section className="mailing-history" id="mailing-history">
             <div className="mailing-section-heading"><div><span className="eyebrow">RESEND DELIVERY RECORDS</span><h2>Email history</h2></div></div>
             {!currentHistory.length ? <div className="mailing-empty">Sent newsletters and meeting notifications will be listed here.</div> : currentHistory.map((item) => {
               const hasSavedCampaign = Boolean(item.campaign && typeof item.campaign === "object");
@@ -427,6 +446,65 @@ export default function MailingManager() {
             })}
           </section>
         </>}
+      <style jsx global>{`
+        .mailing-admin { --mailing-ink:#14233b; --mailing-muted:#66758b; --mailing-line:#e1e8f0; --mailing-blue:#245bd6; color:var(--mailing-ink); }
+        .mailing-admin .admin-content { width:min(100% - 32px, 1500px); margin-inline:auto; }
+        .mailing-admin .admin-heading { margin-bottom:24px; }
+        .mailing-admin .mailing-quick-nav { display:flex; flex-wrap:wrap; gap:8px; margin:0 0 20px; position:sticky; top:0; z-index:20; padding:10px 0; background:rgba(248,250,253,.94); backdrop-filter:blur(12px); }
+        .mailing-admin .mailing-quick-nav button { border:1px solid var(--mailing-line); border-radius:999px; background:#fff; color:#33445c; padding:9px 14px; font:inherit; font-size:13px; font-weight:650; cursor:pointer; }
+        .mailing-admin .mailing-quick-nav button:hover { border-color:#9ab7f5; color:var(--mailing-blue); }
+        .mailing-admin .mailing-stats { display:grid; grid-template-columns:repeat(4,minmax(0,1fr)); gap:12px; }
+        .mailing-admin .mailing-stats article, .mailing-admin .mailing-people, .mailing-admin .mailing-compose, .mailing-admin .mailing-history { min-width:0; border:1px solid var(--mailing-line); border-radius:18px; background:#fff; box-shadow:0 8px 30px rgba(26,48,84,.045); }
+        .mailing-admin .mailing-grid { display:grid; grid-template-columns:minmax(300px,.78fr) minmax(0,1.5fr); gap:20px; align-items:start; margin-top:20px; }
+        .mailing-admin .mailing-people, .mailing-admin .mailing-compose, .mailing-admin .mailing-history { padding:clamp(14px,2vw,24px); }
+        .mailing-admin .mailing-people { position:sticky; top:64px; max-height:calc(100vh - 84px); overflow:auto; }
+        .mailing-admin .mailing-section-heading { display:flex; align-items:center; justify-content:space-between; gap:12px; }
+        .mailing-admin .mailing-section-heading h2 { margin:4px 0 0; }
+        .mailing-admin .mailing-search-label { display:block; margin:16px 0 8px; font-size:13px; font-weight:650; }
+        .mailing-admin .mailing-search-label input { display:block; width:100%; min-width:0; margin-top:7px; box-sizing:border-box; border:1px solid #d6dfeb; border-radius:10px; padding:11px 12px; background:#fbfcfe; color:inherit; font:inherit; }
+        .mailing-admin .mailing-member-list { display:grid; gap:8px; max-height:52vh; overflow:auto; overscroll-behavior:contain; padding-right:3px; }
+        .mailing-admin .mailing-member-list article { display:flex; align-items:center; gap:9px; min-width:0; flex-wrap:wrap; padding:12px; border:1px solid #edf1f6; border-radius:12px; background:#fff; }
+        .mailing-admin .mailing-member-list article > div { flex:1 1 160px; min-width:0; }
+        .mailing-admin .mailing-member-list article strong { display:block; overflow-wrap:anywhere; }
+        .mailing-admin .mailing-member-list article small { display:block; color:var(--mailing-muted); line-height:1.5; overflow-wrap:anywhere; }
+        .mailing-admin .mailing-form { display:grid; gap:17px; }
+        .mailing-admin .mailing-form > label, .mailing-admin .mailing-rich-field { min-width:0; }
+        .mailing-admin .mailing-form input, .mailing-admin .mailing-form select, .mailing-admin .mailing-schedule-form input, .mailing-admin .mailing-schedule-form select { max-width:100%; box-sizing:border-box; }
+        .mailing-admin .mailing-form-actions { position:sticky; bottom:8px; z-index:10; display:flex; justify-content:flex-end; padding:10px; border:1px solid var(--mailing-line); border-radius:14px; background:rgba(255,255,255,.94); backdrop-filter:blur(10px); }
+        .mailing-admin .mailing-history { margin-top:20px; scroll-margin-top:84px; }
+        .mailing-admin #mailing-audience, .mailing-admin #mailing-compose { scroll-margin-top:84px; }
+        .mailing-admin .mailing-history-row { display:grid; grid-template-columns:minmax(0,1fr) auto; align-items:center; gap:12px; }
+        .mailing-admin .mailing-history-row > div:first-child { min-width:0; }
+        .mailing-admin .mailing-history-row strong, .mailing-admin .mailing-history-row small { overflow-wrap:anywhere; }
+        .mailing-admin .mailing-history-actions { display:flex; flex-wrap:wrap; gap:8px; grid-column:1/-1; }
+        .mailing-admin .mailing-template-preview { max-width:760px; margin-inline:auto; }
+        .mailing-admin .mailing-template-card { overflow:hidden; }
+        .mailing-admin .mailing-template-card img { max-width:100%; }
+        .mailing-admin .mailing-grid-focused { display:block; max-width:1040px; margin-inline:auto; }
+        .mailing-admin .mailing-grid-focused .mailing-people { display:none; }
+        .mailing-admin .mailing-focus-mode .mailing-stats, .mailing-admin.mailing-focus-mode .mailing-quick-nav, .mailing-admin.mailing-focus-mode > .admin-content > .mailing-history { display:none; }
+        .mailing-admin.mailing-focus-mode .mailing-grid { margin-top:8px; }
+        .mailing-admin.mailing-focus-mode .mailing-compose { padding:clamp(16px,3vw,32px); box-shadow:0 18px 60px rgba(26,48,84,.09); }
+        @media (max-width: 1000px) {
+          .mailing-admin .mailing-grid { grid-template-columns:minmax(0,1fr); }
+          .mailing-admin .mailing-people { position:static; max-height:none; }
+          .mailing-admin .mailing-member-list { max-height:440px; }
+        }
+        @media (max-width: 640px) {
+          .mailing-admin .admin-content { width:calc(100% - 20px); }
+          .mailing-admin .mailing-stats { grid-template-columns:repeat(2,minmax(0,1fr)); gap:8px; }
+          .mailing-admin .mailing-stats article { padding:12px; }
+          .mailing-admin .mailing-quick-nav { top:0; gap:6px; margin-inline:-2px; }
+          .mailing-admin .mailing-quick-nav button { padding:8px 10px; font-size:12px; }
+          .mailing-admin .mailing-section-heading { align-items:flex-start; flex-wrap:wrap; }
+          .mailing-admin .mailing-focus-toggle { margin-left:auto; }
+          .mailing-admin .mailing-history-row { grid-template-columns:minmax(0,1fr); }
+          .mailing-admin .mailing-history-actions { grid-column:auto; }
+          .mailing-admin .mailing-history-actions button { flex:1 1 140px; }
+          .mailing-admin .mailing-form-actions { bottom:6px; }
+          .mailing-admin .mailing-form-actions button { width:100%; }
+        }
+      `}</style>
     </div>
   </main>;
 }
