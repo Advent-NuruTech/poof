@@ -2,6 +2,11 @@
 ## Ongoing working preference
 - Whenever project changes are made, record the major change and any build/runtime errors with their verified fixes in this file before finishing. When the user asks, provide the exact suggested Git commit message; do not create a commit unless explicitly requested.
 
+## 2026-10-13: Clarify newsletter welcome and footer links
+
+- **Major changes:** Updated the newsletter welcome email to explain what subscribers can expect, including health and wellness resources, Bible and prophecy studies, faith-building messages, featured videos, and ministry/meeting updates. Moved Unsubscribe from the message body into the footer alongside links to Prayer Requests (`/prayer-request`), Contact Us (`/contact`), and Next Meeting (`/meetings`). Added the same route links and footer unsubscribe to the plain-text email while preserving the existing campaign styling and button.
+- **Verification:** Focused ESLint on `lib/mailing-server.ts`, `npx.cmd --no-install tsc --noEmit`, and `git diff --check` passed. Live email delivery was not exercised.
+
 ## 2026-10-13: Email-based administrator invitations
 
 - **Invitation authorization and delivery:** Replaced the client-side Firestore write with `/api/admin/invites`, which verifies the caller using the shared active-admin check, creates the two-hour invitation with the server Firestore client, and emails the single-use signup link through the existing branded Resend campaign template. Failed sends are logged and the unused invitation is removed; cleanup failures are surfaced explicitly.

@@ -234,18 +234,43 @@ export function renderCampaign(
   const button = buttonUrl
     ? `<p style="margin:28px 0"><a href="${escapeHtml(buttonUrl)}" style="display:inline-block;background:#172126;color:#fff;padding:14px 24px;border-radius:28px;text-decoration:none;font-weight:700">${escapeHtml(campaign.buttonLabel || "Learn more")}</a></p>`
     : "";
-  const unsubscribe = unsubscribeUrl
-    ? `<p style="margin:30px 0 0;padding-top:20px;border-top:1px solid #e5e8e6;color:#68736e;font-size:13px;line-height:1.6">You received this newsletter because you subscribed to Faith of the Pioneers. <a href="${escapeHtml(unsubscribeUrl)}" style="color:#263e69;font-weight:700">Unsubscribe from emails</a></p>`
-    : "";
   const logo = logoUrl
     ? `<img src="${escapeHtml(logoUrl)}" alt="Faith of the Pioneers" width="84" height="84" style="display:block;width:84px;height:84px;object-fit:contain;margin:0 auto 12px;border:0">`
     : "";
   const letterTitle = escapeHtml(campaign.letterTitle || (campaign.kind === "meeting" ? "Online meeting reminder" : "A letter for your journey"));
   const siteUrl = logoUrl ? new URL(logoUrl).origin : "";
-  const footerSite = siteUrl ? `<a href="${escapeHtml(siteUrl)}" style="color:#263e69;text-decoration:underline">Visit Faith of the Pioneers</a>` : "Faith of the Pioneers";
+  const footerLinks = [
+    { label: "Prayer Requests", path: "/prayer-request" },
+    { label: "Contact Us", path: "/contact" },
+    { label: "Next Meeting", path: "/meetings" },
+  ];
+  const footerNav = [
+    ...footerLinks.map(({ label, path }) =>
+      `<a href="${escapeHtml(new URL(path, siteUrl || "https://example.com").toString())}" style="color:#263e69;text-decoration:underline">${label}</a>`
+    ),
+    ...(unsubscribeUrl
+      ? [`<a href="${escapeHtml(unsubscribeUrl)}" style="color:#263e69;text-decoration:underline">Unsubscribe</a>`]
+      : []),
+  ].join(' <span style="color:#84908a">·</span> ');
+  const footerSite = siteUrl
+    ? `<a href="${escapeHtml(siteUrl)}" style="color:#263e69;text-decoration:underline">Visit Faith of the Pioneers</a>`
+    : "Faith of the Pioneers";
   return {
-    html: `<!doctype html><html><head><meta name="viewport" content="width=device-width,initial-scale=1"><style>@media only screen and (max-width:600px){.email-outer{padding:0!important}.email-card{border-radius:0!important}.email-content{padding:24px 20px!important}.email-brand{padding:25px 18px!important}.email-headline{font-size:29px!important}.email-body{font-size:18px!important}}</style></head><body style="margin:0;background:#f1f3f2;font-family:Arial,Helvetica,sans-serif;color:#172126"><div style="display:none;max-height:0;overflow:hidden;opacity:0">${escapeHtml(campaign.preheader || automaticPreviewText(campaign.body))}</div><table role="presentation" class="email-outer" width="100%" cellspacing="0" cellpadding="0" style="background:#f1f3f2;padding:24px 14px"><tr><td align="center"><table role="presentation" class="email-card" width="720" cellspacing="0" cellpadding="0" style="width:100%;max-width:720px;background:#fff;border:1px solid #e5e8e6;border-radius:12px;overflow:hidden"><tr><td class="email-brand" align="center" style="padding:28px 24px;background:#082d63;background-image:linear-gradient(145deg,#0c3978,#061e49);color:#fff">${logo}<div style="font-size:12px;letter-spacing:3px;font-weight:700;color:#f3d875">FAITH OF THE PIONEERS</div><div style="height:1px;width:64px;background:#d8b84d;margin:15px auto 11px"></div><div style="font-size:17px;line-height:1.4;font-style:italic;color:#fff">${letterTitle}</div></td></tr><tr><td class="email-content" style="padding:36px 48px 40px"><div style="height:3px;width:42px;background:#c51c31;margin:0 0 20px"></div>${greeting}<h1 class="email-headline" style="font-size:34px;line-height:1.18;letter-spacing:-.5px;margin:0 0 24px;color:#172126">${escapeHtml(campaign.headline)}</h1><div class="email-body">${bodyHtml(campaign.body)}</div>${preview}${button}${unsubscribe}</td></tr><tr><td style="padding:22px 28px;background:#f7f8f6;border-top:1px solid #e8ebe8;color:#68736e;font-size:13px;line-height:1.7;text-align:center"><strong style="color:#243b64;letter-spacing:1.5px">FAITH OF THE PIONEERS</strong><br>Online fellowship, Bible study, and worship<br>${footerSite}<br><span style="font-size:11px;color:#84908a">© Faith of the Pioneers</span></td></tr></table></td></tr></table></body></html>`,
-    text: [personalizedGreeting(options.recipientName), letterTitle, campaign.headline, richTextToPlainText(campaign.body), inlineVideoUrl ? "" : videoUrl ? `Watch: ${videoUrl}` : "", buttonUrl ? `${campaign.buttonLabel || "Learn more"}: ${buttonUrl}` : "", options.textSuffix, unsubscribeUrl ? `Unsubscribe: ${unsubscribeUrl}` : "", siteUrl ? `Visit Faith of the Pioneers: ${siteUrl}` : ""].filter(Boolean).join("\n\n"),
+    html: `<!doctype html><html><head><meta name="viewport" content="width=device-width,initial-scale=1"><style>@media only screen and (max-width:600px){.email-outer{padding:0!important}.email-card{border-radius:0!important}.email-content{padding:24px 20px!important}.email-brand{padding:25px 18px!important}.email-headline{font-size:29px!important}.email-body{font-size:18px!important}}</style></head><body style="margin:0;background:#f1f3f2;font-family:Arial,Helvetica,sans-serif;color:#172126"><div style="display:none;max-height:0;overflow:hidden;opacity:0">${escapeHtml(campaign.preheader || automaticPreviewText(campaign.body))}</div><table role="presentation" class="email-outer" width="100%" cellspacing="0" cellpadding="0" style="background:#f1f3f2;padding:24px 14px"><tr><td align="center"><table role="presentation" class="email-card" width="720" cellspacing="0" cellpadding="0" style="width:100%;max-width:720px;background:#fff;border:1px solid #e5e8e6;border-radius:12px;overflow:hidden"><tr><td class="email-brand" align="center" style="padding:28px 24px;background:#082d63;background-image:linear-gradient(145deg,#0c3978,#061e49);color:#fff">${logo}<div style="font-size:12px;letter-spacing:3px;font-weight:700;color:#f3d875">FAITH OF THE PIONEERS</div><div style="height:1px;width:64px;background:#d8b84d;margin:15px auto 11px"></div><div style="font-size:17px;line-height:1.4;font-style:italic;color:#fff">${letterTitle}</div></td></tr><tr><td class="email-content" style="padding:36px 48px 40px"><div style="height:3px;width:42px;background:#c51c31;margin:0 0 20px"></div>${greeting}<h1 class="email-headline" style="font-size:34px;line-height:1.18;letter-spacing:-.5px;margin:0 0 24px;color:#172126">${escapeHtml(campaign.headline)}</h1><div class="email-body">${bodyHtml(campaign.body)}</div>${preview}${button}</td></tr><tr><td style="padding:22px 28px;background:#f7f8f6;border-top:1px solid #e8ebe8;color:#68736e;font-size:13px;line-height:1.7;text-align:center"><strong style="color:#243b64;letter-spacing:1.5px">FAITH OF THE PIONEERS</strong><br>Online fellowship, Bible study, and worship<br>${footerNav}<br>${footerSite}<br><span style="font-size:11px;color:#84908a">© Faith of the Pioneers</span></td></tr></table></td></tr></table></body></html>`,
+    text: [
+      personalizedGreeting(options.recipientName),
+      letterTitle,
+      campaign.headline,
+      richTextToPlainText(campaign.body),
+      inlineVideoUrl ? "" : videoUrl ? `Watch: ${videoUrl}` : "",
+      buttonUrl ? `${campaign.buttonLabel || "Learn more"}: ${buttonUrl}` : "",
+      options.textSuffix,
+      siteUrl ? `Visit Faith of the Pioneers: ${siteUrl}` : "",
+      ...footerLinks.map(({ label, path }) =>
+        `${label}: ${new URL(path, siteUrl || "https://example.com").toString()}`
+      ),
+      ...(unsubscribeUrl ? [`Unsubscribe: ${unsubscribeUrl}`] : []),
+    ].filter(Boolean).join("\n\n"),
   };
 }
 
@@ -356,11 +381,12 @@ export async function sendNewsletterWelcome(subscriber: { id: string; email: str
     letterTitle: "A warm welcome",
     headline: "You're on the list!",
     preheader: "Thank you for subscribing. Here are three recent videos to get you started.",
-    body: `<p>Thank you for subscribing to Faith of the Pioneers. We are glad to have you with us.</p>${videoSection}<p>We hope these messages encourage your faith and make you feel at home in our community.</p>`,
+    body: `<p>Thank you for subscribing to Faith of the Pioneers. We are delighted to welcome you to our community.</p><p>You can expect to receive health and wellness resources, Bible and prophecy study materials, and other faith-building messages. We will also share featured videos and updates on our ministry and upcoming online fellowship meetings.</p>${videoSection}<p>Our desire is to encourage you toward wholeness in spirit, mind, and body, so that you grow in your understanding of Bible truth, strengthen your walk with Christ, and remain ready to meet Him in glory.</p><p>We look forward to learning and growing together. You are welcome to visit our website at any time to explore our available resources.</p>`,
     buttonLabel: "Explore the website",
     buttonUrl: baseUrl,
     videoUrl: "",
   };
+
   const videoText = welcomeVideoText(videos);
   return deliverCampaign(
     campaign,
