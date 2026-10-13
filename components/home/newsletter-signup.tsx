@@ -110,7 +110,7 @@ SUBSCRIBE TO OUR NEWSLETTER
       autoComplete="given-name"
       value={name}
       onChange={(event) => setName(event.target.value)}
-      placeholder="Byron"
+      placeholder="Name"
       disabled={busy}
     />
     <label htmlFor="newsletter-email">Email address</label>

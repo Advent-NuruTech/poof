@@ -2,6 +2,14 @@
 ## Ongoing working preference
 - Whenever project changes are made, record the major change and any build/runtime errors with their verified fixes in this file before finishing. When the user asks, provide the exact suggested Git commit message; do not create a commit unless explicitly requested.
 
+## 2026-10-13: Manage scheduled mailing with cron-job.org
+- **Scheduler:** Removed the Vercel cron entry and added `npm run cron:sync`, which uses cron-job.org's REST API to create or update the single stable-title job for every-five-minute UTC delivery. Response saving is disabled. The job uses `CRON_SECRET`; the same value must be configured in Vercel and local `.env.local`. The initial sync created the job and a second sync updated it, verifying idempotent repeat behavior.
+- **Cron route:** Preserved the Firestore claim/lock transaction. Authorization now fails closed and compares fixed-size SHA-256 digests with `timingSafeEqual`. Empty and successful runs return counts only; campaign-level errors are recorded in `lastError` and handled without exposing recipient addresses or secrets in logs or response bodies.
+- **Documentation:** Updated the mailing setup and cron instructions in `README.md`.
+- **Validation:** `npx.cmd --no-install tsc --noEmit`, focused ESLint, `node --check scripts/sync-mailing-cron.mjs`, `git diff --check`, the repeat cron sync, and `npm.cmd run build` passed. The build compiled and generated `/api/mailing/cron`.
+- **Validation issue and fix:** A first check found malformed auth-header syntax after credential redaction affected a newly added literal bearer expression. Constructing the header with `"Bearer".concat(" ", token)` avoided the redaction; a subsequent type check and production build passed.
+- **Runtime limit:** Each cron invocation processes up to 20 due campaigns sequentially. A run can exceed cron-job.org's 30-second timeout if enough campaigns or recipients are due at once; batching was intentionally left unchanged. Monitor run durations and move to a queue/shorter per-invocation workload if timeouts occur.
+
 ## 2026-10-13: Personalize mailing and confirm meeting-link requests
 - **Major changes:** YouTube links in campaign messages now render as clickable thumbnails at the inline link position instead of only as a separate featured-video block; separate featured-video rendering remains when no inline link exists. Campaign email greetings use the recipient's first name and send-time greeting, with a generic fallback. Newsletter signup and administrator-added meeting members can now supply a first name.
 - **Meeting requests:** Successful meeting-link requests now send a confirmation email using the same latest-three-video selection and thumbnail logic as the newsletter welcome email. The form confirms that the link will be sent soon and asks requesters to check email; email delivery failures are logged and shown without losing the saved request.

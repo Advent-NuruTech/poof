@@ -6,7 +6,8 @@
     "dev": "next dev",
     "build": "next build",
     "start": "next start",
-    "lint": "eslint"
+    "lint": "eslint",
+    "cron:sync": "node --env-file=.env.local scripts/sync-mailing-cron.mjs"
   },
 
 

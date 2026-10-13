@@ -1,6 +1,6 @@
 "use client";
 
-import { forwardRef, useEffect, useImperativeHandle, useRef } from "react";
+import { forwardRef, useEffect, useImperativeHandle, useRef, useState } from "react";
 import { sanitizeRichText } from "@/lib/rich-text";
 
 type RichTextEditorProps = {
@@ -9,16 +9,20 @@ type RichTextEditorProps = {
   value?: string;
   maxTextLength?: number;
   allowImages?: boolean;
+  onUploadImage?: (file: File) => Promise<string>;
   onChange?: (value: string) => void;
   className?: string;
 };
 
 const RichTextEditor = forwardRef<HTMLDivElement, RichTextEditorProps>(function RichTextEditor(
-  { label, placeholder, value, maxTextLength, allowImages = false, onChange, className = "" },
+  { label, placeholder, value, maxTextLength, allowImages = false, onUploadImage, onChange, className = "" },
   forwardedRef,
 ) {
   const editor = useRef<HTMLDivElement>(null);
+  const imageInput = useRef<HTMLInputElement>(null);
   const savedSelection = useRef<Range | null>(null);
+  const [uploadingImage, setUploadingImage] = useState(false);
+  const [imageUploadError, setImageUploadError] = useState("");
   useImperativeHandle(forwardedRef, () => editor.current!, []);
 
   useEffect(() => {
@@ -84,6 +88,37 @@ const RichTextEditor = forwardRef<HTMLDivElement, RichTextEditorProps>(function 
     if (editor.current) updateContent(editor.current);
   }
 
+  async function uploadImage(file: File) {
+    if (!onUploadImage) return;
+    setImageUploadError("");
+    setUploadingImage(true);
+    try {
+      const source = await onUploadImage(file);
+      const image = document.createElement("img");
+      image.src = source;
+      image.alt = "";
+      editor.current?.focus();
+      const selection = window.getSelection();
+      if (savedSelection.current) {
+        selection?.removeAllRanges();
+        selection?.addRange(savedSelection.current);
+      }
+      if (selection?.rangeCount) {
+        selection.getRangeAt(0).insertNode(image);
+        selection.getRangeAt(0).setStartAfter(image);
+        selection.getRangeAt(0).collapse(true);
+      } else {
+        editor.current?.append(image);
+      }
+      if (editor.current) updateContent(editor.current);
+    } catch (reason) {
+      setImageUploadError(reason instanceof Error ? reason.message : "The image could not be uploaded.");
+    } finally {
+      setUploadingImage(false);
+      if (imageInput.current) imageInput.current.value = "";
+    }
+  }
+
   return <>
     <div className="rich-toolbar" role="toolbar" aria-label={`${label} formatting`}>
       <button type="button" title="Bold" aria-label="Bold" onMouseDown={(event) => event.preventDefault()} onClick={() => runCommand("bold")}><b>B</b></button>
@@ -101,8 +136,16 @@ const RichTextEditor = forwardRef<HTMLDivElement, RichTextEditorProps>(function 
       </label>
       <button type="button" aria-label="Bulleted list" title="Bulleted list" onMouseDown={(event) => event.preventDefault()} onClick={() => runCommand("insertUnorderedList")}>• List</button>
       <button type="button" aria-label="Numbered list" title="Numbered list" onMouseDown={(event) => event.preventDefault()} onClick={() => runCommand("insertOrderedList")}>1. List</button>
-      {allowImages && <button type="button" aria-label="Insert image" title="Insert image from an HTTPS URL" onMouseDown={(event) => event.preventDefault()} onClick={insertImage}>Image</button>}
+      {allowImages && <button type="button" aria-label="Insert image from URL" title="Insert image from an HTTPS URL" onMouseDown={(event) => event.preventDefault()} onClick={insertImage}>Image URL</button>}
+      {onUploadImage && <>
+        <button type="button" aria-label="Upload image" title="Upload an image file" disabled={uploadingImage} onMouseDown={(event) => { rememberSelection(); event.preventDefault(); }} onClick={() => imageInput.current?.click()}>{uploadingImage ? "Uploading…" : "Upload image"}</button>
+        <input ref={imageInput} type="file" accept="image/jpeg,image/png,image/gif,image/webp" hidden onChange={(event) => {
+          const file = event.currentTarget.files?.[0];
+          if (file) void uploadImage(file);
+        }}/>
+      </>}
     </div>
+    {imageUploadError && <p role="alert" className="notice error-notice">{imageUploadError}</p>}
     <div
       ref={editor}
       className={`rich-editor ${className}`.trim()}

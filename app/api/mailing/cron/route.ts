@@ -1,3 +1,4 @@
+import { createHash, timingSafeEqual } from "node:crypto";
 import {
   FieldValue, getCampaignRecipients, getEmailsSentCount, getMailDb, parseCampaignAudience, Timestamp,
   type Campaign, deliverCampaign,
@@ -51,9 +52,17 @@ function nextOccurrence(previous: Date, repeat: MailSchedule["repeat"], timeZone
   return zonedDate({ ...parts, year: date.getUTCFullYear(), month: date.getUTCMonth() + 1, day: date.getUTCDate() }, timeZone);
 }
 
-export async function GET(request: Request) {
+function hasValidCronSecret(request: Request) {
   const secret = process.env.CRON_SECRET;
-  if (!secret || request.headers.get("authorization") !== `Bearer ${secret}`) {
+  const supplied = request.headers.get("authorization")?.match(/^Bearer ([^\s]+)$/i)?.[1];
+  if (!secret || !supplied) return false;
+  const expectedDigest = createHash("sha256").update(secret).digest();
+  const suppliedDigest = createHash("sha256").update(supplied).digest();
+  return timingSafeEqual(expectedDigest, suppliedDigest);
+}
+
+export async function GET(request: Request) {
+  if (!hasValidCronSecret(request)) {
     return Response.json({ error: "Not authorized." }, { status: 401 });
   }
   try {
@@ -62,7 +71,9 @@ export async function GET(request: Request) {
       .where("nextSendAt", "<=", Timestamp.now())
       .limit(20)
       .get();
-    const results: Array<{ id: string; status: string }> = [];
+    let processed = 0;
+    let sent = 0;
+    let failed = 0;
     const baseUrl = process.env.NEXT_PUBLIC_SITE_URL?.replace(/\/$/, "") || `https://${process.env.VERCEL_URL ?? new URL(request.url).host}`;
     for (const candidate of due.docs) {
       const ref = candidate.ref;
@@ -76,6 +87,7 @@ export async function GET(request: Request) {
         return { data, scheduledAt };
       });
       if (!claim) continue;
+      processed += 1;
       try {
         const configError = !process.env.RESEND_API_KEY || !process.env.RESEND_FROM_EMAIL
           ? "Configure RESEND_API_KEY and RESEND_FROM_EMAIL before sending email."
@@ -87,7 +99,7 @@ export async function GET(request: Request) {
             active: false, status: "error", nextSendAt: FieldValue.delete(),
             processingUntil: FieldValue.delete(), lastError: configError,
           });
-          results.push({ id: ref.id, status: "configuration-error" });
+          failed += 1;
           continue;
         }
         const campaign: Campaign = {
@@ -102,7 +114,7 @@ export async function GET(request: Request) {
             active: false, status: "error", nextSendAt: FieldValue.delete(),
             processingUntil: FieldValue.delete(), lastError: audience,
           });
-          results.push({ id: ref.id, status: "invalid-audience" });
+          failed += 1;
           continue;
         }
         const recipients = await getCampaignRecipients(mailDb, campaign, audience);
@@ -111,7 +123,7 @@ export async function GET(request: Request) {
             active: false, status: "error", nextSendAt: FieldValue.delete(),
             processingUntil: FieldValue.delete(), lastError: "No eligible recipients match this selection.",
           });
-          results.push({ id: ref.id, status: "no-eligible-recipients" });
+          failed += 1;
           continue;
         }
         await getEmailsSentCount(mailDb);
@@ -128,6 +140,8 @@ export async function GET(request: Request) {
           emailsSent: FieldValue.increment(delivery.sent),
         }, { merge: true });
         await batch.commit();
+        sent += delivery.sent;
+        failed += delivery.failures.length;
         const retryCount = claim.data.retryCount ?? 0;
         if (delivery.failures.some((failure) => failure.retryable) && retryCount < 3) {
           await ref.update({
@@ -137,7 +151,6 @@ export async function GET(request: Request) {
             processingUntil: FieldValue.delete(),
             lastError: "Temporary delivery errors; retrying failed recipient deliveries.",
           });
-          results.push({ id: ref.id, status: "retry-scheduled" });
           continue;
         }
         let next = nextOccurrence(claim.scheduledAt.toDate(), claim.data.repeat, claim.data.timeZone || "UTC");
@@ -155,10 +168,13 @@ export async function GET(request: Request) {
           processingUntil: FieldValue.delete(),
           retryFor: FieldValue.delete(),
           retryCount: FieldValue.delete(),
+          lastError: delivery.failures.length
+            ? `Email delivery failed for ${delivery.failures.length} recipient(s).`
+            : FieldValue.delete(),
         });
-        results.push({ id: ref.id, status: delivery.failures.length ? "sent-with-failures" : "sent" });
       } catch (error) {
-        console.error("Scheduled email failed", { scheduleId: ref.id, error });
+        console.error("Scheduled email delivery failed.");
+        failed += 1;
         const retryCount = claim.data.retryCount ?? 0;
         if (retryCount < 3) {
           await ref.update({
@@ -168,20 +184,18 @@ export async function GET(request: Request) {
             processingUntil: FieldValue.delete(),
             lastError: error instanceof Error ? error.message.slice(0, 500) : "Unknown delivery error",
           });
-          results.push({ id: ref.id, status: "retry-scheduled" });
         } else {
           await ref.update({
             active: false, status: "error", nextSendAt: FieldValue.delete(),
             processingUntil: FieldValue.delete(),
             lastError: error instanceof Error ? error.message.slice(0, 500) : "Unknown delivery error",
           });
-          results.push({ id: ref.id, status: "failed" });
         }
       }
     }
-    return Response.json({ processed: results.length, results });
-  } catch (error) {
-    console.error("Mailing cron failed", error);
+    return Response.json({ processed, sent, failed });
+  } catch {
+    console.error("Mailing cron failed unexpectedly.");
     return Response.json({ error: "Could not process scheduled email delivery." }, { status: 500 });
   }
 }

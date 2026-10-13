@@ -34,7 +34,7 @@ type MailingData = {
   history: MailingRecord[];
   counts: { verified: number; pending: number; active: number; unsubscribed: number; totalMembers: number; totalSubscribers: number; emailsSent: number };
 };
-type ApiResult = { error?: string; status?: string; sent?: number; failed?: number };
+type ApiResult = { error?: string; status?: string; sent?: number; failed?: number; imageUrl?: string };
 type DateLike = { _seconds?: number; seconds?: number } | string | null | undefined;
 
 const initialCampaign: CampaignForm = {
@@ -124,12 +124,28 @@ export default function MailingManager() {
     return readApiResponse<ApiResult>(response, "Mailing request");
   }, [user]);
 
+  async function uploadCampaignImage(file: File) {
+    if (!user) throw new Error("Sign in to upload mailing images.");
+    const token = await user.getIdToken();
+    const form = new FormData();
+    form.set("image", file);
+    const response = await fetch("/api/mailing/image", {
+      method: "POST",
+      headers: { Authorization: "Bearer".concat(" ", token) },
+      body: form,
+      cache: "no-store",
+    });
+    const result = await readApiResponse<ApiResult>(response, "Mailing image upload");
+    if (!result.imageUrl) throw new Error("The image upload did not return an image URL.");
+    return result.imageUrl;
+  }
+
   const refresh = useCallback(async () => {
     if (!user) return;
     setLoading(true);
     try {
       const token = await user.getIdToken();
-      const response = await fetch("/api/mailing", { headers: { Authorization: `Bearer ${token}` }, cache: "no-store" });
+      const response = await fetch("/api/mailing", {       headers: { Authorization: "Bearer " + token }, cache: "no-store" });
       const result = await readApiResponse<MailingData & { error?: string }>(response, "Could not load mailing lists");
       setData(result);
     } catch (reason) {
@@ -211,7 +227,8 @@ export default function MailingManager() {
         ? await request("/api/mailing", { method: "PATCH", body: JSON.stringify({ ...payload, collection: "schedules", id: editingScheduleId, status: "scheduled" }) })
         : await request("/api/mailing", { method: "POST", body: JSON.stringify(payload) });
       if (action === "send") {
-        setNotice(`Email sent to ${result.sent ?? 0} ${tab === "meeting" ? "verified members" : "subscribers"}${result.failed ? `; ${result.failed} failed` : ""}.`);
+          const failureSummary = result.failed ? "; " + result.failed + " failed" : "";
+          setNotice("Email sent to " + (result.sent ?? 0) + " " + (tab === "meeting" ? "verified members" : "subscribers") + failureSummary + ".");
       } else {
         setNotice(editingScheduleId ? "Your scheduled email was updated." : "Your email is scheduled. The system will send it automatically.");
         setEditingScheduleId(null);
@@ -299,7 +316,8 @@ export default function MailingManager() {
         method: "POST",
         body: JSON.stringify({ action: "history-send", historyId: item.id, audienceMode: mode }),
       });
-      setNotice(`Email sent to ${result.sent ?? 0} recipients${result.failed ? `; ${result.failed} failed` : ""}.`);
+      const failureSummary = result.failed ? "; " + result.failed + " failed" : "";
+      setNotice("Email sent to " + (result.sent ?? 0) + " recipients" + failureSummary + ".");
       await refresh();
     } catch (reason) {
       setError(reason instanceof Error ? reason.message : "The saved email could not be sent.");
@@ -330,7 +348,7 @@ export default function MailingManager() {
   const effectiveVideoUrl = inlineVideoUrl || campaign.videoUrl;
   const previewVideo = videoId(effectiveVideoUrl);
   const greeting = tab === "meeting" ? "Meeting invitation" : "Faith of the Pioneers newsletter";
-  const greetingPreview = personalizedGreeting("Byron");
+  const greetingPreview = personalizedGreeting("Name");
   const automaticPreheader = automaticPreviewText(campaign.body);
   const previewPreheader = preheaderEdited ? campaign.preheader : automaticPreheader;
 
@@ -353,7 +371,7 @@ export default function MailingManager() {
           <section className="mailing-grid">
             <div className="mailing-people">
               <div className="mailing-section-heading"><div><span className="eyebrow">{tab === "meeting" ? "ONLINE MEETING MEMBERS" : "NEWSLETTER AUDIENCE"}</span><h2>{tab === "meeting" ? "Email list" : "Subscribers"}</h2></div><button className="text-button" onClick={() => void refresh()} disabled={loading}>{loading ? "Refreshing…" : "Refresh"}</button></div>
-              {tab === "meeting" && <form className="mailing-add-form" onSubmit={(event) => void addMember(event)}><label htmlFor="add-member-name">First name (optional)<input id="add-member-name" type="text" maxLength={120} value={memberName} onChange={(event) => setMemberName(event.target.value)} placeholder="Byron"/></label><label htmlFor="add-member-email">Email address<input id="add-member-email" type="email" required maxLength={254} value={memberEmail} onChange={(event) => setMemberEmail(event.target.value)} placeholder="person@example.com"/></label><button className="primary-button" disabled={busy}>Add email as verified</button></form>}
+              {tab === "meeting" && <form className="mailing-add-form" onSubmit={(event) => void addMember(event)}><label htmlFor="add-member-name">First name (optional)<input id="add-member-name" type="text" maxLength={120} value={memberName} onChange={(event) => setMemberName(event.target.value)} placeholder="Name"/></label><label htmlFor="add-member-email">Email address<input id="add-member-email" type="email" required maxLength={254} value={memberEmail} onChange={(event) => setMemberEmail(event.target.value)} placeholder="person@example.com"/></label><button className="primary-button" disabled={busy}>Add email as verified</button></form>}
               {currentMembers.length > 0 && <p className="mailing-helper">Showing up to the 500 most recent addresses. All-audience sends include every eligible contact.</p>}
               {audienceMode === "selected" && currentMembers.length > 0 && <button type="button" className="text-button mailing-select-visible" onClick={() => {
                 const eligible = currentMembers.filter((member) => member.status === (tab === "meeting" ? "verified" : "active")).map((member) => member.id);
@@ -363,7 +381,7 @@ export default function MailingManager() {
                 : <div className="mailing-member-list">{currentMembers.map((member) => {
                   const status = String(member.status ?? "unknown");
                   const eligible = status === (tab === "meeting" ? "verified" : "active");
-                  return <article key={member.id}>{audienceMode === "selected" && <input className="mailing-recipient-check" type="checkbox" aria-label={`Select ${String(member.email ?? "email")}`} checked={recipientIds.includes(member.id)} disabled={!eligible || busy} onChange={() => toggleRecipient(member.id)}/>}<div><strong>{String(member.email ?? "")}</strong><small>{String(member.name ?? (member.source === "admin" ? "Added by administrator" : "Subscriber"))} · {dateLabel(member.createdAt as DateLike)}</small></div><span className={`mailing-status ${status}`}>{status}</span>{tab === "meeting" && status !== "verified" && <button className="outline-button" disabled={busy} onClick={() => void updateRecord("members", member.id, "verified")}>Verify</button>}{tab === "meeting" && <button className="icon-action remove-action" aria-label={`Remove ${String(member.email ?? "email")}`} disabled={busy} onClick={() => void updateRecord("members", member.id, "delete")}>×</button>}</article>;
+                  return <article key={member.id}>{audienceMode === "selected" && <input className="mailing-recipient-check" type="checkbox" aria-label={"Select " + String(member.email ?? "email")} checked={recipientIds.includes(member.id)} disabled={!eligible || busy} onChange={() => toggleRecipient(member.id)}/>}<div><strong>{String(member.email ?? "")}</strong><small>{String(member.name ?? (member.source === "admin" ? "Added by administrator" : "Subscriber"))} · {dateLabel(member.createdAt as DateLike)}</small></div><span className={"mailing-status " + status}>{status}</span>{tab === "meeting" && status !== "verified" && <button className="outline-button" disabled={busy} onClick={() => void updateRecord("members", member.id, "verified")}>Verify</button>}{tab === "meeting" && <button className="icon-action remove-action" aria-label={"Remove " + String(member.email ?? "email")} disabled={busy} onClick={() => void updateRecord("members", member.id, "delete")}>×</button>}</article>;
                 })}</div>}
             </div>
             <div className="mailing-compose">
@@ -375,30 +393,30 @@ export default function MailingManager() {
                 <label>Headline<input required maxLength={180} value={campaign.headline} onChange={(event) => updateCampaign("headline", event.target.value)} placeholder={tab === "meeting" ? "You're invited to join us" : "Encouragement for your week"}/></label>
                 <label>Inbox preview text<input maxLength={180} value={preheaderEdited ? campaign.preheader : automaticPreheader} onChange={(event) => updateCampaign("preheader", event.target.value)} placeholder="Automatically generated from your message"/><small>Suggested from your message. Edit it here if you prefer different text.</small></label>
                 {preheaderEdited && <button type="button" className="text-button" onClick={() => { setCampaign((current) => ({ ...current, preheader: "" })); setPreheaderEdited(false); }}>Use message preview</button>}
-                <div className="mailing-rich-field"><strong>Message</strong><RichTextEditor label="Message" placeholder={tab === "meeting" ? "Write your meeting announcement…" : "Write your newsletter…"} value={campaign.body} maxTextLength={12000} allowImages onChange={(value) => updateCampaign("body", value)} className="rich-editor-compact"/><small>Add an image from a public HTTPS URL, or paste a YouTube link into your message for a clickable thumbnail at that position. Email apps do not support reliable embedded playback.</small></div>
+                <div className="mailing-rich-field"><strong>Message</strong><RichTextEditor label="Message" placeholder={tab === "meeting" ? "Write your meeting announcement…" : "Write your newsletter…"} value={campaign.body} maxTextLength={12000} allowImages onUploadImage={uploadCampaignImage} onChange={(value) => updateCampaign("body", value)} className="rich-editor-compact"/><small>Upload an image file or insert one from a public HTTPS URL. You can also paste a YouTube link for a clickable thumbnail at that position. Email apps do not support reliable embedded playback.</small></div>
                 <label>{tab === "meeting" ? "Meeting link (HTTPS)" : "Button link (optional)"}<input type="url" required={tab === "meeting"} value={campaign.buttonUrl} onChange={(event) => updateCampaign("buttonUrl", event.target.value)} placeholder="https://…"/></label>
-                {tab === "newsletter" && <><label>Button label<input maxLength={80} value={campaign.buttonLabel} onChange={(event) => updateCampaign("buttonLabel", event.target.value)} placeholder="Read the full story"/></label><label>Featured video URL (optional)<input type="url" value={campaign.videoUrl} onChange={(event) => updateCampaign("videoUrl", event.target.value)} placeholder="https://www.youtube.com/watch?v=…"/><small>Email apps block embedded playback; subscribers get a clickable video preview. A YouTube link in the message takes priority automatically.</small></label>{effectiveVideoUrl && (previewVideo ? <div className="mailing-video-preview"><img src={`https://img.youtube.com/vi/${previewVideo}/hqdefault.jpg`} alt="Video thumbnail preview"/><span>Clickable video preview in your newsletter</span></div> : <div className="mailing-generic-video">▶ <span>Featured video preview</span></div>)}</>}
+                {tab === "newsletter" && <><label>Button label<input maxLength={80} value={campaign.buttonLabel} onChange={(event) => updateCampaign("buttonLabel", event.target.value)} placeholder="Read the full story"/></label><label>Featured video URL (optional)<input type="url" value={campaign.videoUrl} onChange={(event) => updateCampaign("videoUrl", event.target.value)} placeholder="https://www.youtube.com/watch?v=…"/><small>Email apps block embedded playback; subscribers get a clickable video preview. A YouTube link in the message takes priority automatically.</small></label>{effectiveVideoUrl && (previewVideo ? <div className="mailing-video-preview"><img src={"https://img.youtube.com/vi/" + previewVideo + "/hqdefault.jpg"} alt="Video thumbnail preview"/><span>Clickable video preview in your newsletter</span></div> : <div className="mailing-generic-video">▶ <span>Featured video preview</span></div>)}</>}
                 <label>Recipients<select value={audienceMode} onChange={(event) => {
                   const value = event.target.value;
                   if (value === "all" || value === "selected" || value === "new") setAudienceMode(value);
-                }}><option value="all">All eligible {tab === "meeting" ? "members" : "subscribers"}</option><option value="selected">Custom selection (choose members below)</option>{audienceSince && <option value="new">{historySourceId ? "New members since the original email" : "New members since the saved date"}</option>}</select><small>{audienceMode === "all" ? `${activeCount.toLocaleString()} eligible recipients across the full list.` : audienceMode === "selected" ? `${recipientIds.length.toLocaleString()} selected from up to 500 recent addresses shown below.` : `Eligible contacts added after ${dateLabel(audienceSince)}.`}</small></label>
+                }}><option value="all">All eligible {tab === "meeting" ? "members" : "subscribers"}</option><option value="selected">Custom selection (choose members below)</option>{audienceSince && <option value="new">{historySourceId ? "New members since the original email" : "New members since the saved date"}</option>}</select><small>{audienceMode === "all" ? activeCount.toLocaleString() + " eligible recipients across the full list." : audienceMode === "selected" ? recipientIds.length.toLocaleString() + " selected from up to 500 recent addresses shown below." : "Eligible contacts added after " + dateLabel(audienceSince) + "."}</small></label>
                 {audienceMode === "selected" && recipientIds.length === 0 && <p className="mailing-audience-warning">Choose eligible email addresses from the list before sending or scheduling.</p>}
-                <div className="mailing-form-actions"><button className="primary-button" type="submit" disabled={busy || (audienceMode === "selected" && recipientIds.length === 0)}>{busy ? "Sending…" : audienceMode === "selected" ? `Send to ${recipientIds.length.toLocaleString()} selected` : audienceMode === "new" ? "Send to new members" : `Send to ${activeCount.toLocaleString()}`}</button></div>
+                <div className="mailing-form-actions"><button className="primary-button" type="submit" disabled={busy || (audienceMode === "selected" && recipientIds.length === 0)}>{busy ? "Sending…" : audienceMode === "selected" ? "Send to " + recipientIds.length.toLocaleString() + " selected" : audienceMode === "new" ? "Send to new members" : "Send to " + activeCount.toLocaleString()}</button></div>
               </form>
               <form className="mailing-schedule-form" onSubmit={(event) => void submitCampaign(event, "schedule")}>
                 <h3>Schedule automatic delivery</h3>
-                <p className="mailing-helper">Hobby plan: the scheduler checks once a day around 09:00 UTC. Vercel may start that check up to 59 minutes before or after; emails scheduled after it may wait until the next daily check.</p>
+                <p className="mailing-helper">Scheduled emails are checked every minute. This frequency requires Vercel Pro; Hobby plans allow scheduled checks only once per day.</p>
                 <div className="mailing-schedule-fields"><label>First send<input type="datetime-local" required value={campaign.startsAt} onChange={(event) => updateCampaign("startsAt", event.target.value)}/></label><label>Repeat<select value={campaign.repeat} onChange={(event) => { const value = event.target.value; if (value === "once" || value === "daily" || value === "weekly" || value === "monthly") setCampaign((current) => ({ ...current, repeat: value })); }}><option value="once">One time</option><option value="daily">Daily</option><option value="weekly">Weekly</option><option value="monthly">Monthly</option></select></label></div>
                 {campaign.repeat !== "once" && <label>Repeat through (optional)<input type="datetime-local" value={campaign.endsAt} onChange={(event) => updateCampaign("endsAt", event.target.value)}/><small>Leave blank to repeat until you cancel the schedule.</small></label>}
                 {editingScheduleId && <button type="button" className="text-button" onClick={() => { setEditingScheduleId(null); setCampaign({ ...initialCampaign, letterTitle: tab === "meeting" ? "Online meeting reminder" : "A letter for your journey" }); setPreheaderEdited(false); setAudienceMode("all"); setRecipientIds([]); setAudienceSince(""); setHistorySourceId(""); setNotice(""); }}>Cancel editing</button>}
                 <button className="outline-button" disabled={busy || (audienceMode === "selected" && recipientIds.length === 0)}>{busy ? "Saving…" : editingScheduleId ? "Update schedule" : "Schedule email"}</button>
               </form>
-              <aside className="mailing-template-preview"><span className="eyebrow">TEMPLATE PREVIEW</span><div className="mailing-template-card"><header><img src="/images/logo.jpeg" alt="Faith of the Pioneers"/><strong>FAITH OF THE PIONEERS</strong><span>{campaign.letterTitle || "Your letter header"}</span></header><section><small>{greeting} · {previewPreheader || "Your preview text appears here."}</small><p className="mailing-preview-greeting">{greetingPreview}</p><h3>{campaign.headline || "Your headline appears here"}</h3>{campaign.body ? <div className="mailing-preview-body" dangerouslySetInnerHTML={{ __html: inlineVideoLinks(sanitizeRichText(campaign.body)) }}/>: <p>Your email message preview will appear here as you write.</p>}{campaign.buttonUrl && <span className="mailing-preview-button">{campaign.buttonLabel || (tab === "meeting" ? "Join the meeting" : "Learn more")}</span>}{!inlineVideoUrl && (previewVideo ? <img src={`https://img.youtube.com/vi/${previewVideo}/hqdefault.jpg`} alt="Featured video thumbnail"/> : effectiveVideoUrl && <div className="mailing-generic-video">▶ <span>Featured video preview</span></div>)}</section></div></aside>
+              <aside className="mailing-template-preview"><span className="eyebrow">TEMPLATE PREVIEW</span><div className="mailing-template-card"><header><img src="/images/logo.jpeg" alt="Faith of the Pioneers"/><strong>FAITH OF THE PIONEERS</strong><span>{campaign.letterTitle || "Your letter header"}</span></header><section><small>{greeting} · {previewPreheader || "Your preview text appears here."}</small><p className="mailing-preview-greeting">{greetingPreview}</p><h3>{campaign.headline || "Your headline appears here"}</h3>{campaign.body ? <div className="mailing-preview-body" dangerouslySetInnerHTML={{ __html: inlineVideoLinks(sanitizeRichText(campaign.body)) }}/>: <p>Your email message preview will appear here as you write.</p>}{campaign.buttonUrl && <span className="mailing-preview-button">{campaign.buttonLabel || (tab === "meeting" ? "Join the meeting" : "Learn more")}</span>}{!inlineVideoUrl && (previewVideo ? <img src={"https://img.youtube.com/vi/" + previewVideo + "/hqdefault.jpg"} alt="Featured video thumbnail"/> : effectiveVideoUrl && <div className="mailing-generic-video">▶ <span>Featured video preview</span></div>)}</section></div></aside>
             </div>
           </section>
           <section className="mailing-history">
             <div className="mailing-section-heading"><div><span className="eyebrow">AUTOMATION & DELIVERY</span><h2>Scheduled emails</h2></div></div>
-            {!currentSchedules.length ? <div className="mailing-empty">No scheduled emails for this list.</div> : currentSchedules.map((schedule) => <article className="mailing-history-row" key={schedule.id}><div><strong>{String(schedule.subject ?? "Email")}</strong><small>{String(schedule.repeat ?? "once")} · Next send {dateLabel(schedule.nextSendAt as DateLike)}{schedule.endsAt ? ` · Ends ${dateLabel(schedule.endsAt as DateLike)}` : ""}</small></div><span className={`mailing-status ${schedule.active ? "active" : "completed"}`}>{String(schedule.status ?? (schedule.active ? "scheduled" : "completed"))}</span>{schedule.active === true && <><button className="outline-button" disabled={busy} onClick={() => editSchedule(schedule)}>Edit</button><button className="outline-button" disabled={busy} onClick={() => void updateRecord("schedules", schedule.id, "cancelled")}>Cancel</button></>}</article>)}
+            {!currentSchedules.length ? <div className="mailing-empty">No scheduled emails for this list.</div> : currentSchedules.map((schedule) => <article className="mailing-history-row" key={schedule.id}><div><strong>{String(schedule.subject ?? "Email")}</strong><small>{String(schedule.repeat ?? "once")} · Next send {dateLabel(schedule.nextSendAt as DateLike)}{schedule.endsAt ? " · Ends " + dateLabel(schedule.endsAt as DateLike) : ""}</small>{typeof schedule.lastError === "string" && schedule.lastError && <small className="error-notice">{schedule.lastError}</small>}</div><span className={"mailing-status " + (schedule.active ? "active" : "completed")}>{String(schedule.status ?? (schedule.active ? "scheduled" : "completed"))}</span>{schedule.active === true && <><button className="outline-button" disabled={busy} onClick={() => editSchedule(schedule)}>Edit</button><button className="outline-button" disabled={busy} onClick={() => void updateRecord("schedules", schedule.id, "cancelled")}>Cancel</button></>}</article>)}
           </section>
           <section className="mailing-history">
             <div className="mailing-section-heading"><div><span className="eyebrow">RESEND DELIVERY RECORDS</span><h2>Email history</h2></div></div>

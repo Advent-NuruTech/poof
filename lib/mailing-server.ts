@@ -1,6 +1,7 @@
 import { createHash, createHmac } from "node:crypto";
 import { applicationDefault, cert, getApp, getApps, initializeApp, type ServiceAccount } from "firebase-admin/app";
 import { AggregateField, FieldValue, getFirestore, Timestamp, type Firestore } from "firebase-admin/firestore";
+import { getStorage } from "firebase-admin/storage";
 import { Resend } from "resend";
 import { automaticPreviewText, extractFeaturedVideoUrl, inlineVideoLinks, personalizedGreeting, richTextToPlainText, sanitizeRichText } from "@/lib/rich-text";
 import { getPublicCatalog, type FeedVideo } from "@/lib/catalog-feed";
@@ -57,6 +58,12 @@ function getAdminApp() {
 
 export function getMailDb(): Firestore {
   return getFirestore(getAdminApp());
+}
+
+export function getMailStorageBucket() {
+  const bucketName = process.env.NEXT_PUBLIC_FIREBASE_STORAGE_BUCKET;
+  if (!bucketName) throw new Error("NEXT_PUBLIC_FIREBASE_STORAGE_BUCKET must be configured to upload mailing images.");
+  return getStorage(getAdminApp()).bucket(bucketName);
 }
 
 export async function getEmailsSentCount(db: Firestore) {
