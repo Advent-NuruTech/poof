@@ -32,6 +32,11 @@ return (
       <span>Our donation page is coming soon.</span>
     </div>
 
+    <p className="donate-contact">
+      Contact <a href="mailto:pondezedd@gmail.com">pondezedd@gmail.com</a> for
+      directions on how you can finish your donation process for now.
+    </p>
+
     <p className="donate-message">
       We are preparing a dedicated page to make supporting this
       work simple and secure. Thank you for your patience,
@@ -141,6 +146,25 @@ return (
       flex-shrink: 0;
       background: #2563eb;
       border-radius: 50%;
+    }
+
+    .donate-contact {
+      max-width: 560px;
+      margin: 0 auto 20px;
+      color: #475569;
+      font-size: 1rem;
+      line-height: 1.8;
+    }
+
+    .donate-contact a {
+      color: #1d4ed8;
+      font-weight: 650;
+      text-decoration: underline;
+      overflow-wrap: anywhere;
+    }
+
+    .donate-contact a:hover {
+      color: #0b3d91;
     }
 
     .donate-message {
