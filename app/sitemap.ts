@@ -8,7 +8,7 @@ const publicPaths = [
   { path: "/library", changeFrequency: "weekly", priority: 0.9 },
   { path: "/playlists", changeFrequency: "weekly", priority: 0.8 },
   {
-    path: "/doctrine/fundermentalprinciples",
+    path: "/doctrine/fundamental-principles",
     changeFrequency: "monthly",
     priority: 0.8,
   },

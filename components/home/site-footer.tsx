@@ -182,7 +182,7 @@ export default function SiteFooter() {
           </p>
 
           <nav className="zm-footer-links" aria-label="Footer navigation">
-            <Link href="/doctrine/fundermentalprinciples">Fundamental Principles</Link>
+            <Link href="/doctrine/fundamental-principles">Fundamental Principles</Link>
             <Link href="/privacy-policy">Privacy Policy</Link>
             <Link href="/terms-of-use">Terms of Use</Link>
             <Link href="/cookies-policy">Cookies Policy</Link>
