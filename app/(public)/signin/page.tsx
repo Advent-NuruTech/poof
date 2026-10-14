@@ -106,7 +106,7 @@ return (
 <main className="auth-page">
 <section className="auth-card">
 <Link href="/" className="brand" aria-label="POOF home">
-<Image          src="/images/logo.jpeg"          alt="Pioneers of Our Faith logo"          width={100}          height={100}          priority        />
+<Image src="/images/logo.jpeg"alt="Pioneers of Our Faith logo" width={100}height={100} priority/>
 </Link>
 
     <div className="welcome-heading">

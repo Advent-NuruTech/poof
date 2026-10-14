@@ -15,6 +15,7 @@ import SiteFooter from "@/components/home/site-footer";
 import NewsletterSignup from "@/components/home/newsletter-signup";
 import HomeHero from "@/components/home/home-hero";
 import AboutMeetingCarousel from "@/components/home/about-meeting-carousel";
+import HomeLoadingScreen from "@/components/home/home-loading-screen";
 import { CardGridSkeleton, MeetingListSkeleton, VideoListSkeleton } from "@/components/home/skeleton";
 
 // How many cards each homepage section renders. These caps, not the size of the
@@ -70,14 +71,14 @@ export default function HomeScreen() {
   // Every public page reads the shared server snapshot cached for 24 hours. No
   // page opens an onSnapshot listener on videos, playlists, channels, or
   // meetings; see lib/catalog-feed.ts for the quota rules behind this.
-  const { feed } = usePublicCatalog();
+  const { feed, status } = usePublicCatalog();
   const [pageVideos, setPageVideos] = useState<Video[] | null>(null);
   const channels = feedChannels(feed);
   const feedVideoRows = feedVideos(feed);
   const playlists = feedPlaylists(feed);
   const meetings = feedMeetings(feed);
   const videos = pageVideos ?? feedVideoRows.slice(0, LATEST_PAGE_SIZE);
-  const feedLoaded = feed.fetchedAt !== "";
+  const feedLoaded = status !== "loading";
   const channelsLoaded = feedLoaded || pageVideos !== null;
   const videosLoaded = channelsLoaded;
   const playlistsLoaded = channelsLoaded;
@@ -171,9 +172,11 @@ export default function HomeScreen() {
   }
 
   return <main className="home-app">
+    {status === "loading" && <HomeLoadingScreen />}
     <PublicHeader searchOpen={searchOpen} search={search} onSearchOpenChange={setSearchOpen} onSearchChange={setSearch}/>
     {searchOpen && <div className="search-overlay" onClick={() => { setSearchOpen(false); setSearch(""); }}><section className="search-panel" role="dialog" aria-label="Video search results" onClick={(event) => event.stopPropagation()}><div className="search-panel-heading"><strong>{term ? `Results for ${search.trim()}` : "Search videos"}</strong><span>{term ? `${latest.length} ${latest.length === 1 ? "video" : "videos"}${latest.length > searchResults.length ? ` · showing ${searchResults.length}` : ""}` : "Search titles, topics, and channels"}</span></div>{!term ? <p className="search-prompt">Start typing to find a video.</p> : !videosLoaded ? <VideoListSkeleton/> : searchResults.length ? <div className="search-results">{searchResults.map(renderSearchCard)}</div> : <div className="search-empty"><strong>No videos found</strong><span>Try another title, topic, or channel.</span></div>}</section></div>}
     <HomeHero items={heroItems} live={live} now={now} onWatch={setWatching}/>
+    {status === "error" && <div className="home-feed-error" role="alert"><span>Some live content couldn’t be loaded. You can still explore the site.</span><button type="button" onClick={() => window.location.reload()}>Try again</button></div>}
     <div className="home-content">
       <div className="latest-about-layout">
       <section className="home-section latest-section" id="latest"><SectionTitle icon="list" title={search ? "Search results" : "Latest Videos"} onViewAll={() => setShowAllVideos(!showAllVideos)}/>

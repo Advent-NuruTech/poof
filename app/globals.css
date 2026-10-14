@@ -326,3 +326,21 @@ body{font-size:16px}.home-section-title h2{font-size:25px}.latest-card .video-co
 .unsubscribe-card button:hover{background:#263e69}
 .unsubscribe-home{margin-top:18px;color:#263e69;font-size:14px;font-weight:700;text-decoration:underline;text-underline-offset:3px}
 .unsubscribe-card small{margin-top:24px;color:#78817c;font-size:12px;line-height:1.6}
+
+/* Branded loading state shown while the public catalog is being prepared. */
+.home-loading-screen{position:fixed;inset:0;z-index:1000;display:grid;place-items:center;overflow:hidden;padding:24px;background:radial-gradient(ellipse at 72% 22%,rgba(29,78,216,.32),transparent 58%),radial-gradient(ellipse at 18% 85%,rgba(11,61,145,.5),transparent 55%),linear-gradient(145deg,#10233d,#0b3d91 48%,#092e70);color:#fff;text-align:center}
+.home-loading-screen::before{position:absolute;inset:0;background-image:linear-gradient(rgba(212,175,55,.045) 1px,transparent 1px),linear-gradient(90deg,rgba(212,175,55,.045) 1px,transparent 1px);background-size:72px 72px;content:"";pointer-events:none}
+.home-loading-content{position:relative;display:flex;align-items:center;flex-direction:column;width:min(100%,420px);animation:home-loader-enter .7s ease both}
+.home-loading-logo{width:64px;height:64px;margin-bottom:22px;border:1px solid rgba(212,175,55,.8);border-radius:50%;object-fit:cover;box-shadow:0 0 38px rgba(212,175,55,.18)}
+.home-loading-brand{margin:0;color:#fff;font-family:var(--font-oswald,"Arial Narrow",sans-serif);font-size:clamp(1.6rem,5vw,2.35rem);font-weight:600;letter-spacing:.06em;text-transform:uppercase}
+.home-loading-message{margin:24px 0 0;color:#ead991;font-size:.72rem;font-weight:700;letter-spacing:.27em;text-transform:uppercase}
+.home-loading-track{width:min(220px,65vw);height:2px;margin-top:17px;overflow:hidden;background:rgba(255,255,255,.13)}
+.home-loading-track span{display:block;width:42%;height:100%;background:linear-gradient(90deg,#1d4ed8,#ead991);animation:home-loader-progress 1.45s ease-in-out infinite}
+.home-loading-caption{margin-top:13px;color:#dbeafe;font-size:.8rem;letter-spacing:.04em}
+.home-feed-error{display:flex;align-items:center;justify-content:center;gap:14px;padding:14px 24px;background:#eff6ff;color:#0b3d91;font-size:14px}
+.home-feed-error button{padding:7px 12px;border:1px solid #d4af37;border-radius:4px;background:#fff;color:#0b3d91;font:inherit;font-weight:700;cursor:pointer}
+.home-feed-error button:hover{background:#ead991}
+@keyframes home-loader-enter{from{opacity:0;transform:translateY(12px)}to{opacity:1;transform:translateY(0)}}
+@keyframes home-loader-progress{0%{transform:translateX(-110%)}100%{transform:translateX(340%)}}
+@media(max-width:520px){.home-feed-error{align-items:flex-start;flex-direction:column;gap:8px;padding:14px 20px}}
+@media(prefers-reduced-motion:reduce){.home-loading-content{animation:none}.home-loading-track span{animation:none;width:100%}}

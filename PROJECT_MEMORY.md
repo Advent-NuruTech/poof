@@ -2,6 +2,11 @@
 ## Ongoing working preference
 - Whenever project changes are made, record the major change and any build/runtime errors with their verified fixes in this file before finishing. When the user asks, provide the exact suggested Git commit message; do not create a commit unless explicitly requested.
 
+## 2026-10-14: Branded homepage loading experience
+
+- **Major changes:** Added a branded loading screen for the public site route fallback and while the homepage catalog feed is fetched. Styled it with the site's active blue-and-gold hero palette, Faith of the Pioneers logo, animated progress bar, and reduced-motion support. The loader exits when the feed succeeds or fails; on feed failure, visitors see an explicit notice and retry action while the rest of the site remains usable.
+- **Verification:** `npx.cmd --no-install tsc --noEmit`, focused ESLint, `npm.cmd run build`, and `git diff --check` passed. ESLint reported zero errors and nine existing homepage warnings. No build/runtime errors were encountered.
+
 ## 2026-10-13: Clarify newsletter welcome and footer links
 
 - **Major changes:** Updated the newsletter welcome email to explain what subscribers can expect, including health and wellness resources, Bible and prophecy studies, faith-building messages, featured videos, and ministry/meeting updates. Moved Unsubscribe from the message body into the footer alongside links to Prayer Requests (`/prayer-request`), Contact Us (`/contact`), and Next Meeting (`/meetings`). Added the same route links and footer unsubscribe to the plain-text email while preserving the existing campaign styling and button.
