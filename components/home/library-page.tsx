@@ -411,20 +411,25 @@ export default function LibraryPage({ documentId }: { documentId?: string }) {
                     aria-selected={filter === "all"}
                     className={`lib-chip${filter === "all" ? " is-active" : ""}`}
                     onClick={() => setFilter("all")}
+                    title="Show every resource in the library"
                   >
-                    All
+                    All resources
                   </button>
-                  {topCategories.map((cat) => (
-                    <button
-                      key={cat.id}
-                      role="tab"
-                      aria-selected={filter === cat.id}
-                      className={`lib-chip${filter === cat.id ? " is-active" : ""}`}
-                      onClick={() => setFilter(cat.id)}
-                    >
-                      {cat.name}
-                    </button>
-                  ))}
+                  {topCategories.map((cat) => {
+                    const catActive = activeParent?.id === cat.id;
+                    return (
+                      <button
+                        key={cat.id}
+                        role="tab"
+                        aria-selected={catActive}
+                        className={`lib-chip${catActive ? " is-active" : ""}`}
+                        onClick={() => setFilter(cat.id)}
+                        title={`Show resources in ${cat.name}`}
+                      >
+                        {cat.name}
+                      </button>
+                    );
+                  })}
                 </div>
               </div>
 
@@ -436,8 +441,9 @@ export default function LibraryPage({ documentId }: { documentId?: string }) {
                     <button
                       className={`lib-chip-sm${filter === activeParent.id ? " is-active" : ""}`}
                       onClick={() => setFilter(activeParent.id)}
+                      title={`Show all resources in ${activeParent.name}`}
                     >
-                      All
+                      All in {activeParent.name}
                     </button>
                     {children(activeParent.id).map((child) => (
                       <button
@@ -512,7 +518,20 @@ export default function LibraryPage({ documentId }: { documentId?: string }) {
                   ))}
                 </div>
               ) : (
-                <p className="lib-empty">No resources match this search yet.</p>
+                <p className="lib-empty">
+                  No resources match {search ? "this search" : "the current filter"}
+                  {search && filter !== "all" ? " in this category" : ""} yet.{" "}
+                  {filter !== "all" && (
+                    <button
+                      type="button"
+                      className="lib-chip-sm"
+                      style={{ marginLeft: 10, verticalAlign: "middle" }}
+                      onClick={() => setFilter("all")}
+                    >
+                      Show all resources
+                    </button>
+                  )}
+                </p>
               )}
             </section>
 
