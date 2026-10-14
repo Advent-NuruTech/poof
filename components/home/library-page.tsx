@@ -376,17 +376,11 @@ export default function LibraryPage({ documentId }: { documentId?: string }) {
                 </h1>
 
                 <p className="lib-lede">
-                  Study resources, reading notes, and video playlists — curated for depth,
+                  Study resources, reading notes curated for depth,
                   clarity, and quiet reflection.
                 </p>
 
-                <div className="lib-hero-meta">
-                  <span><strong>{documents.length}</strong> resources</span>
-                  <span className="lib-dot" />
-                  <span><strong>{playlists.length}</strong> playlists</span>
-                  <span className="lib-dot" />
-                  <span><strong>{categories.length}</strong> categories</span>
-                </div>
+                
               </div>
             </header>
 
