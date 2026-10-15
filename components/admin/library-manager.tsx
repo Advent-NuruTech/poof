@@ -1,7 +1,7 @@
 "use client";
 
 import Link from "next/link";
-import { addDoc, collection, deleteDoc, doc, getDocs, limit, onSnapshot, orderBy, query, setDoc, updateDoc } from "firebase/firestore";
+import { addDoc, collection, deleteDoc, doc, getDocs, limit, orderBy, query, setDoc, updateDoc } from "firebase/firestore";
 import { onAuthStateChanged } from "firebase/auth";
 import { useEffect, useRef, useState } from "react";
 import { auth, db } from "@/lib/firebase";
@@ -24,13 +24,19 @@ export default function LibraryManager() {
   const editor = useRef<HTMLDivElement>(null);
   const seededDefaults = useRef(false);
 
+  async function refreshPublicLibrary() {
+    const token = await auth.currentUser?.getIdToken();
+    if (!token) return;
+    await fetch("/api/admin/catalog/revalidate", { method: "POST", headers: { Authorization: `Bearer ${token}` } });
+  }
+
   useEffect(() => {
-    const stopSnapshot = onSnapshot(collection(db, "libraryCategories"), (snapshot) => {
+    let active = true;
+    void getDocs(collection(db, "libraryCategories")).then((snapshot) => {
+      if (!active) return;
       const rows = snapshot.docs.map((item) => ({ ...item.data(), id: item.id }) as LibraryCategory);
-      setCategories(rows);
-      setCategoryId((current) => current || rows[0]?.id || "");
-      setParentId((current) => current || rows.find((item) => !item.parentId)?.id || "");
-    }, (reason) => setError(reason.message));
+      setCategories(rows); setCategoryId((current) => current || rows[0]?.id || ""); setParentId((current) => current || rows.find((item) => !item.parentId)?.id || "");
+    }).catch((reason) => { if (active) setError(reason instanceof Error ? reason.message : "Could not load library categories."); });
     const stopAuth = onAuthStateChanged(auth, async (user) => {
       if (!user || seededDefaults.current) return;
       seededDefaults.current = true;
@@ -49,11 +55,9 @@ export default function LibraryManager() {
         ]);
       } catch (reason) { setError(reason instanceof Error ? reason.message : "Could not initialize library categories."); }
     });
-    return () => { stopSnapshot(); stopAuth(); };
+    return () => { active = false; stopAuth(); };
   }, []);
-  useEffect(() => onSnapshot(query(collection(db, "libraryDocuments"), orderBy("updatedAt", "desc"), limit(200)), (snapshot) => {
-    setDocuments(snapshot.docs.map((item) => ({ ...item.data(), id: item.id }) as LibraryDocument).sort((a, b) => (b.updatedAt ?? "").localeCompare(a.updatedAt ?? "")));
-  }, (reason) => setError(reason.message)), []);
+  useEffect(() => { let active = true; void getDocs(query(collection(db, "libraryDocuments"), orderBy("updatedAt", "desc"), limit(200))).then((snapshot) => { if (active) setDocuments(snapshot.docs.map((item) => ({ ...item.data(), id: item.id }) as LibraryDocument).sort((a, b) => (b.updatedAt ?? "").localeCompare(a.updatedAt ?? ""))); }).catch((reason) => { if (active) setError(reason instanceof Error ? reason.message : "Could not load library documents."); }); return () => { active = false; }; }, []);
 
   async function addCategory(event: React.FormEvent) {
     event.preventDefault();
@@ -61,6 +65,7 @@ export default function LibraryManager() {
     if (!name) return;
     try {
       const row = await addDoc(collection(db, "libraryCategories"), { name, parentId: parentId || null });
+      await refreshPublicLibrary();
       setCategoryId(row.id); setNewCategory(""); setNotice(`“${name}” is ready to use.`);
     } catch (reason) { setError(reason instanceof Error ? reason.message : "Could not add category."); }
   }
@@ -103,6 +108,7 @@ export default function LibraryManager() {
         await addDoc(collection(db, "libraryDocuments"), { ...note, createdAt: updatedAt });
         setNotice("Note published to the library.");
       }
+      await refreshPublicLibrary();
       setTitle(""); setDescription(""); if (editor.current) editor.current.innerHTML = "";
     } catch (reason) { setError(reason instanceof Error ? reason.message : "Could not save note."); }
     finally { setBusy(false); }
@@ -124,6 +130,7 @@ export default function LibraryManager() {
       if (!response.ok || !result.secureUrl) throw new Error(result.error ?? "Upload failed.");
       const selected = categories.find((item) => item.id === categoryId);
       await addDoc(collection(db, "libraryDocuments"), { title: title.trim(), description: description.trim(), categoryId, categoryName: selected?.name ?? "Library", kind, fileUrl: result.secureUrl, ...(result.previewUrl ? { previewUrl: result.previewUrl } : {}), fileName: file.name, createdAt: new Date().toISOString(), updatedAt: new Date().toISOString() });
+      await refreshPublicLibrary();
       setTitle(""); setDescription(""); setNotice("File uploaded and published.");
     } catch (reason) { setError(reason instanceof Error ? reason.message : "Could not upload file."); }
     finally { setBusy(false); }
@@ -146,6 +153,6 @@ export default function LibraryManager() {
       {(editingDocument?.kind === "doc" || editingDocument?.kind === "pdf") && <p className="library-help">File contents cannot be replaced here. You can edit the title, description, and category for this resource.</p>}
       {editingDocument?.kind === "doc" || editingDocument?.kind === "pdf" ? <div className="library-form-actions"><button className="primary-button" type="submit" disabled={busy}>{busy ? "Saving…" : "Save changes"}</button><button className="outline-button" type="button" disabled={busy} onClick={cancelEditing}>Cancel edit</button></div> : null}
     </form>{!editingDocument && <div className="library-upload"><div><strong>Or upload a document</strong><span>PDF and Word files, up to 25 MB. Readers can preview and download them.</span></div><label className="outline-button">{busy ? "Uploading…" : "Choose file"}<input type="file" accept="application/pdf,.pdf,.doc,.docx,application/msword,application/vnd.openxmlformats-officedocument.wordprocessingml.document" disabled={busy} onChange={(e) => void uploadFile(e.target.files?.[0])}/></label></div>}</section>
-    <section className="admin-panel"><h2>Published resources <small>({documents.length})</small></h2>{documents.length ? <div className="library-admin-list">{documents.map((item) => <article key={item.id}><div><strong>{item.title}</strong><span>{item.categoryName} · {item.kind === "note" ? "Note" : item.kind.toUpperCase()}</span></div><Link className="outline-button" href={`/library/${encodeURIComponent(item.id)}`}>Preview</Link><button className="outline-button" onClick={() => startEditing(item)}>Edit</button><button className="icon-action remove-action" aria-label={`Delete ${item.title}`} onClick={() => void deleteDoc(doc(db, "libraryDocuments", item.id))}>×</button></article>)}</div> : <p className="library-help">Your published resources will appear here.</p>}</section>
+    <section className="admin-panel"><h2>Published resources <small>({documents.length})</small></h2>{documents.length ? <div className="library-admin-list">{documents.map((item) => <article key={item.id}><div><strong>{item.title}</strong><span>{item.categoryName} · {item.kind === "note" ? "Note" : item.kind.toUpperCase()}</span></div><Link className="outline-button" href={`/library/${encodeURIComponent(item.id)}`}>Preview</Link><button className="outline-button" onClick={() => startEditing(item)}>Edit</button><button className="icon-action remove-action" aria-label={`Delete ${item.title}`} onClick={() => void deleteDoc(doc(db, "libraryDocuments", item.id)).then(async () => { setDocuments((items) => items.filter((entry) => entry.id !== item.id)); await refreshPublicLibrary(); }).catch((reason) => setError(reason instanceof Error ? reason.message : "Could not delete library resource."))}>×</button></article>)}</div> : <p className="library-help">Your published resources will appear here.</p>}</section>
   </main>;
 }

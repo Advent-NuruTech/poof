@@ -1,6 +1,6 @@
 "use client";
 
-import { collection, limit, onSnapshot, orderBy, query } from "firebase/firestore";
+import { collection, getDocs, limit, orderBy, query } from "firebase/firestore";
 import { useEffect, useMemo, useState } from "react";
 import type { User } from "firebase/auth";
 import { db } from "@/lib/firebase";
@@ -15,13 +15,12 @@ export default function NotificationBell({ user }: { user: User | null }) {
 
   useEffect(() => {
     if (!user) return;
-    // Bound the listener instead of reading all of `contacts`: the bell only
-    // ever shows the 5 most recent submissions, so an orderBy + limit query
-    // gives the same result while delivering (and billing for) a tiny slice.
-    // A missing composite index falls back to the unbounded read so the bell
-    // never goes silently blank.
+    // This intentionally performs one bounded read per admin-page visit.
+    // A realtime listener would keep charging for every incoming submission.
     const bounded = query(collection(db, "contacts"), orderBy("createdAt", "desc"), limit(20));
-    return onSnapshot(bounded, (snapshot) => setItems(snapshot.docs.map((item) => ({ ...item.data(), id: item.id }) as InboxItem)));
+    let active = true;
+    void getDocs(bounded).then((snapshot) => { if (active) setItems(snapshot.docs.map((item) => ({ ...item.data(), id: item.id }) as InboxItem)); });
+    return () => { active = false; };
   }, [user]);
 
   const ordered = useMemo(() => [...items].sort((a, b) => (b.createdAt?.toDate?.().getTime() ?? 0) - (a.createdAt?.toDate?.().getTime() ?? 0)), [items]);

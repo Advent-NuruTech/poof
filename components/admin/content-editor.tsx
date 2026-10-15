@@ -1,6 +1,6 @@
 "use client";
 
-import { collection, doc, limit, onSnapshot, orderBy, query, setDoc } from "firebase/firestore";
+import { collection, doc, getDocs, limit, orderBy, query, setDoc } from "firebase/firestore";
 import { useEffect, useState } from "react";
 import { db } from "@/lib/firebase";
 import type { Playlist, Video } from "@/lib/catalog";
@@ -12,19 +12,15 @@ export default function ContentEditor() {
   const [videoLimit, setVideoLimit] = useState(40);
   const [playlistLimit, setPlaylistLimit] = useState(40);
 
-  useEffect(() => onSnapshot(query(collection(db, "videos"), orderBy("publishedAt", "desc"), limit(videoLimit)), (snapshot) => {
-    setVideos(snapshot.docs.map((entry) => ({ ...entry.data(), id: entry.id }) as Video).sort((a, b) => (b.publishedAt ?? "").localeCompare(a.publishedAt ?? "")));
-  }, (reason) => setError(reason.message)), [videoLimit]);
-  useEffect(() => onSnapshot(query(collection(db, "playlists"), orderBy("title", "asc"), limit(playlistLimit)), (snapshot) => {
-    setPlaylists(snapshot.docs.map((entry) => ({ ...entry.data(), id: entry.id }) as Playlist));
-  }, (reason) => setError(reason.message)), [playlistLimit]);
+  useEffect(() => { let active = true; void getDocs(query(collection(db, "videos"), orderBy("publishedAt", "desc"), limit(videoLimit))).then((snapshot) => { if (active) setVideos(snapshot.docs.map((entry) => ({ ...entry.data(), id: entry.id }) as Video).sort((a, b) => (b.publishedAt ?? "").localeCompare(a.publishedAt ?? ""))); }).catch((reason) => { if (active) setError(reason instanceof Error ? reason.message : "Could not load videos."); }); return () => { active = false; }; }, [videoLimit]);
+  useEffect(() => { let active = true; void getDocs(query(collection(db, "playlists"), orderBy("title", "asc"), limit(playlistLimit))).then((snapshot) => { if (active) setPlaylists(snapshot.docs.map((entry) => ({ ...entry.data(), id: entry.id }) as Playlist)); }).catch((reason) => { if (active) setError(reason instanceof Error ? reason.message : "Could not load playlists."); }); return () => { active = false; }; }, [playlistLimit]);
 
   async function updateVideo(video: Video, change: Partial<NonNullable<Video["website"]>>) {
-    try { await setDoc(doc(db, "videos", video.id), { website: { ...video.website, ...change } }, { merge: true }); }
+    try { const website = { ...video.website, ...change }; await setDoc(doc(db, "videos", video.id), { website }, { merge: true }); setVideos((items) => items.map((item) => item.id === video.id ? { ...item, website } : item)); }
     catch (reason) { setError(reason instanceof Error ? reason.message : "Could not update this video."); }
   }
   async function updatePlaylist(playlist: Playlist, change: Partial<NonNullable<Playlist["website"]>>) {
-    try { await setDoc(doc(db, "playlists", playlist.id), { website: { ...playlist.website, ...change } }, { merge: true }); }
+    try { const website = { ...playlist.website, ...change }; await setDoc(doc(db, "playlists", playlist.id), { website }, { merge: true }); setPlaylists((items) => items.map((item) => item.id === playlist.id ? { ...item, website } : item)); }
     catch (reason) { setError(reason instanceof Error ? reason.message : "Could not update this playlist."); }
   }
 

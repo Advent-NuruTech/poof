@@ -2,7 +2,7 @@
 
 import { onAuthStateChanged, signOut, type User } from "firebase/auth";
 import Link from "next/link";
-import { collection, deleteDoc, doc, getDoc, limit, onSnapshot, query, updateDoc } from "firebase/firestore";
+import { collection, deleteDoc, doc, getDoc, getDocs, limit, query, updateDoc } from "firebase/firestore";
 import { useEffect, useState } from "react";
 import { auth, db } from "@/lib/firebase";
 import { endAdminSession } from "@/lib/admin-session";
@@ -50,13 +50,15 @@ export default function ContactsManager({ mode = "all", initialTab = "contact" }
   }, [user]);
   useEffect(() => {
     if (!isAdmin) return;
-    return onSnapshot(query(collection(db, "contacts"), limit(100)), (snapshot) => {
-      setContacts(snapshot.docs.map((item) => ({ ...item.data(), id: item.id }) as Contact).sort((a, b) => (b.createdAt?.toDate?.().getTime() ?? 0) - (a.createdAt?.toDate?.().getTime() ?? 0)));
-    }, (reason) => setError(reason.message));
+    let active = true;
+    void getDocs(query(collection(db, "contacts"), limit(100))).then((snapshot) => {
+      if (active) setContacts(snapshot.docs.map((item) => ({ ...item.data(), id: item.id }) as Contact).sort((a, b) => (b.createdAt?.toDate?.().getTime() ?? 0) - (a.createdAt?.toDate?.().getTime() ?? 0)));
+    }).catch((reason) => { if (active) setError(reason instanceof Error ? reason.message : "Could not load submissions."); });
+    return () => { active = false; };
   }, [isAdmin]);
 
   const setStatus = (item: Contact, status: Status) => {
-    void updateDoc(doc(db, "contacts", item.id), { status, handledAt: status === "handled" ? new Date() : null })
+    void updateDoc(doc(db, "contacts", item.id), { status, handledAt: status === "handled" ? new Date() : null }).then(() => setContacts((items) => items.map((entry) => entry.id === item.id ? { ...entry, status, handledAt: status === "handled" ? { toDate: () => new Date() } : null } : entry)))
       .catch((reason) => setError(reason instanceof Error ? reason.message : "Could not update submission status."));
   };
   const tabContacts = contacts.filter((item) => (item.category ?? "contact") === tab);

@@ -17,9 +17,9 @@ const nextConfig: NextConfig = {
       expire: 7 * 24 * 60 * 60,
     },
     libraryFeed: {
-      stale: 60,
-      revalidate: 10 * 60,
-      expire: 24 * 60 * 60,
+      stale: 60 * 60,
+      revalidate: FEED_CACHE_SECONDS,
+      expire: 7 * 24 * 60 * 60,
     },
   },
 };

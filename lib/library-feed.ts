@@ -1,8 +1,9 @@
-import { cacheLife } from "next/cache";
+import { cacheLife, cacheTag } from "next/cache";
 import type { LibraryCategory, LibraryDocument } from "@/lib/library";
 
 const MAX_LIBRARY_ROWS = 900;
 const TIMEOUT_MS = 8000;
+export const PUBLIC_LIBRARY_CACHE_TAG = "public-library";
 
 type Wire = Record<string, unknown>;
 type RestDocument = { name?: string; fields?: Record<string, unknown> };
@@ -46,6 +47,7 @@ async function readCollection<T>(name: string): Promise<T[]> {
 export async function getPublicLibrary() {
   "use cache";
   cacheLife("libraryFeed");
+  cacheTag(PUBLIC_LIBRARY_CACHE_TAG);
   const [categories, documents] = await Promise.all([
     readCollection<LibraryCategory>("libraryCategories"),
     readCollection<LibraryDocument>("libraryDocuments"),

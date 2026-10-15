@@ -2,7 +2,7 @@
 
 import { onAuthStateChanged, signOut, type User } from "firebase/auth";
 import Link from "next/link";
-import { collection, deleteDoc, doc, getCountFromServer, getDoc, getDocs, onSnapshot, query, runTransaction, serverTimestamp, setDoc, Timestamp, where, writeBatch } from "firebase/firestore";
+import { collection, deleteDoc, doc, getCountFromServer, getDoc, getDocs, query, runTransaction, serverTimestamp, setDoc, Timestamp, where, writeBatch } from "firebase/firestore";
 import { useCallback, useEffect, useRef, useState } from "react";
 import type { FormEvent } from "react";
 import { auth, db } from "@/lib/firebase";
@@ -79,14 +79,18 @@ export default function AdminPage() {
   }, [user]);
   useEffect(() => {
     if (!isAdmin) return;
-    return onSnapshot(collection(db, "channels"), (snapshot) => setChannels(snapshot.docs.map((item) => ({ ...item.data(), id: item.id }) as Channel)), (reason) => setError(reason.message));
+    let active = true;
+    void getDocs(collection(db, "channels")).then((snapshot) => {
+      if (active) setChannels(snapshot.docs.map((item) => ({ ...item.data(), id: item.id }) as Channel));
+    }).catch((reason) => { if (active) setError(reason instanceof Error ? reason.message : "Could not load channels."); });
+    return () => { active = false; };
   }, [isAdmin]);
   useEffect(() => {
     if (!isAdmin) return;
     Promise.all([getCountFromServer(collection(db, "videos")), getCountFromServer(collection(db, "playlists"))])
       .then(([videoCount, playlistCount]) => setCatalogCounts({ videos: videoCount.data().count, playlists: playlistCount.data().count }))
       .catch((reason) => setError(reason instanceof Error ? reason.message : "Could not load catalog totals."));
-  }, [isAdmin, channels]);
+  }, [isAdmin]);
 
   const syncChannel = useCallback(async (channel: Channel) => {
     if (!user) return;

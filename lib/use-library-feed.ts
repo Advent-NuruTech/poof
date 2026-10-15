@@ -8,7 +8,9 @@ const EMPTY: LibraryFeed = { categories: [], documents: [], truncated: false };
 let cached: LibraryFeed | null = null;
 let cachedAt = 0;
 let pending: Promise<LibraryFeed | null> | null = null;
-const CACHE_MS = 10 * 60 * 1000;
+// The server shares the same 24-hour snapshot across visitors. This client
+// cache prevents route changes in one tab from repeatedly calling the API.
+const CACHE_MS = 24 * 60 * 60 * 1000;
 
 async function fetchLibrary(): Promise<LibraryFeed | null> {
   if (cached && Date.now() - cachedAt < CACHE_MS) return cached;

@@ -2,7 +2,7 @@
 
 import { onAuthStateChanged, signOut, type User } from "firebase/auth";
 import Link from "next/link";
-import { addDoc, collection, deleteDoc, doc, getDoc, limit, onSnapshot, query, updateDoc, deleteField } from "firebase/firestore";
+import { addDoc, collection, deleteDoc, doc, getDoc, getDocs, limit, query, updateDoc, deleteField } from "firebase/firestore";
 import { useEffect, useState } from "react";
 import type { FormEvent } from "react";
 import { auth, db } from "@/lib/firebase";
@@ -86,7 +86,11 @@ export default function MeetingsManager() {
   }, [user]);
   useEffect(() => {
     if (!isAdmin) return;
-    return onSnapshot(query(collection(db, "meetings"), limit(200)), (snapshot) => setMeetings(snapshot.docs.map((item) => ({ ...item.data(), id: item.id }) as Meeting).sort((a, b) => a.startsAt.localeCompare(b.startsAt))), (reason) => setError(reason.message));
+    let active = true;
+    void getDocs(query(collection(db, "meetings"), limit(200))).then((snapshot) => {
+      if (active) setMeetings(snapshot.docs.map((item) => ({ ...item.data(), id: item.id }) as Meeting).sort((a, b) => a.startsAt.localeCompare(b.startsAt)));
+    }).catch((reason) => { if (active) setError(reason instanceof Error ? reason.message : "Could not load meetings."); });
+    return () => { active = false; };
   }, [isAdmin]);
 
   function editMeeting(meeting: Meeting) {

@@ -1,6 +1,7 @@
 import { revalidateTag } from "next/cache";
 import { isAdminIdentity } from "@/lib/admin-access";
 import { PUBLIC_CATALOG_CACHE_TAG } from "@/lib/catalog-feed-types";
+import { PUBLIC_LIBRARY_CACHE_TAG } from "@/lib/library-feed";
 
 export async function POST(request: Request) {
   const token = request.headers.get("authorization")?.match(/^Bearer\s+(.+)$/i)?.[1];
@@ -49,6 +50,7 @@ export async function POST(request: Request) {
     }
 
     revalidateTag(PUBLIC_CATALOG_CACHE_TAG, { expire: 0 });
+    revalidateTag(PUBLIC_LIBRARY_CACHE_TAG, { expire: 0 });
     return Response.json({ revalidated: true }, { headers: { "Cache-Control": "no-store" } });
   } catch (reason) {
     console.error("Could not refresh the public catalog after an administrator change.", reason);
