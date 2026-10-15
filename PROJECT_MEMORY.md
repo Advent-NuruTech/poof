@@ -1,4 +1,10 @@
 # Project Memory
+## 2026-10-15: Secure admin navigation in the installed app
+
+- **Major changes:** Added an admin install control directly below Mailing in the admin sidebar and removed the public meetings-page install action so the install prompt is offered from the authenticated admin area. The installed PWA displays an Admin dashboard shortcut between Library and Zoom on desktop and mobile only after the server confirms the existing administrator session. A previously verified local hint can restore shortcut visibility if the app shell is still available offline; it grants no access, because `/poof/admin` remains server-protected. The sign-in checkbox now explicitly chooses Firebase local versus session persistence and remembers the email when selected; passwords remain delegated to the browser password manager and are never stored by the app.
+- **Offline/security boundary:** PWA installation cannot be securely attested as having started from the admin route. The shortcut is a UI convenience only, while every protected route continues to validate the administrator session. The current app has no service worker, so offline startup, admin pages, and admin actions are not guaranteed; no sensitive admin data is cached offline.
+- **Verification:** Production build and a TypeScript recheck completed successfully after fixing a missed JSX provider closing-tag rename found by the final build. An initial TypeScript check ran while the production build regenerated `.next/types` and reported missing generated files; it passed when rerun after the build completed. Focused ESLint passed with one pre-existing `<img>` warning in `components/home/public-header.tsx`; `git diff --check` passed.
+
 ## Ongoing working preference
 - Whenever project changes are made, record the major change and any build/runtime errors with their verified fixes in this file before finishing. When the user asks, provide the exact suggested Git commit message; do not create a commit unless explicitly requested.
 

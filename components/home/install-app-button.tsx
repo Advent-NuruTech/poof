@@ -13,7 +13,7 @@ declare global {
   }
 }
 
-export default function InstallAppButton() {
+export default function InstallAppButton({ variant = "default" }: { variant?: "default" | "admin" }) {
   const [installPrompt, setInstallPrompt] = useState<InstallPromptEvent | null>(null);
   const [helpOpen, setHelpOpen] = useState(false);
   const [isInstalled, setIsInstalled] = useState(false);
@@ -88,7 +88,7 @@ export default function InstallAppButton() {
   return (
     <>
       <button
-        className="zm-chip zm-install-button"
+        className={variant === "admin" ? "admin-sidebar-install-button" : "zm-chip zm-install-button"}
         type="button"
         onClick={handleInstall}
         aria-haspopup={installPrompt ? undefined : "dialog"}

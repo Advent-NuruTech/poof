@@ -1,6 +1,7 @@
 "use client";
 
 import Link from "next/link";
+import { useAdminAppShortcutVisible } from "@/components/app/admin-app-access-provider";
 
 type PublicHeaderProps = {
   searchOpen: boolean;
@@ -90,6 +91,12 @@ const CSS = `
   outline:0;border-color:var(--red);
   box-shadow:0 0 0 2px rgba(208,2,27,.35);
 }
+.zm-nav a.zm-admin-shortcut{
+  display:inline-grid;place-items:center;width:36px;height:36px;padding:0;
+  border:1px solid rgba(208,2,27,.45);border-radius:50%;color:var(--red);
+  font-size:23px;font-weight:500;line-height:1;transition:background .2s,color .2s,border-color .2s;
+}
+.zm-nav a.zm-admin-shortcut:hover{background:var(--red);border-color:var(--red);color:var(--paper)}
 .zm-nav a.is-current{
   background:var(--ink);color:var(--paper);border-color:var(--ink);
 }
@@ -293,6 +300,7 @@ export default function PublicHeader({
   onSearchOpenChange,
   onSearchChange,
 }: PublicHeaderProps) {
+  const showAdminShortcut = useAdminAppShortcutVisible();
   const closeSearch = () => {
     onSearchOpenChange(false);
     onSearchChange("");
@@ -322,8 +330,18 @@ export default function PublicHeader({
               </Link>
               <Link href="/playlists">Playlists</Link>
               <Link href="/about">About Us</Link>
-              <Link href="/meetings">Zoom</Link>
               <Link href="/library">Library</Link>
+              {showAdminShortcut && (
+                <Link
+                  className="zm-admin-shortcut"
+                  href="/poof/admin"
+                  aria-label="Admin dashboard"
+                  title="Admin dashboard"
+                >
+                  +
+                </Link>
+              )}
+              <Link href="/meetings">Zoom</Link>
               <Link className="zm-donate" href="/donate">
                 Donate
               </Link>

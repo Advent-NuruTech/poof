@@ -3,6 +3,7 @@
 import { useEffect, useState } from "react";
 import Link from "next/link";
 import { usePathname } from "next/navigation";
+import InstallAppButton from "@/components/home/install-app-button";
 
 const sections = [
   { href: "/poof/admin", label: "Dashboard", icon: "⌂" },
@@ -60,7 +61,7 @@ export default function AdminSidebar() {
     <aside id="admin-sidebar" className={open ? "admin-sidebar open" : "admin-sidebar"}>
       <button className="admin-sidebar-close" type="button" aria-label="Close admin menu" onClick={closeSidebar}><span aria-hidden="true">✕</span></button>
       <Link href="/poof/admin" className="admin-sidebar-brand" onClick={closeSidebar}><span>FAITH OF THE</span><strong>PIONEERS</strong></Link>
-      <nav aria-label="Admin navigation"><p>Workspace</p><NavItems items={sections} onNavigate={closeSidebar}/><p>Inbox</p><NavItems items={inbox} onNavigate={closeSidebar}/></nav>
+      <nav aria-label="Admin navigation"><p>Workspace</p><NavItems items={sections} onNavigate={closeSidebar}/><InstallAppButton variant="admin"/><p>Inbox</p><NavItems items={inbox} onNavigate={closeSidebar}/></nav>
       <Link className="admin-sidebar-public" href="/" target="_blank">View public site <span aria-hidden="true">↗</span></Link>
     </aside>
   </>;

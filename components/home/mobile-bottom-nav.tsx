@@ -1,9 +1,12 @@
 "use client";
 
 import type { ReactNode } from "react";
+import { Fragment } from "react";
 import { useEffect, useState } from "react";
 import { feedMeetings, usePublicCatalog } from "@/lib/use-catalog";
 import { meetingStatus } from "@/lib/meetings";
+import Link from "next/link";
+import { useAdminAppShortcutVisible } from "@/components/app/admin-app-access-provider";
 
 type Section = "home" | "library" | "meetings" | "contact";
 
@@ -16,6 +19,7 @@ const tabs: { section: Section; label: string; href: string; icon: ReactNode }[]
 
 export default function MobileBottomNav({ current }: { current: Section }) {
   const [now, setNow] = useState(0);
+  const showAdminShortcut = useAdminAppShortcutVisible();
   // The bottom tab bar previously opened its own live meetings listener on every
   // public page, duplicating the listener the page itself already had. It now
   // reads the shared 24-hour snapshot (no extra reads, no extra connections).
@@ -23,10 +27,16 @@ export default function MobileBottomNav({ current }: { current: Section }) {
   const meetings = feedMeetings(feed);
   useEffect(() => { const initial = window.setTimeout(() => setNow(Date.now()), 0); const timer = window.setInterval(() => setNow(Date.now()), 30_000); return () => { window.clearTimeout(initial); window.clearInterval(timer); }; }, []);
   const meetingCount = meetings.filter((meeting) => meetingStatus(meeting, now) !== "completed").length;
-  return <nav className="mobile-tabbar" aria-label="Main navigation">
-    {tabs.map((tab) => <a key={tab.section} className={current === tab.section ? "tab-active" : ""} href={tab.href} aria-current={current === tab.section ? "page" : undefined}>
-      <span className="tab-icon-wrap"><svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">{tab.icon}</svg>{tab.section === "meetings" && meetingCount > 0 && <span className="tab-count" aria-label={`${meetingCount} upcoming or ongoing meetings`}>{meetingCount > 9 ? "9+" : meetingCount}</span>}</span>
-      <span>{tab.label}</span>
-    </a>)}
+  return <nav className="mobile-tabbar" aria-label="Main navigation" style={showAdminShortcut ? { gridTemplateColumns: "repeat(5, minmax(0, 1fr))" } : undefined}>
+    {tabs.map((tab) => <Fragment key={tab.section}>
+      {tab.section === "meetings" && showAdminShortcut && <Link href="/poof/admin" aria-label="Admin dashboard" title="Admin dashboard">
+        <span className="tab-icon-wrap"><svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" aria-hidden="true"><path d="M12 5v14M5 12h14"/></svg></span>
+        <span>Admin</span>
+      </Link>}
+      <a className={current === tab.section ? "tab-active" : ""} href={tab.href} aria-current={current === tab.section ? "page" : undefined}>
+        <span className="tab-icon-wrap"><svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">{tab.icon}</svg>{tab.section === "meetings" && meetingCount > 0 && <span className="tab-count" aria-label={`${meetingCount} upcoming or ongoing meetings`}>{meetingCount > 9 ? "9+" : meetingCount}</span>}</span>
+        <span>{tab.label}</span>
+      </a>
+    </Fragment>)}
   </nav>;
 }

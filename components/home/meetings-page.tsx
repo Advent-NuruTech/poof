@@ -5,7 +5,6 @@ import { useEffect, useRef, useState } from "react";
 import { feedMeetings, usePublicCatalog } from "@/lib/use-catalog";
 import { meetingGroups, meetingSearchText, type MeetingStatus } from "@/lib/meetings";
 import MeetingCard, { MeetingIcon } from "@/components/home/meeting-card";
-import InstallAppButton from "@/components/home/install-app-button";
 import MobileBottomNav from "@/components/home/mobile-bottom-nav";
 import { MeetingListSkeleton } from "@/components/home/skeleton";
 
@@ -152,34 +151,6 @@ const CSS = `
 }
 .zm-chip.is-active b{background:rgba(255,255,255,.14);color:var(--paper)}
 .zm-chip.is-active b::after{content:""}
-
-.zm-install-button{
-  color:var(--red);border-color:rgba(208,2,27,.42);font-weight:600;
-}
-.zm-install-button:hover{border-color:var(--red);background:#fff8f8}
-.zm-install-button svg{
-  width:15px;height:15px;fill:none;stroke:currentColor;stroke-width:1.7;
-  stroke-linecap:round;stroke-linejoin:round;
-}
-.zm-install-dialog{
-  position:fixed;inset:0;margin:auto;width:min(420px,calc(100vw - 32px));
-  max-width:none;padding:0;border:1px solid var(--line-strong);border-radius:18px;
-  background:var(--paper);color:var(--ink);box-shadow:0 24px 80px rgba(10,10,10,.24);
-}
-.zm-install-dialog::backdrop{background:rgba(10,10,10,.48);backdrop-filter:blur(3px)}
-.zm-install-dialog-content{position:relative;padding:32px}
-.zm-install-dialog-kicker{
-  display:block;margin-bottom:12px;color:var(--red);font-size:10px;
-  font-weight:700;letter-spacing:.17em;text-transform:uppercase;
-}
-.zm-install-dialog h2{margin:0 36px 10px 0;font-size:25px;font-weight:600;letter-spacing:-.035em}
-.zm-install-dialog p{margin:0;color:var(--muted);font-size:14px;line-height:1.6}
-.zm-install-dialog-close{
-  position:absolute;top:16px;right:16px;width:32px;height:32px;border:1px solid var(--line);
-  border-radius:50%;background:var(--paper);color:var(--muted);font-size:22px;line-height:1;
-  cursor:pointer;
-}
-.zm-install-dialog-close:hover{color:var(--ink);border-color:var(--line-strong)}
 
 /* ============ SECTIONS ============ */
 .zm-section{max-width:1120px;margin:0 auto;padding:56px 24px 40px}
@@ -432,7 +403,6 @@ export default function MeetingsPage() {
                       {option.label}
                       <b>{counts[option.value]}</b>
                     </button>
-                    {option.value === "upcoming" && <InstallAppButton />}
                   </span>
                 );
               })}

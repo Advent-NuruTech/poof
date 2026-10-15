@@ -1,6 +1,14 @@
 "use client";
 
-import { onAuthStateChanged, signInWithEmailAndPassword, signOut, type User } from "firebase/auth";
+import {
+  browserLocalPersistence,
+  browserSessionPersistence,
+  onAuthStateChanged,
+  setPersistence,
+  signInWithEmailAndPassword,
+  signOut,
+  type User,
+} from "firebase/auth";
 import Image from "next/image";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
@@ -70,6 +78,8 @@ setError("");
 try {
   const form = new FormData(event.currentTarget);
   const normalizedEmail = String(form.get("email") ?? "").trim();
+  const keepSignedIn = rememberInput.current?.checked ?? false;
+  await setPersistence(auth, keepSignedIn ? browserLocalPersistence : browserSessionPersistence);
   const credential = await signInWithEmailAndPassword(
     auth,
     normalizedEmail,
@@ -144,7 +154,7 @@ return (
           ref={rememberInput}
           disabled={busy}
         />
-        Remember me
+        Keep me signed in on this device
       </label>
 
       {error && <p className="auth-error" role="alert">{error}</p>}
