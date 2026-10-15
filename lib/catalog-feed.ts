@@ -1,7 +1,7 @@
-import { cacheLife } from "next/cache";
+import { cacheLife, cacheTag } from "next/cache";
 
 import type { FeedChannel, FeedMeeting, FeedPlaylist, FeedVideo, PublicCatalogFeed } from "@/lib/catalog-feed-types";
-import { EMPTY_CATALOG_FEED, MOST_VIEWED_VIDEO_LIMIT } from "@/lib/catalog-feed-types";
+import { EMPTY_CATALOG_FEED, MOST_VIEWED_VIDEO_LIMIT, PUBLIC_CATALOG_CACHE_TAG } from "@/lib/catalog-feed-types";
 
 /**
  * The public catalog snapshot, read from Firestore once and then cached
@@ -26,7 +26,7 @@ import { EMPTY_CATALOG_FEED, MOST_VIEWED_VIDEO_LIMIT } from "@/lib/catalog-feed-
  */
 
 export type { FeedChannel, FeedMeeting, FeedPlaylist, FeedVideo, PublicCatalogFeed } from "@/lib/catalog-feed-types";
-export { EMPTY_CATALOG_FEED, FEED_CACHE_CONTROL, FEED_CACHE_MS, FEED_CACHE_SECONDS } from "@/lib/catalog-feed-types";
+export { EMPTY_CATALOG_FEED, FEED_CACHE_MS, FEED_CACHE_SECONDS } from "@/lib/catalog-feed-types";
 
 /** Hard ceiling on documents pulled per collection, regardless of catalog size. */
 export const MAX_FEED_ROWS = 900;
@@ -159,6 +159,7 @@ async function readCollection<T>(collectionId: string, maxRows = MAX_FEED_ROWS, 
 export async function getPublicCatalog(): Promise<PublicCatalogFeed> {
   "use cache";
   cacheLife("catalogFeed");
+  cacheTag(PUBLIC_CATALOG_CACHE_TAG);
   if (!process.env.NEXT_PUBLIC_FIREBASE_PROJECT_ID || !process.env.NEXT_PUBLIC_FIREBASE_API_KEY) return EMPTY_CATALOG_FEED;
   const channels = await readCollection<FeedChannel>("channels");
   const enabledChannelIds = channels.filter((channel) => channel.enabled !== false).map((channel) => channel.id);

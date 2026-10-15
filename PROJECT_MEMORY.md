@@ -2,6 +2,13 @@
 ## Ongoing working preference
 - Whenever project changes are made, record the major change and any build/runtime errors with their verified fixes in this file before finishing. When the user asks, provide the exact suggested Git commit message; do not create a commit unless explicitly requested.
 
+## 2026-10-15: Refresh public meetings after administrator edits
+
+- **Root cause:** Public pages read meetings from the shared Firestore catalog snapshot, intentionally cached for 24 hours to protect the Firestore free tier. The admin manager wrote directly to Firestore without invalidating that snapshot, and already-open public pages fetched it only once.
+- **Major changes:** Added a protected administrator endpoint to invalidate the shared catalog cache after meeting create, edit, and delete. The public catalog API response now uses `Cache-Control: no-store` and reads the request URL so Next.js keeps the route request-time while the catalog data remains shared-cached. Public catalog hooks refresh on a 60-second visible-tab interval and on focus/visibility changes, preserving the server cache and avoiding Firestore listeners. The recurring meeting day expansion remains unchanged.
+- **Build finding and fix:** The first production build showed `/api/catalog` as a one-day static route, which could bypass the on-demand refresh. Reading `request.url` in its handler made it Dynamic while retaining the `getPublicCatalog` cache; the follow-up production build confirmed `/api/catalog` and `/api/admin/catalog/revalidate` are both Dynamic.
+- **Verification:** `npx.cmd --no-install tsc --noEmit`, focused ESLint, both production builds, and `git diff --check` passed. ESLint reported 0 errors and the two existing `<img>` warnings in `components/admin/meetings-manager.tsx`. Live Firestore behavior was not exercised from this environment.
+
 ## 2026-10-14: Add 1889 Fundamental Principles edition alongside 1872
 
 - **Major change:** The `/doctrine/fundamental-principles` page now presents both declarations, each clearly labeled with a year badge: the original **1872** "Declaration of the Fundamental Principles" and the **1889** "Revised Declaration of the Fundamental Principles Taught and Practiced by the Seventh-day Adventists" (as stated in the SDA Year Books of 1889–1931; Battle Creek Steam Press). The 1889 edition adds 28 numbered propositions plus the closing Jeremiah 6:16 quotation.

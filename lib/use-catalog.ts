@@ -10,12 +10,11 @@ import type { FeedChannel, FeedMeeting, FeedPlaylist, FeedVideo, PublicCatalogFe
 // Quota rules this hook exists to enforce:
 //  - No `onSnapshot` listeners on public pages. A live listener re-delivers the
 //    whole catalog to every visitor on every sync write, which is what exhausted
-//    the Firestore free tier. This hook fetches once per page view and the
-//    server cache (24 hours) means those fetches almost never reach Firestore.
-//  - `refreshCatalogFeed()` deliberately does NOT force a server refresh. It
-//    re-reads the current cached snapshot so it cannot be used (or abused) to
-//    generate uncached Firestore reads. The server snapshot refreshes itself
-//    every 24 hours when Next.js revalidates.
+//    the Firestore free tier. This hook periodically fetches the shared server
+//    snapshot, which prevents those requests from reaching Firestore.
+//  - Periodic browser requests keep already-open public pages current without
+//    forcing Firestore reads; the cached server snapshot is invalidated after
+//    authenticated administrator changes and otherwise refreshes every 24 hours.
 
 export type CatalogStatus = "loading" | "ready" | "error";
 
@@ -27,7 +26,8 @@ const FEED_URL = "/api/catalog";
  * This is the ONLY way a public page may reach Firestore-backed catalog data.
  * It hits /api/catalog, which is served from a snapshot cached for 24 hours
  * (FEED_CACHE_SECONDS), so calling it repeatedly does not increase Firestore
- * reads. It must never be changed to read Firestore from the browser.
+ * reads unless an administrator has invalidated the snapshot. It must never
+ * be changed to read Firestore from the browser.
  */
 export async function fetchCatalogFeed(): Promise<PublicCatalogFeed | null> {
   try {
@@ -46,12 +46,38 @@ export function usePublicCatalog() {
 
   useEffect(() => {
     let active = true;
-    void fetchCatalogFeed().then((body) => {
-      if (!active) return;
-      setFeed(body ?? EMPTY_FEED);
-      setStatus(body ? "ready" : "error");
-    });
-    return () => { active = false; };
+    let requestPending = false;
+    let hasData = false;
+    const refresh = async () => {
+      if (requestPending) return;
+      requestPending = true;
+      try {
+        const body = await fetchCatalogFeed();
+        if (!active) return;
+        if (body) {
+          hasData = true;
+          setFeed(body);
+          setStatus("ready");
+        } else if (!hasData) {
+          setStatus("error");
+        }
+      } finally {
+        requestPending = false;
+      }
+    };
+    const refreshWhenVisible = () => {
+      if (document.visibilityState === "visible") void refresh();
+    };
+    void refresh();
+    const timer = window.setInterval(refreshWhenVisible, 60_000);
+    window.addEventListener("focus", refreshWhenVisible);
+    document.addEventListener("visibilitychange", refreshWhenVisible);
+    return () => {
+      active = false;
+      window.clearInterval(timer);
+      window.removeEventListener("focus", refreshWhenVisible);
+      document.removeEventListener("visibilitychange", refreshWhenVisible);
+    };
   }, []);
 
   return { feed, status };

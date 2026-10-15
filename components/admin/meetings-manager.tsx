@@ -100,9 +100,20 @@ export default function MeetingsManager() {
     setForm({ ...blank, timeZone: preferredTimeZone() }); setEditingId(null); setError(""); setNotice("");
   }
 
+  async function refreshPublicCatalog() {
+    const token = await user?.getIdToken();
+    if (!token) throw new Error("Sign in again to refresh the public schedule.");
+    const response = await fetch("/api/admin/catalog/revalidate", {
+      method: "POST",
+      headers: { Authorization: `Bearer ${token}` },
+    });
+    await readApiResponse<{ revalidated: boolean }>(response, "Public schedule refresh");
+  }
+
   async function saveMeeting(event: FormEvent<HTMLFormElement>) {
     event.preventDefault(); if (busy || uploadingPoster) return;
     setError(""); setNotice("");
+    let saved = false;
     try {
       if (!form.timeZone) throw new Error("Choose the time zone for this meeting.");
       const timeZone = form.timeZone;
@@ -118,15 +129,36 @@ export default function MeetingsManager() {
       const data = { title: form.title.trim(), description: sanitizeRichText(form.description).trim(), posterUrl: form.posterUrl.trim(), startsAt, endsAt, timeZone, meetingType: form.meetingType, meetingUrl: form.meetingType === "online" ? form.meetingUrl.trim() : "", venue: form.meetingType === "onsite" ? form.venue.trim() : "" };
       if (editingId) {
         await updateDoc(doc(db, "meetings", editingId), { ...data, recurrence: recurrence ?? deleteField() });
-        setNotice("Meeting updated.");
       } else {
         await addDoc(collection(db, "meetings"), { ...data, ...(recurrence ? { recurrence } : {}) });
-        setNotice("Meeting published.");
       }
+      saved = true;
       try { window.localStorage.setItem(timeZoneStorageKey, timeZone); } catch { /* Keep the meeting saved if browser storage is unavailable. */ }
       setForm({ ...blank, timeZone }); setEditingId(null);
-    } catch (reason) { setError(reason instanceof Error ? reason.message : "Could not save this meeting."); }
+      try {
+        await refreshPublicCatalog();
+        setNotice("Meeting saved. Public pages will refresh shortly.");
+      } catch (reason) {
+        setError(`Meeting saved, but public pages could not be refreshed: ${reason instanceof Error ? reason.message : "Unknown error."}`);
+      }
+    } catch (reason) { setError(saved ? "Meeting saved, but public pages could not be refreshed." : reason instanceof Error ? reason.message : "Could not save this meeting."); }
     finally { setBusy(false); }
+  }
+
+  async function removeMeeting(meeting: Meeting) {
+    if (!window.confirm(`Delete “${meeting.title}”?`)) return;
+    setError(""); setNotice("");
+    try {
+      await deleteDoc(doc(db, "meetings", meeting.id));
+      try {
+        await refreshPublicCatalog();
+        setNotice("Meeting deleted. Public pages will refresh shortly.");
+      } catch (reason) {
+        setError(`Meeting deleted, but public pages could not be refreshed: ${reason instanceof Error ? reason.message : "Unknown error."}`);
+      }
+    } catch (reason) {
+      setError(reason instanceof Error ? reason.message : "Could not delete meeting.");
+    }
   }
 
   async function uploadPoster(file: File | undefined) {
@@ -165,7 +197,7 @@ export default function MeetingsManager() {
           </form>
         </section>
         <div className="channel-list-heading"><h2>Scheduled meetings <span>{meetings.length}</span></h2></div>
-        {!meetings.length ? <section className="admin-panel empty-state"><h3>No meetings yet</h3><p>Published meetings will appear here.</p></section> : <div className="admin-channel-list">{meetings.map((meeting) => <article className="admin-channel" key={meeting.id}>{meeting.posterUrl && <img className="channel-avatar meeting-admin-poster" src={meeting.posterUrl} alt=""/>}<div className="channel-details"><div className="channel-title-row"><h3>{meeting.title}</h3></div><p>{formatMeetingDate(meeting.startsAt)} · {formatMeetingTime(meeting)}</p>{meeting.description && <div className="meeting-description-preview" dangerouslySetInnerHTML={{ __html: sanitizeRichText(meeting.description) }}/>}</div><div className="channel-actions"><button type="button" className="outline-button" disabled={busy || uploadingPoster} onClick={() => editMeeting(meeting)}>Edit</button><button className="icon-action remove-action" title={`Delete ${meeting.title}`} onClick={() => { if (window.confirm(`Delete “${meeting.title}”?`)) void deleteDoc(doc(db, "meetings", meeting.id)).catch((reason) => setError(reason instanceof Error ? reason.message : "Could not delete meeting.")); }}>×</button></div></article>)}</div>}
+        {!meetings.length ? <section className="admin-panel empty-state"><h3>No meetings yet</h3><p>Published meetings will appear here.</p></section> : <div className="admin-channel-list">{meetings.map((meeting) => <article className="admin-channel" key={meeting.id}>{meeting.posterUrl && <img className="channel-avatar meeting-admin-poster" src={meeting.posterUrl} alt=""/>}<div className="channel-details"><div className="channel-title-row"><h3>{meeting.title}</h3></div><p>{formatMeetingDate(meeting.startsAt)} · {formatMeetingTime(meeting)}</p>{meeting.description && <div className="meeting-description-preview" dangerouslySetInnerHTML={{ __html: sanitizeRichText(meeting.description) }}/>}</div><div className="channel-actions"><button type="button" className="outline-button" disabled={busy || uploadingPoster} onClick={() => editMeeting(meeting)}>Edit</button><button className="icon-action remove-action" title={`Delete ${meeting.title}`} onClick={() => void removeMeeting(meeting)}>×</button></div></article>)}</div>}
       </>}
     </div>
   </main>;

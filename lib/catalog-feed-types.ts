@@ -84,11 +84,10 @@ export type PublicCatalogFeed = {
  * The project's mandatory public-read cache window: 24 hours.
  *
  * This is the ONE place that number is defined. next.config.ts feeds it to the
- * `catalogFeed` cacheLife profile, app/api/catalog/route.ts uses it for the
- * `s-maxage` header, and the public pages use it to decide when a long-lived tab
- * should re-read the cache. Changing it here changes all of them together —
- * which is the point, because an accidental drop back to minutes is exactly how
- * the Firestore free tier gets exhausted again.
+ * `catalogFeed` cacheLife profile and the public pages use it to decide when a
+ * long-lived tab should re-read the cache. Changing it here changes both
+ * together — an accidental drop back to minutes is exactly how the Firestore
+ * free tier gets exhausted again.
  */
 export const FEED_CACHE_SECONDS = 24 * 60 * 60;
 
@@ -98,7 +97,7 @@ export const MOST_VIEWED_VIDEO_LIMIT = 12;
 /** The same window in milliseconds, for client-side refresh timers. */
 export const FEED_CACHE_MS = FEED_CACHE_SECONDS * 1000;
 
-/** Cache-Control header for the catalog endpoint, derived from the window. */
-export const FEED_CACHE_CONTROL = `public, s-maxage=${FEED_CACHE_SECONDS}, stale-while-revalidate=3600`;
+/** Tag used to expire the shared public catalog after an administrator edit. */
+export const PUBLIC_CATALOG_CACHE_TAG = "public-catalog";
 
 export const EMPTY_CATALOG_FEED: PublicCatalogFeed = { channels: [], videos: [], mostViewedVideos: [], playlists: [], meetings: [], fetchedAt: "", truncated: false };
