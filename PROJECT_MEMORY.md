@@ -2,6 +2,12 @@
 ## Ongoing working preference
 - Whenever project changes are made, record the major change and any build/runtime errors with their verified fixes in this file before finishing. When the user asks, provide the exact suggested Git commit message; do not create a commit unless explicitly requested.
 
+## 2026-10-15: Make the meetings page installable as a PWA
+
+- **Major changes:** Added a Next.js App Router manifest with the Faith of the Pioneers app name, standalone display settings, theme colors, and 192px/512px brand icons served from `public/`. Added an install action immediately after the Upcoming filter on the meetings page. Supported browsers use the native `beforeinstallprompt`; browsers without that API get installation instructions (including Safari/iOS Add to Home Screen steps). The action is hidden when the app is already installed.
+- **Lint finding and fix:** Focused ESLint initially flagged setting iOS state synchronously in an effect. Moved platform detection to the install-instructions action; focused ESLint then passed.
+- **Verification:** `npx.cmd --no-install tsc --noEmit`, focused ESLint, and `npm.cmd run build` passed. The build emitted `/manifest.webmanifest`; a runtime JSON check confirmed its standalone settings and both referenced public icons. `git diff --check` passed.
+
 ## 2026-10-15: Refresh public meetings after administrator edits
 
 - **Root cause:** Public pages read meetings from the shared Firestore catalog snapshot, intentionally cached for 24 hours to protect the Firestore free tier. The admin manager wrote directly to Firestore without invalidating that snapshot, and already-open public pages fetched it only once.
