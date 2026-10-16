@@ -116,20 +116,22 @@ export default function LibraryManager() {
 
   async function uploadFile(file?: File) {
     if (!file) return;
-    const kind = file.type === "application/pdf" ? "pdf" : /\.docx?$/i.test(file.name) ? "doc" : null;
-    if (!kind) { setError("Choose a PDF, DOC, or DOCX file."); return; }
+    const extension = file.name.split(".").pop()?.toLowerCase();
+    const kind = extension === "pdf" ? "pdf" : ["doc", "docx", "ppt", "pptx"].includes(extension ?? "") ? "doc" : null;
+    if (!kind) { setError("Choose a PDF, Word, or PowerPoint file."); return; }
     if (file.size > 25 * 1024 * 1024) { setError("Files must be 25 MB or smaller."); return; }
     if (!title.trim() || !categoryId) { setError("Add a title and choose a category before uploading."); return; }
     setBusy(true); setError(""); setNotice("");
     try {
       const token = await auth.currentUser?.getIdToken();
       if (!token) throw new Error("Sign in again to upload library files.");
-      const form = new FormData(); form.set("file", file);
-      const response = await fetch("/api/library/upload", { method: "POST", headers: { Authorization: `Bearer ${token}` }, body: form });
-      const result = await response.json() as { secureUrl?: string; previewUrl?: string; error?: string };
-      if (!response.ok || !result.secureUrl) throw new Error(result.error ?? "Upload failed.");
+      const response = await fetch("/api/library/upload", { method: "POST", headers: { Authorization: `Bearer ${token}`, "Content-Type": "application/json" }, body: JSON.stringify({ fileName: file.name, contentType: file.type, size: file.size }) });
+      const result = await response.json() as { uploadUrl?: string; secureUrl?: string; error?: string };
+      if (!response.ok || !result.uploadUrl || !result.secureUrl) throw new Error(result.error ?? "Upload failed.");
+      const stored = await fetch(result.uploadUrl, { method: "PUT", headers: { "Content-Type": file.type || "application/octet-stream" }, body: file });
+      if (!stored.ok) throw new Error("The file could not be stored. Please try again.");
       const selected = categories.find((item) => item.id === categoryId);
-      await addDoc(collection(db, "libraryDocuments"), { title: title.trim(), description: description.trim(), categoryId, categoryName: selected?.name ?? "Library", kind, fileUrl: result.secureUrl, ...(result.previewUrl ? { previewUrl: result.previewUrl } : {}), fileName: file.name, createdAt: new Date().toISOString(), updatedAt: new Date().toISOString() });
+      await addDoc(collection(db, "libraryDocuments"), { title: title.trim(), description: description.trim(), categoryId, categoryName: selected?.name ?? "Library", kind, fileUrl: result.secureUrl, fileName: file.name, createdAt: new Date().toISOString(), updatedAt: new Date().toISOString() });
       await refreshPublicLibrary();
       setTitle(""); setDescription(""); setNotice("File uploaded and published.");
     } catch (reason) { setError(reason instanceof Error ? reason.message : "Could not upload file."); }
@@ -152,7 +154,7 @@ export default function LibraryManager() {
       {editingDocument?.kind !== "doc" && editingDocument?.kind !== "pdf" && <div className="library-form-actions"><button className="primary-button" type="submit" disabled={busy}>{busy ? "Saving…" : editingDocument ? "Save changes" : "Publish note"}</button>{editingDocument && <button className="outline-button" type="button" disabled={busy} onClick={cancelEditing}>Cancel edit</button>}</div>}
       {(editingDocument?.kind === "doc" || editingDocument?.kind === "pdf") && <p className="library-help">File contents cannot be replaced here. You can edit the title, description, and category for this resource.</p>}
       {editingDocument?.kind === "doc" || editingDocument?.kind === "pdf" ? <div className="library-form-actions"><button className="primary-button" type="submit" disabled={busy}>{busy ? "Saving…" : "Save changes"}</button><button className="outline-button" type="button" disabled={busy} onClick={cancelEditing}>Cancel edit</button></div> : null}
-    </form>{!editingDocument && <div className="library-upload"><div><strong>Or upload a document</strong><span>PDF and Word files, up to 25 MB. Readers can preview and download them.</span></div><label className="outline-button">{busy ? "Uploading…" : "Choose file"}<input type="file" accept="application/pdf,.pdf,.doc,.docx,application/msword,application/vnd.openxmlformats-officedocument.wordprocessingml.document" disabled={busy} onChange={(e) => void uploadFile(e.target.files?.[0])}/></label></div>}</section>
+    </form>{!editingDocument && <div className="library-upload"><div><strong>Or upload a document</strong><span>PDF, Word, and PowerPoint files, up to 25 MB. Readers can preview and download them.</span></div><label className="outline-button">{busy ? "Uploading…" : "Choose file"}<input type="file" accept=".pdf,.doc,.docx,.ppt,.pptx,application/pdf,application/msword,application/vnd.openxmlformats-officedocument.wordprocessingml.document,application/vnd.ms-powerpoint,application/vnd.openxmlformats-officedocument.presentationml.presentation" disabled={busy} onChange={(e) => void uploadFile(e.target.files?.[0])}/></label></div>}</section>
     <section className="admin-panel"><h2>Published resources <small>({documents.length})</small></h2>{documents.length ? <div className="library-admin-list">{documents.map((item) => <article key={item.id}><div><strong>{item.title}</strong><span>{item.categoryName} · {item.kind === "note" ? "Note" : item.kind.toUpperCase()}</span></div><Link className="outline-button" href={`/library/${encodeURIComponent(item.id)}`}>Preview</Link><button className="outline-button" onClick={() => startEditing(item)}>Edit</button><button className="icon-action remove-action" aria-label={`Delete ${item.title}`} onClick={() => void deleteDoc(doc(db, "libraryDocuments", item.id)).then(async () => { setDocuments((items) => items.filter((entry) => entry.id !== item.id)); await refreshPublicLibrary(); }).catch((reason) => setError(reason instanceof Error ? reason.message : "Could not delete library resource."))}>×</button></article>)}</div> : <p className="library-help">Your published resources will appear here.</p>}</section>
   </main>;
 }

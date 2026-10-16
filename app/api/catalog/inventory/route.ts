@@ -1,4 +1,5 @@
 import { NextResponse } from "next/server";
+import { isD1Configured, queryD1 } from "@/lib/cloudflare-d1";
 
 // Firestore's aggregation `count` endpoint bills one document read per query
 // regardless of collection size, so this is the cheapest way to learn whether a
@@ -32,7 +33,9 @@ async function countCollection(collectionId: string) {
 }
 
 export async function GET() {
-  const counts = await Promise.all(COLLECTIONS.map(async (collectionId) => [collectionId, await countCollection(collectionId)] as const));
+  const counts = await Promise.all(COLLECTIONS.map(async (collectionId) => [collectionId, collectionId === "videos" && isD1Configured()
+    ? await queryD1<{ total: number }>("SELECT COUNT(*) AS total FROM videos").then((rows) => ({ count: Number(rows[0]?.total ?? 0), denied: false })).catch(() => ({ count: 0, denied: true }))
+    : await countCollection(collectionId)] as const));
   const inventory = Object.fromEntries(counts.map(([id, value]) => [id, value.count])) as Record<(typeof COLLECTIONS)[number], number>;
   const measurable = counts.filter(([, value]) => !value.denied);
   const deniable = new Set<string>(["contacts"]);

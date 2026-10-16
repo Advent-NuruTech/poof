@@ -2,6 +2,7 @@ import { cacheLife, cacheTag } from "next/cache";
 
 import type { FeedChannel, FeedMeeting, FeedPlaylist, FeedVideo, PublicCatalogFeed } from "@/lib/catalog-feed-types";
 import { EMPTY_CATALOG_FEED, MOST_VIEWED_VIDEO_LIMIT, PUBLIC_CATALOG_CACHE_TAG } from "@/lib/catalog-feed-types";
+import { isD1Configured, queryD1 } from "@/lib/cloudflare-d1";
 
 /**
  * The public catalog snapshot, read from Firestore once and then cached
@@ -70,6 +71,23 @@ function decodeFields(fields: Record<string, unknown>): Record<string, unknown> 
 }
 
 async function readMostViewedVideos(channelIds: string[]): Promise<FeedVideo[]> {
+  if (isD1Configured()) {
+    const results = await Promise.all(channelIds.map(async (channelId) => {
+      try {
+        const rows = await queryD1<{ data_json: string }>(
+          "SELECT data_json FROM videos WHERE availability = 'available' AND hidden = 0 AND view_count > 0 AND EXISTS (SELECT 1 FROM json_each(videos.catalog_channel_ids_json) WHERE value = ?) ORDER BY view_count DESC LIMIT ?",
+          [channelId, MOST_VIEWED_VIDEO_LIMIT],
+        );
+        return rows.flatMap((row) => { try { return [JSON.parse(row.data_json) as FeedVideo]; } catch { return []; } });
+      } catch (error) {
+        console.error(`Could not load most-viewed videos for channel ${channelId} from D1.`, error);
+        return [];
+      }
+    }));
+    const unique = new Map<string, FeedVideo>();
+    for (const video of results.flat()) if (!video.website?.hidden && video.statistics?.viewCount !== undefined) unique.set(video.id, video);
+    return [...unique.values()].sort((a, b) => (b.statistics?.viewCount ?? 0) - (a.statistics?.viewCount ?? 0)).slice(0, MOST_VIEWED_VIDEO_LIMIT);
+  }
   const projectId = process.env.NEXT_PUBLIC_FIREBASE_PROJECT_ID;
   const apiKey = process.env.NEXT_PUBLIC_FIREBASE_API_KEY;
   if (!projectId || !apiKey || !channelIds.length) return [];
@@ -122,6 +140,17 @@ async function readMostViewedVideos(channelIds: string[]): Promise<FeedVideo[]> 
     .slice(0, MOST_VIEWED_VIDEO_LIMIT);
 }
 
+async function readVideos(maxRows: number) {
+  if (!isD1Configured()) return readCollection<FeedVideo>("videos", maxRows, "publishedAt desc");
+  try {
+    const rows = await queryD1<{ data_json: string }>("SELECT data_json FROM videos WHERE availability != 'unavailable' AND hidden = 0 ORDER BY published_at DESC LIMIT ?", [maxRows]);
+    return rows.flatMap((row) => { try { return [JSON.parse(row.data_json) as FeedVideo]; } catch { return []; } });
+  } catch (error) {
+    console.error("Could not load the D1 video catalog.", error);
+    return [];
+  }
+}
+
 /**
  * One bounded REST read of a whole collection. Returns an empty array rather
  * than throwing so a quota-exhausted or unconfigured project degrades to an
@@ -164,7 +193,7 @@ export async function getPublicCatalog(): Promise<PublicCatalogFeed> {
   const channels = await readCollection<FeedChannel>("channels");
   const enabledChannelIds = channels.filter((channel) => channel.enabled !== false).map((channel) => channel.id);
   const [videos, mostViewedVideos, playlists, meetings] = await Promise.all([
-    readCollection<FeedVideo>("videos", MAX_VIDEO_FEED_ROWS, "publishedAt desc"),
+    readVideos(MAX_VIDEO_FEED_ROWS),
     readMostViewedVideos(enabledChannelIds),
     readCollection<FeedPlaylist>("playlists"),
     readCollection<FeedMeeting>("meetings"),

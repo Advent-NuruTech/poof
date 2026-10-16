@@ -1,5 +1,6 @@
 import type { Channel, Playlist, Video } from "@/lib/catalog";
 import { isAdminIdentity } from "@/lib/admin-access";
+import { syncVideoRecords } from "@/lib/video-storage";
 
 const apiKey = process.env.YOUTUBE_DATA_API_KEY;
 const projectId = process.env.NEXT_PUBLIC_FIREBASE_PROJECT_ID;
@@ -170,7 +171,7 @@ export async function GET(request: Request) {
     const playlistByVideo = new Map<string, string[]>();
     for (const playlist of playlistResults) for (const videoId of playlist.videoIds) playlistByVideo.set(videoId, [...(playlistByVideo.get(videoId) ?? []), playlist.id]);
     const videos: Video[] = details.filter((video) => video.status?.privacyStatus !== "private").map((video) => ({
-      id: video.id, title: video.snippet?.title ?? "Untitled video", description: video.snippet?.description ?? "",
+      id: video.id, videoUrl: `https://www.youtube.com/watch?v=${encodeURIComponent(video.id)}`, title: video.snippet?.title ?? "Untitled video", description: video.snippet?.description ?? "",
       thumbnail: image(video.snippet?.thumbnails), publishedAt: video.snippet?.publishedAt ?? "", channelId: video.snippet?.channelId ?? channelId,
       channelTitle: video.snippet?.channelTitle ?? channelRow.snippet?.title ?? "", duration: video.contentDetails?.duration ?? "",
       liveStatus: video.liveStreamingDetails?.actualEndTime ? "complete" : video.liveStreamingDetails?.actualStartTime ? "live" : video.liveStreamingDetails?.scheduledStartTime ? "upcoming" : "",
@@ -189,7 +190,8 @@ export async function GET(request: Request) {
       thumbnail: image(channelRow.snippet?.thumbnails), customUrl: channelRow.snippet?.customUrl,
       uploadsPlaylistId: uploadsId, enabled: true, syncStatus: "complete",
     };
-    return Response.json({ channel, playlists: playlistResults, videos, unavailableVideoIds, syncedAt: new Date().toISOString() });
+    const videoSync = await syncVideoRecords(channelId, videos, unavailableVideoIds, token);
+    return Response.json({ channel, playlists: playlistResults, ...videoSync, syncedAt: new Date().toISOString() });
   } catch (error) {
     return Response.json({ error: error instanceof Error ? error.message : "YouTube synchronization failed." }, { status: 502 });
   }

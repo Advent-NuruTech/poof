@@ -1,42 +1,24 @@
-import { createHash } from "node:crypto";
-import { isAdminIdentity } from "@/lib/admin-access";
+import { authorizeAdminRequest } from "@/lib/server-admin-auth";
+import { createDocumentKey, createR2UploadUrl, documentPublicUrl } from "@/lib/r2";
 
-// Route segment config (`runtime`, `dynamic`, `revalidate`) is not allowed while
-// `nextConfig.cacheComponents` is enabled. Node is the default runtime here.
+const MAX_FILE_BYTES = 25 * 1024 * 1024;
+const ALLOWED_EXTENSIONS = new Set(["pdf", "doc", "docx", "ppt", "pptx"]);
 
 export async function POST(request: Request) {
-  const token = request.headers.get("authorization")?.replace(/^Bearer\s+/i, "");
-  const projectId = process.env.NEXT_PUBLIC_FIREBASE_PROJECT_ID;
-  const cloudName = process.env.NEXT_PUBLIC_CLOUDINARY_CLOUD_NAME;
-  const apiKey = process.env.CLOUDINARY_API_KEY;
-  const apiSecret = process.env.CLOUDINARY_API_SECRET;
-  if (!token || !projectId || !cloudName || !apiKey || !apiSecret) return Response.json({ error: "Library uploads are not configured." }, { status: 401 });
+  if (!await authorizeAdminRequest(request)) return Response.json({ error: "Sign in as an administrator to upload." }, { status: 403 });
   try {
-    const encodedPayload = token.split(".")[1];
-    if (!encodedPayload) return Response.json({ error: "Sign in as an administrator to upload." }, { status: 401 });
-    const payload = JSON.parse(Buffer.from(encodedPayload, "base64url").toString("utf8")) as { user_id?: string; sub?: string };
-    const uid = payload.user_id ?? payload.sub;
-    if (!uid || uid.length > 128) return Response.json({ error: "Invalid administrator session." }, { status: 401 });
-    const adminResponse = await fetch(`https://firestore.googleapis.com/v1/projects/${encodeURIComponent(projectId)}/databases/(default)/documents/admins/${encodeURIComponent(uid)}`, { headers: { Authorization: `Bearer ${token}` }, cache: "no-store" });
-    if (!adminResponse.ok) return Response.json({ error: "Administrator access is required." }, { status: 403 });
-    const admin = await adminResponse.json() as { fields?: { enabled?: { booleanValue?: boolean }; expiresAt?: { timestampValue?: string }; inviteId?: { stringValue?: string }; codeHash?: { stringValue?: string } } };
-    if (!isAdminIdentity(uid, {
-      enabled: admin.fields?.enabled?.booleanValue,
-      expiresAt: Date.parse(admin.fields?.expiresAt?.timestampValue ?? ""),
-      inviteId: admin.fields?.inviteId?.stringValue,
-      codeHash: admin.fields?.codeHash?.stringValue,
-    })) return Response.json({ error: "Administrator access is required." }, { status: 403 });
-    const file = (await request.formData()).get("file");
-    if (!(file instanceof File) || !["application/pdf", "application/msword", "application/vnd.openxmlformats-officedocument.wordprocessingml.document"].includes(file.type) && !/\.docx?$/i.test(file.name)) return Response.json({ error: "Choose a PDF, DOC, or DOCX file." }, { status: 400 });
-    if (file.size > 25 * 1024 * 1024) return Response.json({ error: "Files must be 25 MB or smaller." }, { status: 413 });
-    const isPdf = file.type === "application/pdf";
-    const timestamp = Math.floor(Date.now() / 1000).toString();
-    const params = `folder=library&timestamp=${timestamp}`;
-    const signature = createHash("sha1").update(`${params}${apiSecret}`).digest("hex");
-    const body = new FormData(); body.set("file", file); body.set("api_key", apiKey); body.set("timestamp", timestamp); body.set("folder", "library"); body.set("signature", signature);
-    const cloudinaryResponse = await fetch(`https://api.cloudinary.com/v1_1/${encodeURIComponent(cloudName)}/${isPdf ? "image" : "raw"}/upload`, { method: "POST", body, cache: "no-store" });
-    const result = await cloudinaryResponse.json() as { secure_url?: string; error?: { message?: string } };
-    if (!cloudinaryResponse.ok || !result.secure_url) return Response.json({ error: result.error?.message ?? "Cloudinary could not upload this file." }, { status: 502 });
-    return Response.json({ secureUrl: result.secure_url, ...(isPdf ? { previewUrl: result.secure_url.replace(/\.pdf($|\?)/i, ".jpg$1") } : {}) });
-  } catch (reason) { return Response.json({ error: reason instanceof Error ? reason.message : "Could not upload file." }, { status: 500 }); }
+    const body = await request.json() as { fileName?: unknown; contentType?: unknown; size?: unknown };
+    const fileName = typeof body.fileName === "string" ? body.fileName.trim().replace(/[\\/\r\n\0]/g, "_").slice(0, 180) : "";
+    const size = typeof body.size === "number" ? body.size : 0;
+    const extension = fileName.split(".").pop()?.toLowerCase() ?? "";
+    if (!fileName || !ALLOWED_EXTENSIONS.has(extension)) return Response.json({ error: "Choose a PDF, Word, or PowerPoint file." }, { status: 400 });
+    if (!Number.isFinite(size) || size <= 0 || size > MAX_FILE_BYTES) return Response.json({ error: "Files must be no larger than 25 MB." }, { status: 413 });
+
+    const key = createDocumentKey(fileName);
+    const uploadUrl = createR2UploadUrl(key);
+    const secureUrl = documentPublicUrl(key);
+    return Response.json({ uploadUrl, secureUrl, key }, { headers: { "Cache-Control": "no-store" } });
+  } catch (reason) {
+    return Response.json({ error: reason instanceof Error ? reason.message : "Could not prepare this upload." }, { status: 500 });
+  }
 }

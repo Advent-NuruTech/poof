@@ -8,7 +8,7 @@ import type { FormEvent } from "react";
 import { auth, db } from "@/lib/firebase";
 import { isAdminIdentity } from "@/lib/admin-access";
 import { endAdminSession } from "@/lib/admin-session";
-import type { Channel, Playlist, Video } from "@/lib/catalog";
+import type { Channel, Playlist } from "@/lib/catalog";
 import { formatDate } from "@/lib/catalog";
 import ContentEditor from "./content-editor";
 import AdminInvites from "./admin-invites";
@@ -78,19 +78,24 @@ export default function AdminPage() {
     return () => { active = false; };
   }, [user]);
   useEffect(() => {
-    if (!isAdmin) return;
+    if (!isAdmin || !user) return;
     let active = true;
     void getDocs(collection(db, "channels")).then((snapshot) => {
       if (active) setChannels(snapshot.docs.map((item) => ({ ...item.data(), id: item.id }) as Channel));
     }).catch((reason) => { if (active) setError(reason instanceof Error ? reason.message : "Could not load channels."); });
     return () => { active = false; };
-  }, [isAdmin]);
+  }, [isAdmin, user]);
   useEffect(() => {
-    if (!isAdmin) return;
-    Promise.all([getCountFromServer(collection(db, "videos")), getCountFromServer(collection(db, "playlists"))])
-      .then(([videoCount, playlistCount]) => setCatalogCounts({ videos: videoCount.data().count, playlists: playlistCount.data().count }))
+    if (!isAdmin || !user) return;
+    Promise.all([user.getIdToken(), getCountFromServer(collection(db, "playlists"))])
+      .then(async ([token, playlistCount]) => {
+        const response = await fetch("/api/admin/videos?limit=1", { headers: { Authorization: `Bearer ${token}` }, cache: "no-store" });
+        const result = await response.json() as { total?: number; error?: string };
+        if (!response.ok) throw new Error(result.error ?? "Could not load video totals.");
+        setCatalogCounts({ videos: result.total ?? 0, playlists: playlistCount.data().count });
+      })
       .catch((reason) => setError(reason instanceof Error ? reason.message : "Could not load catalog totals."));
-  }, [isAdmin]);
+  }, [isAdmin, user]);
 
   const syncChannel = useCallback(async (channel: Channel) => {
     if (!user) return;
@@ -113,21 +118,11 @@ export default function AdminPage() {
       const response = await fetch(`/api/youtube?action=sync&channelId=${encodeURIComponent(channel.id)}`, { headers: { Authorization: `Bearer ${token}` }, cache: "no-store" });
       const result = await response.json();
       if (!response.ok) throw new Error(result.error ?? "Could not sync the channel.");
-      const videos = result.videos as Video[];
+      const videoCount = Number(result.videoCount ?? 0);
+      const newVideoCount = Number(result.newVideoCount ?? 0);
       const playlists = result.playlists as Playlist[];
-      const unavailableVideoIds = result.unavailableVideoIds as string[];
-      const [priorSnapshot, priorPlaylistSnapshot] = await Promise.all([
-        getDocs(query(collection(db, "videos"), where("catalogChannelIds", "array-contains", channel.id))),
-        getDocs(query(collection(db, "playlists"), where("channelId", "==", channel.id))),
-      ]);
-      // `priorSnapshot` already contains every video whose catalogChannelIds
-      // includes this channel, which is exactly the set the per-id re-read used
-      // to fetch. Re-reading those documents by id billed one extra read each on
-      // every sync for data already in hand, so the loop is gone.
-      const priorVideos = new Map(priorSnapshot.docs.map((entry) => [entry.id, entry.data()]));
-      const currentIds = new Set(videos.map((video) => video.id));
+      const priorPlaylistSnapshot = await getDocs(query(collection(db, "playlists"), where("channelId", "==", channel.id)));
       const currentPlaylistIds = new Set(playlists.map((playlist) => playlist.id));
-      const newVideoCount = videos.filter((video) => !priorVideos.has(video.id)).length;
       let batch = writeBatch(db);
       const operations: Array<() => void> = [];
       for (const playlist of playlists) {
@@ -141,29 +136,6 @@ export default function AdminPage() {
       for (const entry of priorPlaylistSnapshot.docs) {
         if (!currentPlaylistIds.has(entry.id)) operations.push(() => batch.delete(doc(db, "playlists", entry.id)));
       }
-      for (const video of videos) {
-        const previous = priorVideos.get(video.id);
-        const channelPlaylistIds = { ...(previous?.channelPlaylistIds ?? {}), [channel.id]: video.playlistIds ?? [] };
-        const playlistIds = [...new Set(Object.values(channelPlaylistIds).flat())];
-        const catalogChannelIds = [...new Set([...(previous?.catalogChannelIds ?? []), channel.id])];
-        const next = { ...video, playlistIds, channelPlaylistIds, catalogChannelIds, availability: "available", lastSyncedAt: serverTimestamp() };
-        if (isUnchanged(previous, { ...video, playlistIds, channelPlaylistIds, catalogChannelIds, availability: "available" })) continue;
-        operations.push(() => batch.set(doc(db, "videos", video.id), next, { merge: true }));
-      }
-      for (const entry of priorSnapshot.docs) {
-        if (currentIds.has(entry.id) || unavailableVideoIds.includes(entry.id)) continue;
-        const previous = entry.data();
-        const catalogChannelIds = ((previous.catalogChannelIds as string[] | undefined) ?? []).filter((id) => id !== channel.id);
-        const channelPlaylistIds = { ...(previous.channelPlaylistIds ?? {}) };
-        delete channelPlaylistIds[channel.id];
-        const playlistIds = [...new Set(Object.values(channelPlaylistIds).flat() as string[])];
-        const next = { catalogChannelIds, channelPlaylistIds, playlistIds, lastSyncedAt: serverTimestamp() };
-        if (isUnchanged(previous, { catalogChannelIds, channelPlaylistIds, playlistIds })) continue;
-        operations.push(() => batch.set(doc(db, "videos", entry.id), next, { merge: true }));
-      }
-      for (const videoId of unavailableVideoIds) {
-        if (priorVideos.has(videoId)) operations.push(() => batch.set(doc(db, "videos", videoId), { availability: "unavailable", lastSyncedAt: serverTimestamp() }, { merge: true }));
-      }
       let count = 0;
       for (const operation of operations) {
         operation();
@@ -174,7 +146,8 @@ export default function AdminPage() {
       const syncedChannel = { ...result.channel };
       delete syncedChannel.enabled;
       await setDoc(doc(db, "channels", channel.id), { ...syncedChannel, syncStatus: "complete", lastSyncedAt: serverTimestamp(), lastSyncError: "", lastSyncNewVideoCount: newVideoCount }, { merge: true });
-      setNotice(`${channel.title} synced · ${videos.length} videos · ${playlists.length} playlists`);
+      await fetch("/api/admin/catalog/revalidate", { method: "POST", headers: { Authorization: `Bearer ${token}` } });
+      setNotice(`${channel.title} synced · ${videoCount} videos · ${playlists.length} playlists`);
     } catch (reason) {
       const message = reason instanceof Error ? reason.message : "Synchronization failed.";
       setError(message);

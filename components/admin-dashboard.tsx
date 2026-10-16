@@ -47,19 +47,24 @@ export default function AdminDashboard() {
     return () => { active = false; };
   }, [user]);
   useEffect(() => {
-    if (!authorized) return;
+    if (!authorized || !user) return;
     let active = true;
     Promise.all([
-      getCountFromServer(collection(db, "videos")),
+      user.getIdToken().then(async (token) => {
+        const response = await fetch("/api/admin/videos?limit=1", { headers: { Authorization: `Bearer ${token}` }, cache: "no-store" });
+        const result = await response.json() as { total?: number; error?: string };
+        if (!response.ok) throw new Error(result.error ?? "Could not load video totals.");
+        return result.total ?? 0;
+      }),
       getCountFromServer(query(collection(db, "contacts"), limit(100))),
       getCountFromServer(query(collection(db, "libraryDocuments"), limit(900))),
       getCountFromServer(collection(db, "playlists")),
       getCountFromServer(collection(db, "channels")),
     ]).then(([videos, requests, studies, playlists, channels]) => {
-      if (active) setTotals({ videos: videos.data().count, requests: requests.data().count, studies: studies.data().count, playlists: playlists.data().count, channels: channels.data().count });
+      if (active) setTotals({ videos, requests: requests.data().count, studies: studies.data().count, playlists: playlists.data().count, channels: channels.data().count });
     }).catch((reason) => { if (active) setError(reason instanceof Error ? reason.message : "Could not load dashboard totals."); });
     return () => { active = false; };
-  }, [authorized]);
+  }, [authorized, user]);
   useEffect(() => {
     if (!authorized) return;
     let active = true;

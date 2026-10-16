@@ -333,10 +333,8 @@ export default function LibraryPage({ documentId }: { documentId?: string }) {
 
   const previewUrl = (item: LibraryDocument) =>
     item.previewUrl ||
-    (item.fileUrl
-      ? cloudinaryName
-        ? `https://res.cloudinary.com/${cloudinaryName}/image/fetch/pg_1,f_jpg,w_1000/${encodeURIComponent(item.fileUrl)}`
-        : item.fileUrl
+    (item.fileUrl?.startsWith("https://res.cloudinary.com/") && cloudinaryName
+      ? `https://res.cloudinary.com/${cloudinaryName}/image/fetch/pg_1,f_jpg,w_1000/${encodeURIComponent(item.fileUrl)}`
       : "");
 
   async function shareStudy() {
@@ -349,7 +347,7 @@ export default function LibraryPage({ documentId }: { documentId?: string }) {
   }
 
   const kindLabel = (k?: string) =>
-    k === "pdf" ? "PDF" : k === "doc" ? "DOC" : k === "note" ? "NOTE" : "FILE";
+    k === "pdf" ? "PDF" : k === "doc" ? "OFFICE" : k === "note" ? "NOTE" : "FILE";
 
   return (
     <>
@@ -490,7 +488,7 @@ export default function LibraryPage({ documentId }: { documentId?: string }) {
                       <div className="lib-card-thumb">
                         <span className="lib-card-kind">{kindLabel(item.kind)}</span>
                         {item.kind === "pdf" && item.fileUrl ? (
-                          <img src={previewUrl(item)} alt={`${item.title}, page 1`} loading="lazy" />
+                          previewUrl(item) ? <img src={previewUrl(item)} alt={`${item.title}, page 1`} loading="lazy" /> : <div className="lib-card-note">PDF document</div>
                         ) : item.kind === "doc" && item.fileUrl ? (
                           <iframe
                             src={`https://view.officeapps.live.com/op/embed.aspx?src=${encodeURIComponent(item.fileUrl)}`}
@@ -664,7 +662,7 @@ export default function LibraryPage({ documentId }: { documentId?: string }) {
                 <p className="lib-reader-frame-note">
                   If the preview is unavailable,{" "}
                   <a href={`/api/library/download?url=${encodeURIComponent(target.fileUrl)}&name=${encodeURIComponent(target.fileName ?? target.title)}`}>
-                    download the Word document
+                    download the Office file
                   </a>
                   .
                 </p>

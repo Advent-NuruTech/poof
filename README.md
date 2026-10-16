@@ -1,6 +1,6 @@
 # Faith of the Pioneers
 
-A responsive YouTube catalog. YouTube owns source video and playlist metadata; the website stores a synchronized presentation catalog and website-only editorial fields in Cloud Firestore.
+A responsive YouTube catalog. YouTube owns source video and playlist metadata; synchronized video records and website-only video presentation fields are stored in Cloudflare D1. Other catalog metadata remains in Cloud Firestore. Public library originals are stored in Cloudflare R2; Cloudinary remains responsible for images and image transformations.
 
 ## Local setup
 
@@ -25,11 +25,10 @@ Firebase Web API keys identify the Firebase project and are expected to be prese
 
 - `app/(public)` contains the public experience; the route group does not add a URL segment.
 - `app/(admin)/poof/admin` contains channel and catalog management.
-- `app/api/youtube` validates a Firebase ID token against Firebase Authentication, checks the caller's Firestore admin record, and then calls YouTube. It never writes to Firestore.
-- The browser writes synchronized data through the Firebase client SDK. `firestore.rules` permits public catalog reads and limits management writes to the root administrator and administrators activated through a valid invitation. Admin records cannot be granted by an ordinary signed-in account.
-- `videos/{youtubeVideoId}` uses the YouTube video ID as its document ID. Playlist membership and order are stored on playlist documents. Editorial controls live in each record's `website` map and are kept separate from YouTube fields.
-- The homepage's Most Viewed shelf queries the top 12 videos by view count for each enabled channel, then merges those small result sets. The query is covered by `firestore.indexes.json` and included in the shared 24-hour server-cached catalog feed; it does not download the full video collection for each visitor.
-- Deploy the Firestore indexes and wait for the view-count index to finish building before building/deploying the app. The catalog snapshot can be generated during build; Firestore rejects the Most Viewed query until that index is ready.
+- `app/api/youtube` validates a Firebase ID token against Firebase Authentication, checks the caller's Firestore admin record, and then calls YouTube. It saves synchronized video records to D1 from the server; channels, playlists, meetings, and library metadata continue using Firestore.
+- `videos/{youtubeVideoId}` uses the YouTube video ID as its D1 primary key. Playlist membership/order remain on Firestore playlist records. Video editorial controls remain in each D1 video record's `website` map.
+- The homepage's Most Viewed shelf queries indexed D1 video metadata for each enabled channel, then merges those small result sets. The shared 24-hour server-cached catalog feed remains in place.
+- Existing Firestore video rows and editorial settings are imported automatically on the first successful D1 sync of each channel. After configuring D1, use **Sync now** once for each connected channel before relying on the D1-backed public video feed.
 - Channel deletion only removes the channel source record; it does not delete videos or playlists.
 - `/poof/admin/mailing` manages meeting-member verification, newsletter subscribers, campaign schedules, and Resend delivery history. Public meeting-link requests are saved as pending members; newsletter addresses are normalized and deduplicated by a SHA-256 document ID.
 - Meeting and newsletter sends use an inbox-friendly responsive HTML template. YouTube videos appear as clickable thumbnail previews because most email clients do not play embedded video. Newsletter emails include signed unsubscribe links.
@@ -45,6 +44,13 @@ Firebase Web API keys identify the Firebase project and are expected to be prese
 - Set `NEXT_PUBLIC_SITE_URL` to the canonical HTTPS site URL so newsletter unsubscribe links point to the production domain.
 - Local development does not run the cron automatically; invoke `/api/mailing/cron` with the configured bearer token to test due schedules.
 - Browser-side Firestore rules do not grant access to mailing collections. All mailing reads/writes are performed by server routes after admin checks, except public forms which validate and persist only their own submissions.
+
+### Cloudflare catalog and document storage
+
+- Create a Cloudflare D1 database and apply [`migrations/0001_videos.sql`](migrations/0001_videos.sql). Create a Cloudflare API token with D1 read/edit permissions and set `CLOUDFLARE_ACCOUNT_ID`, `CLOUDFLARE_D1_DATABASE_ID`, and `CLOUDFLARE_API_TOKEN` in local development and Vercel. The existing `R2_ACCOUNT_ID` and `D1_DATABASE_ID` names are also accepted for the matching ID variables. `R2_API_TOKEN` is not used for D1: Cloudflare's R2 token/ S3 credentials do not automatically grant D1 API access. These values are server-only; do not add a `NEXT_PUBLIC_` prefix.
+- Create an R2 bucket for public library files, attach a public custom domain, and set `R2_ACCOUNT_ID`, `R2_ACCESS_KEY_ID`, `R2_SECRET_ACCESS_KEY`, `R2_BUCKET_NAME`, and `R2_PUBLIC_BASE_URL` (the full HTTPS base URL) in local development and Vercel. Use bucket-scoped S3 credentials and keep them server-only.
+- Configure R2 bucket CORS to allow `PUT` from the production site origin (and `http://localhost:3000` for local testing), allow the `Content-Type` request header, and expose `ETag`. Uploads use short-lived presigned URLs and bypass the Vercel request-body limit. The library currently accepts PDF, DOC/DOCX, and PPT/PPTX files up to 25 MB. R2 files are public because the library itself is public; do not store private documents in this bucket.
+- Cloudinary continues to handle uploaded images, meeting posters, mailing images, and image transformations. Existing library file URLs remain readable during the transition; new PDF and Office files go to R2 without a visible change to the admin workflow.
 
 ## Sync operation
 

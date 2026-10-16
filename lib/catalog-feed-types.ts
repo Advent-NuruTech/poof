@@ -17,6 +17,7 @@
 
 export type FeedVideo = {
   id: string;
+  videoUrl?: string;
   title: string;
   description?: string;
   thumbnail: string;

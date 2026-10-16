@@ -137,12 +137,12 @@ export default function HomeScreen() {
     .sort((a, b) => new Date(b.createdAt ?? b.updatedAt ?? 0).getTime() - new Date(a.createdAt ?? a.updatedAt ?? 0).getTime())
     .sort((a, b) => Number(isHealthStudy(b)) - Number(isHealthStudy(a)))
     .slice(0, HOME_STUDY_LIMIT);
-  const studyKindLabel = (kind: LibraryDocument["kind"]) => kind === "pdf" ? "PDF" : kind === "doc" ? "DOC" : "NOTE";
+  const studyKindLabel = (kind: LibraryDocument["kind"]) => kind === "pdf" ? "PDF" : kind === "doc" ? "OFFICE" : "NOTE";
   const studyPreviewUrl = (study: LibraryDocument) =>
     study.previewUrl ||
-    (study.fileUrl && process.env.NEXT_PUBLIC_CLOUDINARY_CLOUD_NAME
+    (study.fileUrl?.startsWith("https://res.cloudinary.com/") && process.env.NEXT_PUBLIC_CLOUDINARY_CLOUD_NAME
       ? `https://res.cloudinary.com/${process.env.NEXT_PUBLIC_CLOUDINARY_CLOUD_NAME}/image/fetch/pg_1,f_jpg,w_1000/${encodeURIComponent(study.fileUrl)}`
-      : study.fileUrl || "");
+      : "");
 
   async function shareVideo(video: Video) {
     const url = `https://www.youtube.com/watch?v=${encodeURIComponent(video.id)}`;
@@ -210,7 +210,7 @@ export default function HomeScreen() {
           })}
         </div>)}</div> : <div className="playlist-empty"><Icon name="play" size={20}/><span>No videos from {label} are available in the connected channels.</span></div>}
       </section>)}
-      <section className="home-section studies-section" id="studies"><SectionTitle icon="list" title="Latest Studies" href="/library"/>{!studiesLoaded ? <CardGridSkeleton/> : latestStudies.length ? <div className="study-grid">{latestStudies.map((study) => <Link className="study-card" href={`/library/${encodeURIComponent(study.id)}`} key={study.id}><span className="study-card-preview"><span className="study-kind">{studyKindLabel(study.kind)}</span>{study.kind === "pdf" && study.fileUrl ? <img src={studyPreviewUrl(study)} alt={`${study.title}, page 1`} loading="lazy"/> : study.kind === "doc" && study.fileUrl ? <iframe src={`https://view.officeapps.live.com/op/embed.aspx?src=${encodeURIComponent(study.fileUrl)}`} title={`${study.title} first page`} tabIndex={-1}/> : <span className="study-note-preview" dangerouslySetInnerHTML={{ __html: study.contentHtml ?? "" }}/>}<span className="study-card-arrow" aria-hidden="true">&#8594;</span></span><span className="study-card-body"><strong>{study.title}</strong><small>{study.description?.trim() || (study.kind === "note" ? "Read this study note online" : study.fileName || study.categoryName || "Study resource")}</small></span></Link>)}</div> : <div className="playlist-empty"><Icon name="list" size={20}/><span>Study resources will appear here as they are published.</span></div>}</section>
+      <section className="home-section studies-section" id="studies"><SectionTitle icon="list" title="Latest Studies" href="/library"/>{!studiesLoaded ? <CardGridSkeleton/> : latestStudies.length ? <div className="study-grid">{latestStudies.map((study) => <Link className="study-card" href={`/library/${encodeURIComponent(study.id)}`} key={study.id}><span className="study-card-preview"><span className="study-kind">{studyKindLabel(study.kind)}</span>{study.kind === "pdf" && study.fileUrl ? (studyPreviewUrl(study) ? <img src={studyPreviewUrl(study)} alt={`${study.title}, page 1`} loading="lazy"/> : <span className="study-note-preview">PDF document</span>) : study.kind === "doc" && study.fileUrl ? <iframe src={`https://view.officeapps.live.com/op/embed.aspx?src=${encodeURIComponent(study.fileUrl)}`} title={`${study.title} first page`} tabIndex={-1}/> : <span className="study-note-preview" dangerouslySetInnerHTML={{ __html: study.contentHtml ?? "" }}/>}<span className="study-card-arrow" aria-hidden="true">&#8594;</span></span><span className="study-card-body"><strong>{study.title}</strong><small>{study.description?.trim() || (study.kind === "note" ? "Read this study note online" : study.fileName || study.categoryName || "Study resource")}</small></span></Link>)}</div> : <div className="playlist-empty"><Icon name="list" size={20}/><span>Study resources will appear here as they are published.</span></div>}</section>
       <section className="home-section channels-section" id="channels"><SectionTitle icon="grid" title="Our Channels" href="#channels"/>{!channelsLoaded ? <CardGridSkeleton/> : channels.length ? <div className="channel-strip">{channels.map((channel) => <a className="public-channel" href={channel.customUrl ? `https://www.youtube.com/${channel.customUrl}` : `https://www.youtube.com/channel/${channel.id}`} target="_blank" rel="noreferrer" key={channel.id}><ChannelAvatar channel={channel}/><span><strong>{channel.title}</strong><small>Explore channel</small></span><Icon name="chevron" size={16}/></a>)}</div> : <p className="channel-empty">A growing collection of messages, ministries, and music.</p>}</section>
     <NewsletterSignup />
     <SiteFooter />
