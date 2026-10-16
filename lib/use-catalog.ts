@@ -19,6 +19,7 @@ import type { FeedChannel, FeedMeeting, FeedPlaylist, FeedVideo, PublicCatalogFe
 export type CatalogStatus = "loading" | "ready" | "error";
 
 const FEED_URL = "/api/catalog";
+const BACKGROUND_REFRESH_INTERVAL_MS = 15 * 60 * 1000;
 
 /**
  * Reads the catalog snapshot from the server cache.
@@ -69,7 +70,10 @@ export function usePublicCatalog() {
       if (document.visibilityState === "visible") void refresh();
     };
     void refresh();
-    const timer = window.setInterval(refreshWhenVisible, 60_000);
+    // Admin mutations invalidate the shared snapshot. Fifteen-minute polling,
+    // plus focus/visibility refreshes, keeps open tabs current without sending
+    // a request from every visitor every minute.
+    const timer = window.setInterval(refreshWhenVisible, BACKGROUND_REFRESH_INTERVAL_MS);
     window.addEventListener("focus", refreshWhenVisible);
     document.addEventListener("visibilitychange", refreshWhenVisible);
     return () => {

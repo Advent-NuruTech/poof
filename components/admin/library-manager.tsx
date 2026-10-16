@@ -27,7 +27,7 @@ export default function LibraryManager() {
   async function refreshPublicLibrary() {
     const token = await auth.currentUser?.getIdToken();
     if (!token) return;
-    await fetch("/api/admin/catalog/revalidate", { method: "POST", headers: { Authorization: `Bearer ${token}` } });
+    await fetch("/api/admin/catalog/revalidate?scope=library", { method: "POST", headers: { Authorization: `Bearer ${token}` } });
   }
 
   useEffect(() => {
@@ -126,9 +126,14 @@ export default function LibraryManager() {
       const token = await auth.currentUser?.getIdToken();
       if (!token) throw new Error("Sign in again to upload library files.");
       const response = await fetch("/api/library/upload", { method: "POST", headers: { Authorization: `Bearer ${token}`, "Content-Type": "application/json" }, body: JSON.stringify({ fileName: file.name, contentType: file.type, size: file.size }) });
-      const result = await response.json() as { uploadUrl?: string; secureUrl?: string; error?: string };
+      const result = await response.json() as { uploadUrl?: string; secureUrl?: string; uploadHeaders?: Record<string, string>; error?: string };
       if (!response.ok || !result.uploadUrl || !result.secureUrl) throw new Error(result.error ?? "Upload failed.");
-      const stored = await fetch(result.uploadUrl, { method: "PUT", headers: { "Content-Type": file.type || "application/octet-stream" }, body: file });
+      let stored: Response;
+      try {
+        stored = await fetch(result.uploadUrl, { method: "PUT", headers: result.uploadHeaders, body: file });
+      } catch {
+        throw new Error("The storage service blocked the browser upload. Configure the R2 bucket CORS policy and try again.");
+      }
       if (!stored.ok) throw new Error("The file could not be stored. Please try again.");
       const selected = categories.find((item) => item.id === categoryId);
       await addDoc(collection(db, "libraryDocuments"), { title: title.trim(), description: description.trim(), categoryId, categoryName: selected?.name ?? "Library", kind, fileUrl: result.secureUrl, fileName: file.name, createdAt: new Date().toISOString(), updatedAt: new Date().toISOString() });

@@ -3,7 +3,10 @@
 import { useEffect } from "react";
 import { useRouter } from "next/navigation";
 
-const REFRESH_INTERVAL_MS = 5 * 60 * 1000;
+// The session lasts four months and is also verified on admin navigation. A
+// 30-minute activity heartbeat avoids a Firestore read+write every five minutes
+// per open admin tab while still extending genuinely active sessions.
+const REFRESH_INTERVAL_MS = 30 * 60 * 1000;
 
 export default function AdminSessionHeartbeat() {
   const router = useRouter();

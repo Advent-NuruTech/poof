@@ -155,7 +155,12 @@ service cloud.firestore {
         && request.resource.data.categoryId is string
         && request.resource.data.categoryName is string
         && request.resource.data.kind in ['note', 'pdf', 'doc']
-        && (request.resource.data.previewUrl == null || request.resource.data.previewUrl is string)
+        // Optional keys must be guarded before access. Reading an absent map
+        // key is a rules evaluation error, which previously denied every new
+        // note and file because neither payload includes previewUrl.
+        && (!('previewUrl' in request.resource.data)
+          || request.resource.data.previewUrl == null
+          || request.resource.data.previewUrl is string)
         && ((request.resource.data.kind == 'note' && request.resource.data.contentHtml is string && request.resource.data.contentHtml.size() <= 1000000)
           || (request.resource.data.kind in ['pdf', 'doc'] && request.resource.data.fileUrl is string && request.resource.data.fileName is string));
       allow update: if isAdmin()
@@ -163,7 +168,9 @@ service cloud.firestore {
         && request.resource.data.title is string
         && request.resource.data.title.size() > 0
         && request.resource.data.kind in ['note', 'pdf', 'doc']
-        && (request.resource.data.previewUrl == null || request.resource.data.previewUrl is string);
+        && (!('previewUrl' in request.resource.data)
+          || request.resource.data.previewUrl == null
+          || request.resource.data.previewUrl is string);
       allow delete: if isAdmin();
     }
 

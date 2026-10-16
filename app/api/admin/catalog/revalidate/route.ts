@@ -12,6 +12,10 @@ export async function POST(request: Request) {
   }
 
   try {
+    const requestedScope = new URL(request.url).searchParams.get("scope") ?? "all";
+    if (!new Set(["all", "catalog", "library"]).has(requestedScope)) {
+      return Response.json({ error: "Invalid cache refresh scope." }, { status: 400 });
+    }
     const identityResponse = await fetch(`https://identitytoolkit.googleapis.com/v1/accounts:lookup?key=${encodeURIComponent(apiKey)}`, {
       method: "POST",
       headers: { "Content-Type": "application/json" },
@@ -49,9 +53,13 @@ export async function POST(request: Request) {
       return Response.json({ error: "Administrator access is required." }, { status: 403 });
     }
 
-    revalidateTag(PUBLIC_CATALOG_CACHE_TAG, { expire: 0 });
-    revalidateTag(PUBLIC_LIBRARY_CACHE_TAG, { expire: 0 });
-    return Response.json({ revalidated: true }, { headers: { "Cache-Control": "no-store" } });
+    if (requestedScope === "all" || requestedScope === "catalog") {
+      revalidateTag(PUBLIC_CATALOG_CACHE_TAG, { expire: 0 });
+    }
+    if (requestedScope === "all" || requestedScope === "library") {
+      revalidateTag(PUBLIC_LIBRARY_CACHE_TAG, { expire: 0 });
+    }
+    return Response.json({ revalidated: true, scope: requestedScope }, { headers: { "Cache-Control": "no-store" } });
   } catch (reason) {
     console.error("Could not refresh the public catalog after an administrator change.", reason);
     return Response.json({ error: "The public catalog could not be refreshed." }, { status: 500 });

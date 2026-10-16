@@ -37,9 +37,11 @@ export function documentPublicUrl(key: string) {
   return `${publicBaseUrl}/${awsPath(key)}`;
 }
 
-export function createR2UploadUrl(key: string, expiresSeconds = 600) {
+export function createR2UploadUrl(key: string, contentType: string, expiresSeconds = 600) {
   const { accessKeyId, secretAccessKey, bucket, endpointUrl } = config();
   const host = endpointUrl.host;
+  const safeContentType = contentType.trim().toLowerCase();
+  if (!safeContentType || /[\r\n]/.test(safeContentType)) throw new Error("A valid upload content type is required.");
   const now = new Date();
   const amzDate = now.toISOString().replace(/[:-]|\.\d{3}/g, "");
   const date = amzDate.slice(0, 8);
@@ -51,14 +53,15 @@ export function createR2UploadUrl(key: string, expiresSeconds = 600) {
     ["X-Amz-Credential", `${accessKeyId}/${scope}`],
     ["X-Amz-Date", amzDate],
     ["X-Amz-Expires", String(expiresSeconds)],
-    ["X-Amz-SignedHeaders", "host"],
+    ["X-Amz-SignedHeaders", "content-type;host"],
   ];
   const canonicalQuery = pairs
     .map(([name, value]) => [awsEncode(name), awsEncode(value)] as const)
     .sort(([aName, aValue], [bName, bValue]) => aName.localeCompare(bName) || aValue.localeCompare(bValue))
     .map(([name, value]) => `${name}=${value}`)
     .join("&");
-  const canonicalRequest = ["PUT", path, canonicalQuery, `host:${host}\n`, "host", "UNSIGNED-PAYLOAD"].join("\n");
+  const canonicalHeaders = `content-type:${safeContentType}\nhost:${host}\n`;
+  const canonicalRequest = ["PUT", path, canonicalQuery, canonicalHeaders, "content-type;host", "UNSIGNED-PAYLOAD"].join("\n");
   const stringToSign = ["AWS4-HMAC-SHA256", amzDate, scope, createHash("sha256").update(canonicalRequest).digest("hex")].join("\n");
   const dateKey = hmac(`AWS4${secretAccessKey}`, date);
   const regionKey = hmac(dateKey, "auto");

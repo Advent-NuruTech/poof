@@ -1,7 +1,7 @@
 import { cacheLife, cacheTag } from "next/cache";
 
 import type { FeedChannel, FeedMeeting, FeedPlaylist, FeedVideo, PublicCatalogFeed } from "@/lib/catalog-feed-types";
-import { EMPTY_CATALOG_FEED, MOST_VIEWED_VIDEO_LIMIT, PUBLIC_CATALOG_CACHE_TAG } from "@/lib/catalog-feed-types";
+import { EMPTY_CATALOG_FEED, FEED_CACHE_SECONDS, MOST_VIEWED_VIDEO_LIMIT, PUBLIC_CATALOG_CACHE_TAG } from "@/lib/catalog-feed-types";
 import { isD1Configured, queryD1 } from "@/lib/cloudflare-d1";
 
 /**
@@ -29,8 +29,9 @@ import { isD1Configured, queryD1 } from "@/lib/cloudflare-d1";
 export type { FeedChannel, FeedMeeting, FeedPlaylist, FeedVideo, PublicCatalogFeed } from "@/lib/catalog-feed-types";
 export { EMPTY_CATALOG_FEED, FEED_CACHE_MS, FEED_CACHE_SECONDS } from "@/lib/catalog-feed-types";
 
-/** Hard ceiling on documents pulled per collection, regardless of catalog size. */
-export const MAX_FEED_ROWS = 900;
+/** Hard ceilings keep a cache refill safely below the Firestore free tier. */
+export const MAX_FEED_ROWS = 300;
+export const MAX_CHANNEL_FEED_ROWS = 50;
 /** Keep the public video feed focused on recent uploads and bounded to 100 reads. */
 export const MAX_VIDEO_FEED_ROWS = 100;
 
@@ -111,7 +112,8 @@ async function readMostViewedVideos(channelIds: string[]): Promise<FeedVideo[]> 
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ structuredQuery }),
-        cache: "no-store",
+        cache: "force-cache",
+        next: { revalidate: FEED_CACHE_SECONDS, tags: [PUBLIC_CATALOG_CACHE_TAG] },
         signal: AbortSignal.timeout(FEED_TIMEOUT_MS),
       });
       if (!response.ok) {
@@ -156,8 +158,9 @@ async function readVideos(maxRows: number) {
  * than throwing so a quota-exhausted or unconfigured project degrades to an
  * empty public catalog instead of a 500 error page.
  *
- * `cache: "no-store"` is deliberate: the 24-hour caching is owned entirely by
- * `use cache` + `cacheLife` below, so there is exactly one cache in play.
+ * The fetch Data Cache is deliberately enabled in addition to `use cache`.
+ * Unlike the in-memory `use cache` runtime cache, it persists across serverless
+ * instances, so a cold Vercel function cannot re-read Firestore for every visit.
  */
 async function readCollection<T>(collectionId: string, maxRows = MAX_FEED_ROWS, orderBy?: string): Promise<T[]> {
   const projectId = process.env.NEXT_PUBLIC_FIREBASE_PROJECT_ID;
@@ -166,7 +169,11 @@ async function readCollection<T>(collectionId: string, maxRows = MAX_FEED_ROWS, 
   const ordering = orderBy ? `&orderBy=${encodeURIComponent(orderBy)}` : "";
   const url = `https://firestore.googleapis.com/v1/projects/${encodeURIComponent(projectId)}/databases/(default)/documents/${encodeURIComponent(collectionId)}?pageSize=${maxRows}${ordering}&key=${encodeURIComponent(apiKey)}`;
   try {
-    const response = await fetch(url, { cache: "no-store", signal: AbortSignal.timeout(FEED_TIMEOUT_MS) });
+    const response = await fetch(url, {
+      cache: "force-cache",
+      next: { revalidate: FEED_CACHE_SECONDS, tags: [PUBLIC_CATALOG_CACHE_TAG] },
+      signal: AbortSignal.timeout(FEED_TIMEOUT_MS),
+    });
     if (!response.ok) return [];
     const body = await response.json() as { documents?: RestDocument[] };
     return (body.documents ?? []).flatMap((document) => {
@@ -186,11 +193,11 @@ async function readCollection<T>(collectionId: string, maxRows = MAX_FEED_ROWS, 
  * collection instead of one read per page view.
  */
 export async function getPublicCatalog(): Promise<PublicCatalogFeed> {
-  "use cache";
+  "use cache: remote";
   cacheLife("catalogFeed");
   cacheTag(PUBLIC_CATALOG_CACHE_TAG);
   if (!process.env.NEXT_PUBLIC_FIREBASE_PROJECT_ID || !process.env.NEXT_PUBLIC_FIREBASE_API_KEY) return EMPTY_CATALOG_FEED;
-  const channels = await readCollection<FeedChannel>("channels");
+  const channels = await readCollection<FeedChannel>("channels", MAX_CHANNEL_FEED_ROWS);
   const enabledChannelIds = channels.filter((channel) => channel.enabled !== false).map((channel) => channel.id);
   const [videos, mostViewedVideos, playlists, meetings] = await Promise.all([
     readVideos(MAX_VIDEO_FEED_ROWS),
@@ -198,7 +205,6 @@ export async function getPublicCatalog(): Promise<PublicCatalogFeed> {
     readCollection<FeedPlaylist>("playlists"),
     readCollection<FeedMeeting>("meetings"),
   ]);
-  const total = channels.length + videos.length + playlists.length + meetings.length;
   return {
     channels: channels.filter((channel) => channel.enabled !== false),
     videos: videos.filter((video) => video.availability !== "unavailable" && video.website?.hidden !== true),
@@ -206,6 +212,6 @@ export async function getPublicCatalog(): Promise<PublicCatalogFeed> {
     playlists,
     meetings,
     fetchedAt: new Date().toISOString(),
-    truncated: channels.length >= MAX_FEED_ROWS || videos.length >= MAX_VIDEO_FEED_ROWS || playlists.length >= MAX_FEED_ROWS || meetings.length >= MAX_FEED_ROWS || total >= MAX_FEED_ROWS,
+    truncated: channels.length >= MAX_CHANNEL_FEED_ROWS || videos.length >= MAX_VIDEO_FEED_ROWS || playlists.length >= MAX_FEED_ROWS || meetings.length >= MAX_FEED_ROWS,
   };
 }

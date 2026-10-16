@@ -107,7 +107,7 @@ export default function MeetingsManager() {
   async function refreshPublicCatalog() {
     const token = await user?.getIdToken();
     if (!token) throw new Error("Sign in again to refresh the public schedule.");
-    const response = await fetch("/api/admin/catalog/revalidate", {
+    const response = await fetch("/api/admin/catalog/revalidate?scope=catalog", {
       method: "POST",
       headers: { Authorization: `Bearer ${token}` },
     });

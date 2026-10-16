@@ -146,7 +146,7 @@ export default function AdminPage() {
       const syncedChannel = { ...result.channel };
       delete syncedChannel.enabled;
       await setDoc(doc(db, "channels", channel.id), { ...syncedChannel, syncStatus: "complete", lastSyncedAt: serverTimestamp(), lastSyncError: "", lastSyncNewVideoCount: newVideoCount }, { merge: true });
-      await fetch("/api/admin/catalog/revalidate", { method: "POST", headers: { Authorization: `Bearer ${token}` } });
+      await fetch("/api/admin/catalog/revalidate?scope=catalog", { method: "POST", headers: { Authorization: `Bearer ${token}` } });
       setNotice(`${channel.title} synced · ${videoCount} videos · ${playlists.length} playlists`);
     } catch (reason) {
       const message = reason instanceof Error ? reason.message : "Synchronization failed.";
