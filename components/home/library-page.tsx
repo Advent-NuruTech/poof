@@ -313,10 +313,11 @@ export default function LibraryPage({ documentId }: { documentId?: string }) {
     () =>
       documents.filter(
         (item) =>
-          (filter === "all" || item.categoryId === filter) &&
+          (filter === "all" || item.categoryId === filter ||
+            categories.some((category) => category.id === item.categoryId && category.parentId === filter)) &&
           `${item.title} ${item.description ?? ""} ${item.categoryName}`.toLowerCase().includes(search.toLowerCase()),
       ),
-    [documents, filter, search],
+    [categories, documents, filter, search],
   );
 
   const topCategories = categories.filter((item) => !item.parentId);

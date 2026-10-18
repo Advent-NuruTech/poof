@@ -1,12 +1,11 @@
 "use client";
 
-import { onAuthStateChanged, signOut, type User } from "firebase/auth";
+import { onAuthStateChanged, type User } from "firebase/auth";
 import Link from "next/link";
 import { doc, getDoc } from "firebase/firestore";
 import { useCallback, useEffect, useMemo, useState } from "react";
 import type { FormEvent } from "react";
 import { auth, db } from "@/lib/firebase";
-import { endAdminSession } from "@/lib/admin-session";
 import { isAdminIdentity } from "@/lib/admin-access";
 import { readApiResponse } from "@/lib/api-response";
 import { automaticPreviewText, extractFeaturedVideoUrl, inlineVideoLinks, personalizedGreeting, sanitizeRichText } from "@/lib/rich-text";
@@ -369,7 +368,7 @@ export default function MailingManager() {
   const previewPreheader = preheaderEdited ? campaign.preheader : automaticPreheader;
 
   return <main className={"admin-shell mailing-admin" + (focusedComposer ? " mailing-focus-mode" : "")}>
-    <header className="admin-top"><span className="admin-mark">POOF <span>MAILING</span></span><div className="admin-top-actions"><button className="text-button" onClick={() => void endAdminSession().then(() => signOut(auth)).catch((reason) => setError(reason instanceof Error ? reason.message : "Could not sign out."))}>Sign out</button></div></header>
+    <header className="admin-top"><span className="admin-mark">POOF <span>MAILING</span></span></header>
     <div className="admin-content">
       <div className="admin-heading"><span className="eyebrow">COMMUNICATIONS</span><h1>Mailing system</h1><p>Manage meeting contacts, create polished newsletters, and automate delivery with Resend.</p></div>
       {!ready ? <section className="admin-panel loading-card">Checking administrator access…</section>

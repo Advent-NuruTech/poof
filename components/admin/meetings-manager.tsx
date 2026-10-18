@@ -1,12 +1,11 @@
 "use client";
 
-import { onAuthStateChanged, signOut, type User } from "firebase/auth";
+import { onAuthStateChanged, type User } from "firebase/auth";
 import Link from "next/link";
 import { addDoc, collection, deleteDoc, doc, getDoc, getDocs, limit, query, updateDoc, deleteField } from "firebase/firestore";
 import { useEffect, useState } from "react";
 import type { FormEvent } from "react";
 import { auth, db } from "@/lib/firebase";
-import { endAdminSession } from "@/lib/admin-session";
 import { isAdminIdentity } from "@/lib/admin-access";
 import { deviceTimeZone, formatMeetingDate, formatMeetingTime, type Meeting } from "@/lib/meetings";
 import { readApiResponse } from "@/lib/api-response";
@@ -181,7 +180,7 @@ export default function MeetingsManager() {
     finally { setUploadingPoster(false); }
   }
 
-  return <main className="admin-shell"><header className="admin-top"><a className="back-link" href="/poof/admin">← Channel admin</a><span className="admin-mark">POOF <span>MEETINGS</span></span><button className="text-button" onClick={() => void endAdminSession().then(() => signOut(auth)).catch((reason) => setError(reason instanceof Error ? reason.message : "Could not sign out."))}>Sign out</button><a className="text-button" href="/meetings" target="_blank">View public page ↗</a></header>
+  return <main className="admin-shell"><header className="admin-top"><a className="back-link" href="/poof/admin">← Channel admin</a><span className="admin-mark">POOF <span>MEETINGS</span></span><a className="text-button" href="/meetings" target="_blank">View public page ↗</a></header>
     <div className="admin-content"><div className="admin-heading"><span className="eyebrow">MEETING SCHEDULE</span><h1>Zoom meetings</h1><p>Create or edit a meeting with a poster, schedule, and join link.</p></div>
       {!ready ? <section className="admin-panel loading-card">Checking administrator access…</section> : !user || !isAdmin ? <section className="admin-panel sign-in-panel"><div className="panel-icon">◉</div><h2>{user ? "Admin access required" : "Administrator sign in"}</h2><p>{user ? "This account is not authorized to manage meetings." : "Sign in with your administrator email and password."}</p>{error && <p className="notice error-notice">{error}</p>}<Link className="primary-button" href="/signin">Sign in</Link></section> : <>
         <section className="admin-panel"><div className="section-heading"><div><span className="eyebrow">{editingId ? "EDIT MEETING" : "NEW MEETING"}</span><h2>Meeting details</h2></div><span className="secure-label">● Private admin access</span></div>

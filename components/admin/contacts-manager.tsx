@@ -1,11 +1,10 @@
 "use client";
 
-import { onAuthStateChanged, signOut, type User } from "firebase/auth";
+import { onAuthStateChanged, type User } from "firebase/auth";
 import Link from "next/link";
 import { collection, deleteDoc, doc, getDoc, getDocs, limit, query, updateDoc } from "firebase/firestore";
 import { useEffect, useState } from "react";
 import { auth, db } from "@/lib/firebase";
-import { endAdminSession } from "@/lib/admin-session";
 import { isAdminIdentity } from "@/lib/admin-access";
 import NotificationBell from "./notification-bell";
 
@@ -71,7 +70,7 @@ export default function ContactsManager({ mode = "all", initialTab = "contact" }
     : statusFilter === "pending"
       ? `No pending ${activeTab.label.toLowerCase()} submissions right now.`
       : `No ${activeTab.label.toLowerCase()} submissions yet.`;
-  return <main className="admin-shell"><header className="admin-top"><a className="back-link" href="/poof/admin">← Channel admin</a><span className="admin-mark">POOF <span>INBOX</span></span><div className="admin-top-actions"><NotificationBell user={user}/><a className="text-button" href={mode === "meeting-link" ? "/meeting-link-request" : "/contact"} target="_blank">View public form ↗</a><button className="text-button" onClick={() => void endAdminSession().then(() => signOut(auth)).catch((reason) => setError(reason instanceof Error ? reason.message : "Could not sign out."))}>Sign out</button></div></header>
+  return <main className="admin-shell"><header className="admin-top"><a className="back-link" href="/poof/admin">← Channel admin</a><span className="admin-mark">POOF <span>INBOX</span></span><div className="admin-top-actions"><NotificationBell user={user}/><a className="text-button" href={mode === "meeting-link" ? "/meeting-link-request" : "/contact"} target="_blank">View public form ↗</a></div></header>
     <div className="admin-content"><div className="admin-heading"><span className="eyebrow">INBOX</span><h1>{title}</h1><p>{mode === "meeting-link" ? "Review requests from visitors who would like to join an upcoming Zoom meeting." : "Messages, prayer requests, and Zoom link requests submitted through the public forms."}</p></div>
       {!ready ? <section className="admin-panel loading-card">Checking administrator access...</section> : !user || !isAdmin ? <section className="admin-panel sign-in-panel"><div className="panel-icon">◉</div><h2>{user ? "Admin access required" : "Administrator sign in"}</h2><p>{user ? "This account is not authorized to view these messages." : "Sign in with your administrator email and password."}</p>{error && <p className="notice error-notice">{error}</p>}<Link className="primary-button" href="/signin">Sign in</Link></section> : <>
         <div className="inbox-tabs" role="tablist" aria-label="Inbox categories">{tabs.map((entry) => <button key={entry.id} type="button" role="tab" aria-selected={tab === entry.id} className={`inbox-tab${tab === entry.id ? " is-active" : ""}`} onClick={() => setTab(entry.id)}>{entry.label}<span className="inbox-tab-count">{countFor(entry.id, "all")}</span></button>)}</div>

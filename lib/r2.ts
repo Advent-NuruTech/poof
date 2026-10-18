@@ -50,6 +50,7 @@ export function createR2UploadUrl(key: string, contentType: string, expiresSecon
   const path = `${prefix}/${awsPath(bucket)}/${awsPath(key)}`;
   const pairs: Array<[string, string]> = [
     ["X-Amz-Algorithm", "AWS4-HMAC-SHA256"],
+    ["X-Amz-Content-Sha256", "UNSIGNED-PAYLOAD"],
     ["X-Amz-Credential", `${accessKeyId}/${scope}`],
     ["X-Amz-Date", amzDate],
     ["X-Amz-Expires", String(expiresSeconds)],
