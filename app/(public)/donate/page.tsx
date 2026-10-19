@@ -1,6 +1,7 @@
 import type { Metadata } from "next";
 import Link from "next/link";
 import DonationForm from "@/components/home/donation-form";
+import { paystackCurrencies } from "@/lib/paystack";
 
 export const metadata: Metadata = {
   title: "Donate | Faith of the Pioneers",
@@ -8,7 +9,7 @@ export const metadata: Metadata = {
 };
 
 export default function DonatePage() {
-  const currency = process.env.PAYSTACK_CURRENCY?.trim().toUpperCase() || "NGN";
+  const currencies = paystackCurrencies();
   return <main className="donation-page">
     <section className="donation-intro" aria-labelledby="donation-title">
       <Link href="/" className="donation-back">← Back to home</Link>
@@ -21,6 +22,6 @@ export default function DonatePage() {
         <div><span aria-hidden="true">✓</span><strong>No card data stored</strong><small>This website never handles your card details.</small></div>
       </div>
     </section>
-    <DonationForm currency={currency} />
+    <DonationForm currencies={currencies} />
   </main>;
 }

@@ -1,6 +1,6 @@
 import { AggregateField, Timestamp } from "firebase-admin/firestore";
 import { getMailDb, requireMailAdmin } from "@/lib/mailing-server";
-import { DonationError, verifyAndReconcileDonation } from "@/lib/paystack";
+import { DonationError, paystackCurrencies, verifyAndReconcileDonation } from "@/lib/paystack";
 
 const noStoreHeaders = { "Cache-Control": "private, no-store, max-age=0" };
 
@@ -15,7 +15,7 @@ function donationDto(snapshot: FirebaseFirestore.QueryDocumentSnapshot) {
     name: String(data.name ?? "Unknown donor"),
     email: String(data.email ?? ""),
     amountSubunit: Number(data.amountSubunit ?? 0),
-    currency: String(data.currency ?? "NGN"),
+    currency: String(data.currency ?? "KES"),
     status: String(data.status ?? "pending"),
     providerStatus: String(data.providerStatus ?? "unknown"),
     failureMessage: typeof data.failureMessage === "string" ? data.failureMessage : "",
@@ -35,25 +35,29 @@ export async function GET(request: Request) {
     }
     const db = getMailDb();
     const donationsRef = db.collection("donations");
-    const [records, success, failed, pending] = await Promise.all([
+    const currencies = paystackCurrencies();
+    const [records, success, failed, pending, ...currencyTotals] = await Promise.all([
       donationsRef.orderBy("createdAt", "desc").limit(250).get(),
-      donationsRef.where("status", "==", "success").aggregate({
-        count: AggregateField.count(),
-        amountSubunit: AggregateField.sum("amountSubunit"),
-      }).get(),
+      donationsRef.where("status", "==", "success").count().get(),
       donationsRef.where("status", "==", "failed").count().get(),
       donationsRef.where("status", "==", "pending").count().get(),
+      ...currencies.map((currency) => donationsRef.where("currency", "==", currency).aggregate({
+        count: AggregateField.sum("successfulCount"),
+        amountSubunit: AggregateField.sum("successfulAmountSubunit"),
+      }).get()),
     ]);
     const items = records.docs.map(donationDto);
-    const currencies = [...new Set(items.map((item) => item.currency))];
     return Response.json({
       donations: items,
       summary: {
         successfulCount: Number(success.data().count ?? 0),
-        successfulAmountSubunit: Number(success.data().amountSubunit ?? 0),
         failedCount: Number(failed.data().count ?? 0),
         pendingCount: Number(pending.data().count ?? 0),
-        currency: currencies[0] ?? process.env.PAYSTACK_CURRENCY?.toUpperCase() ?? "NGN",
+        totals: currencies.map((currency, index) => ({
+          currency,
+          successfulCount: Number(currencyTotals[index].data().count ?? 0),
+          successfulAmountSubunit: Number(currencyTotals[index].data().amountSubunit ?? 0),
+        })),
       },
     }, { headers: noStoreHeaders });
   } catch (reason) {

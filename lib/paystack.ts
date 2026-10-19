@@ -5,7 +5,7 @@ import { Resend } from "resend";
 import { FieldValue, getMailDb, Timestamp } from "@/lib/mailing-server";
 
 const PAYSTACK_API = "https://api.paystack.co";
-const DEFAULT_CURRENCY = "NGN";
+const DEFAULT_CURRENCY = "KES";
 const RECEIPT_LEASE_MS = 5 * 60 * 1000;
 
 export type DonationStatus = "pending" | "success" | "failed";
@@ -56,15 +56,22 @@ export class DonationError extends Error {
   }
 }
 
+export function paystackCurrencies() {
+  const configured = process.env.PAYSTACK_CURRENCIES || process.env.PAYSTACK_CURRENCY || DEFAULT_CURRENCY;
+  const currencies = [...new Set(configured.split(",").map((value) => value.trim().toUpperCase()).filter(Boolean))];
+  if (!currencies.length || currencies.some((currency) => !/^[A-Z]{3}$/.test(currency))) {
+    throw new Error("PAYSTACK_CURRENCIES must contain comma-separated three-letter currency codes.");
+  }
+  return currencies;
+}
+
 export function paystackCurrency() {
-  const currency = process.env.PAYSTACK_CURRENCY?.trim().toUpperCase() || DEFAULT_CURRENCY;
-  if (!/^[A-Z]{3}$/.test(currency)) throw new Error("PAYSTACK_CURRENCY must be a three-letter currency code.");
-  return currency;
+  return paystackCurrencies()[0];
 }
 
 function amountToSubunit(value: string, label: string) {
   const normalized = value.trim();
-  if (!/^\d{1,9}(?:\.\d{1,2})?$/.test(normalized)) {
+  if (!/^\d+(?:\.\d{1,2})?$/.test(normalized)) {
     throw new DonationError(`${label} must be a valid amount with no more than two decimal places.`);
   }
   const [whole, fraction = ""] = normalized.split(".");
@@ -81,6 +88,7 @@ export function parseDonationInput(value: unknown): DonationInput {
   const name = typeof input.name === "string" ? input.name.trim().replace(/\s+/g, " ") : "";
   const email = typeof input.email === "string" ? input.email.trim().toLowerCase() : "";
   const amount = typeof input.amount === "string" ? input.amount : "";
+  const requestedCurrency = typeof input.currency === "string" ? input.currency.trim().toUpperCase() : "";
 
   if (name.length < 2 || name.length > 120) throw new DonationError("Enter your full name (2–120 characters).");
   if (email.length > 254 || !/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email)) {
@@ -88,16 +96,12 @@ export function parseDonationInput(value: unknown): DonationInput {
   }
 
   const amountSubunit = amountToSubunit(amount, "Donation amount");
-  const minimum = amountToSubunit(process.env.PAYSTACK_MIN_AMOUNT || "100", "PAYSTACK_MIN_AMOUNT");
-  const maximum = amountToSubunit(process.env.PAYSTACK_MAX_AMOUNT || "10000000", "PAYSTACK_MAX_AMOUNT");
-  if (amountSubunit < minimum) {
-    throw new DonationError(`The minimum donation is ${formatMoney(minimum, paystackCurrency())}.`);
-  }
-  if (amountSubunit > maximum) {
-    throw new DonationError(`The maximum online donation is ${formatMoney(maximum, paystackCurrency())}. Contact us for help with a larger gift.`);
-  }
+  if (amountSubunit <= 0) throw new DonationError("Donation amount must be greater than zero.");
+  const currencies = paystackCurrencies();
+  const currency = requestedCurrency || currencies[0];
+  if (!currencies.includes(currency)) throw new DonationError("Choose a supported donation currency.");
 
-  return { name, email, amountSubunit, currency: paystackCurrency() };
+  return { name, email, amountSubunit, currency };
 }
 
 function paystackSecret() {
@@ -192,6 +196,8 @@ export async function initializeDonation(request: Request, input: DonationInput)
     status: "pending",
     providerStatus: "initializing",
     receiptStatus: "not_sent",
+    successfulCount: 0,
+    successfulAmountSubunit: 0,
     createdAt: FieldValue.serverTimestamp(),
     updatedAt: FieldValue.serverTimestamp(),
   });
@@ -206,11 +212,12 @@ export async function initializeDonation(request: Request, input: DonationInput)
         currency: input.currency,
         reference,
         callback_url: `${baseUrl}/donate/complete`,
-        metadata: {
+        channels: ["card"],
+        metadata: JSON.stringify({
           donation_reference: reference,
           donor_name: input.name,
           cancel_action: `${baseUrl}/donate?payment=cancelled`,
-        },
+        }),
       }),
     });
     const authorizationUrl = result.authorization_url;
@@ -266,7 +273,6 @@ async function applyVerifiedTransaction(transaction: PaystackTransaction, source
   if (!reference || !validReference(reference)) throw new DonationError("Paystack returned an invalid transaction reference.", 502);
   const db = getMailDb();
   const donationRef = db.collection("donations").doc(reference);
-  const statsRef = db.collection("donationStats").doc("summary");
 
   const result = await db.runTransaction(async (dbTransaction) => {
     const snapshot = await dbTransaction.get(donationRef);
@@ -299,6 +305,8 @@ async function applyVerifiedTransaction(transaction: PaystackTransaction, source
     };
     if (finalStatus === "success") {
       update.failureMessage = FieldValue.delete();
+      update.successfulCount = 1;
+      update.successfulAmountSubunit = expectedAmount;
       update.paidAt = transaction.paid_at && Number.isFinite(Date.parse(transaction.paid_at))
         ? Timestamp.fromDate(new Date(transaction.paid_at))
         : FieldValue.serverTimestamp();
@@ -308,14 +316,6 @@ async function applyVerifiedTransaction(transaction: PaystackTransaction, source
         : "Provider verification did not match the original donation details.";
     }
     dbTransaction.update(donationRef, update);
-    if (finalStatus === "success" && !wasSuccessful) {
-      dbTransaction.set(statsRef, {
-        successfulCount: FieldValue.increment(1),
-        successfulAmountSubunit: FieldValue.increment(expectedAmount),
-        currency: expectedCurrency,
-        updatedAt: FieldValue.serverTimestamp(),
-      }, { merge: true });
-    }
     return {
       status: finalStatus,
       name: String(donation.name ?? "Donor"),

@@ -26,10 +26,9 @@ type DonationData = {
   donations: Donation[];
   summary: {
     successfulCount: number;
-    successfulAmountSubunit: number;
     failedCount: number;
     pendingCount: number;
-    currency: string;
+    totals: Array<{ currency: string; successfulCount: number; successfulAmountSubunit: number }>;
   };
   error?: string;
 };
@@ -37,7 +36,7 @@ type Filter = "all" | DonationStatus;
 
 const initialData: DonationData = {
   donations: [],
-  summary: { successfulCount: 0, successfulAmountSubunit: 0, failedCount: 0, pendingCount: 0, currency: "NGN" },
+  summary: { successfulCount: 0, failedCount: 0, pendingCount: 0, totals: [{ currency: "KES", successfulCount: 0, successfulAmountSubunit: 0 }] },
 };
 
 function money(amountSubunit: number, currency: string) {
@@ -146,7 +145,7 @@ export default function DonationsManager() {
       </header>
 
       <section className="donation-admin-stats" aria-label="Donation summary">
-        <article className="is-total"><span>SUCCESSFUL TOTAL</span><strong>{money(data.summary.successfulAmountSubunit, data.summary.currency)}</strong><small>{data.summary.successfulCount.toLocaleString()} confirmed {data.summary.successfulCount === 1 ? "donation" : "donations"}</small></article>
+        <article className="is-total"><span>SUCCESSFUL TOTAL</span><strong>{data.summary.totals.map((total) => money(total.successfulAmountSubunit, total.currency)).join(" + ")}</strong><small>{data.summary.successfulCount.toLocaleString()} confirmed {data.summary.successfulCount === 1 ? "donation" : "donations"}</small></article>
         <article><span>SUCCESSFUL</span><strong>{data.summary.successfulCount.toLocaleString()}</strong><small>Verified by Paystack</small></article>
         <article><span>FAILED</span><strong>{data.summary.failedCount.toLocaleString()}</strong><small>Failed or abandoned</small></article>
         <article><span>PENDING</span><strong>{data.summary.pendingCount.toLocaleString()}</strong><small>Awaiting final status</small></article>
