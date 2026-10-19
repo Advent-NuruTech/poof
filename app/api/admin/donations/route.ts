@@ -1,4 +1,4 @@
-import { AggregateField, Timestamp } from "firebase-admin/firestore";
+import { Timestamp } from "firebase-admin/firestore";
 import { getMailDb, requireMailAdmin } from "@/lib/mailing-server";
 import { DonationError, paystackCurrencies, verifyAndReconcileDonation } from "@/lib/paystack";
 
@@ -36,28 +36,51 @@ export async function GET(request: Request) {
     const db = getMailDb();
     const donationsRef = db.collection("donations");
     const currencies = paystackCurrencies();
-    const [records, success, failed, pending, ...currencyTotals] = await Promise.all([
+    const [records, success, failed, pending, storedTotals] = await Promise.all([
       donationsRef.orderBy("createdAt", "desc").limit(250).get(),
       donationsRef.where("status", "==", "success").count().get(),
       donationsRef.where("status", "==", "failed").count().get(),
       donationsRef.where("status", "==", "pending").count().get(),
-      ...currencies.map((currency) => donationsRef.where("currency", "==", currency).aggregate({
-        count: AggregateField.sum("successfulCount"),
-        amountSubunit: AggregateField.sum("successfulAmountSubunit"),
-      }).get()),
+      db.collection("donationStats").get(),
     ]);
+    const totals = new Map(currencies.map((currency) => [currency, {
+      currency,
+      successfulCount: 0,
+      successfulAmountSubunit: 0,
+    }]));
+    for (const snapshot of storedTotals.docs) {
+      const currency = snapshot.id.toUpperCase();
+      const successfulCount = Number(snapshot.get("successfulCount"));
+      const successfulAmountSubunit = Number(snapshot.get("successfulAmountSubunit"));
+      if (!/^[A-Z]{3}$/.test(currency) || !Number.isSafeInteger(successfulCount) || successfulCount < 0
+        || !Number.isSafeInteger(successfulAmountSubunit) || successfulAmountSubunit < 0) continue;
+      totals.set(currency, { currency, successfulCount, successfulAmountSubunit });
+    }
+    const successfulCount = Number(success.data().count ?? 0);
+    const storedSuccessfulCount = [...totals.values()].reduce((sum, total) => sum + total.successfulCount, 0);
+    if (storedSuccessfulCount !== successfulCount) {
+      // Legacy fallback: derive an exact result without a composite index if
+      // donations predate the transactional donationStats documents.
+      for (const currency of totals.keys()) totals.set(currency, { currency, successfulCount: 0, successfulAmountSubunit: 0 });
+      const successfulRecords = await donationsRef.where("status", "==", "success").select("currency", "amountSubunit").get();
+      for (const snapshot of successfulRecords.docs) {
+        const currency = String(snapshot.get("currency") ?? "").toUpperCase();
+        const amountSubunit = Number(snapshot.get("amountSubunit"));
+        if (!/^[A-Z]{3}$/.test(currency) || !Number.isSafeInteger(amountSubunit) || amountSubunit <= 0) continue;
+        const current = totals.get(currency) ?? { currency, successfulCount: 0, successfulAmountSubunit: 0 };
+        current.successfulCount += 1;
+        current.successfulAmountSubunit += amountSubunit;
+        totals.set(currency, current);
+      }
+    }
     const items = records.docs.map(donationDto);
     return Response.json({
       donations: items,
       summary: {
-        successfulCount: Number(success.data().count ?? 0),
+        successfulCount,
         failedCount: Number(failed.data().count ?? 0),
         pendingCount: Number(pending.data().count ?? 0),
-        totals: currencies.map((currency, index) => ({
-          currency,
-          successfulCount: Number(currencyTotals[index].data().count ?? 0),
-          successfulAmountSubunit: Number(currencyTotals[index].data().amountSubunit ?? 0),
-        })),
+        totals: [...totals.values()],
       },
     }, { headers: noStoreHeaders });
   } catch (reason) {

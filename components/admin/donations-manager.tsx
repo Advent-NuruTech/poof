@@ -36,7 +36,7 @@ type Filter = "all" | DonationStatus;
 
 const initialData: DonationData = {
   donations: [],
-  summary: { successfulCount: 0, failedCount: 0, pendingCount: 0, totals: [{ currency: "KES", successfulCount: 0, successfulAmountSubunit: 0 }] },
+  summary: { successfulCount: 0, failedCount: 0, pendingCount: 0, totals: [{ currency: "USD", successfulCount: 0, successfulAmountSubunit: 0 }, { currency: "KES", successfulCount: 0, successfulAmountSubunit: 0 }] },
 };
 
 function money(amountSubunit: number, currency: string) {

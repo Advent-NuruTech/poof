@@ -5,7 +5,7 @@ import { Resend } from "resend";
 import { FieldValue, getMailDb, Timestamp } from "@/lib/mailing-server";
 
 const PAYSTACK_API = "https://api.paystack.co";
-const DEFAULT_CURRENCY = "KES";
+const DEFAULT_CURRENCIES = "USD,KES";
 const RECEIPT_LEASE_MS = 5 * 60 * 1000;
 
 export type DonationStatus = "pending" | "success" | "failed";
@@ -57,7 +57,7 @@ export class DonationError extends Error {
 }
 
 export function paystackCurrencies() {
-  const configured = process.env.PAYSTACK_CURRENCIES || process.env.PAYSTACK_CURRENCY || DEFAULT_CURRENCY;
+  const configured = process.env.PAYSTACK_CURRENCIES || process.env.PAYSTACK_CURRENCY || DEFAULT_CURRENCIES;
   const currencies = [...new Set(configured.split(",").map((value) => value.trim().toUpperCase()).filter(Boolean))];
   if (!currencies.length || currencies.some((currency) => !/^[A-Z]{3}$/.test(currency))) {
     throw new Error("PAYSTACK_CURRENCIES must contain comma-separated three-letter currency codes.");
@@ -212,7 +212,9 @@ export async function initializeDonation(request: Request, input: DonationInput)
         currency: input.currency,
         reference,
         callback_url: `${baseUrl}/donate/complete`,
-        channels: ["card"],
+        // Card remains the universal fallback. Paystack only renders either
+        // wallet when the merchant, browser, device, and saved card are eligible.
+        channels: ["card", "apple_pay", "google_pay"],
         metadata: JSON.stringify({
           donation_reference: reference,
           donor_name: input.name,
@@ -316,6 +318,14 @@ async function applyVerifiedTransaction(transaction: PaystackTransaction, source
         : "Provider verification did not match the original donation details.";
     }
     dbTransaction.update(donationRef, update);
+    if (finalStatus === "success" && !wasSuccessful) {
+      dbTransaction.set(db.collection("donationStats").doc(expectedCurrency), {
+        currency: expectedCurrency,
+        successfulCount: FieldValue.increment(1),
+        successfulAmountSubunit: FieldValue.increment(expectedAmount),
+        updatedAt: FieldValue.serverTimestamp(),
+      }, { merge: true });
+    }
     return {
       status: finalStatus,
       name: String(donation.name ?? "Donor"),

@@ -23,7 +23,7 @@ export default function DonationForm({ currencies }: { currencies: string[] }) {
   const [name, setName] = useState("");
   const [email, setEmail] = useState("");
   const [amount, setAmount] = useState("");
-  const [currency, setCurrency] = useState(currencies[0] || "KES");
+  const [currency, setCurrency] = useState(currencies[0] || "USD");
   const [website, setWebsite] = useState("");
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState("");
@@ -74,7 +74,7 @@ export default function DonationForm({ currencies }: { currencies: string[] }) {
           {currencies.length > 1 ? <select name="currency" value={currency} onChange={(event) => setCurrency(event.target.value)} aria-label="Donation currency" disabled={busy}>{currencies.map((code) => <option key={code} value={code}>{code} · {currencyNames[code] || code}</option>)}</select> : <b>{currency}</b>}
           <input type="text" name="amount" inputMode="decimal" autoComplete="off" maxLength={18} pattern="[0-9]+([.][0-9]{1,2})?" value={amount} onChange={(event) => setAmount(event.target.value.replace(/[^0-9.]/g, ""))} placeholder="Enter amount" aria-describedby="donation-amount-help" required disabled={busy}/>
         </div>
-        <small id="donation-amount-help">Enter any amount greater than zero. No amount is preselected.</small>
+        <small id="donation-amount-help">Enter any amount greater than zero. No amount is preselected.{currency === "USD" ? " Your bank can convert EUR, SEK, NOK, or DKK automatically." : ""}</small>
       </label>
       <label className="donation-honeypot" aria-hidden="true">
         Website
@@ -82,12 +82,17 @@ export default function DonationForm({ currencies }: { currencies: string[] }) {
       </label>
       {error && <p className="donation-error" role="alert">{error}</p>}
       <button className="donation-submit" type="submit" disabled={busy}>
-        {busy ? <><span className="donation-spinner" aria-hidden="true"/>Opening secure checkout…</> : <>Continue to Paystack <span aria-hidden="true">→</span></>}
+        {busy ? <><span className="donation-spinner" aria-hidden="true"/>Opening secure checkout…</> : <>Continue to secure payment <span aria-hidden="true">→</span></>}
       </button>
     </form>
+    <div className="donation-payment-methods" aria-label="Available payment methods">
+      <span><b aria-hidden="true">▣</b> Card</span>
+      <span>Apple Pay</span>
+      <span>G Pay</span>
+    </div>
     <div className="donation-security-note">
       <svg viewBox="0 0 24 24" width="17" height="17" fill="none" stroke="currentColor" strokeWidth="1.8" aria-hidden="true"><rect x="5" y="10" width="14" height="10" rx="2"/><path d="M8 10V7a4 4 0 0 1 8 0v3"/></svg>
-      <p>Card payment is processed securely by Paystack. International Visa and Mastercard cards require international payments to be active on the Paystack account. We never store card details. See our <Link href="/privacy-policy">privacy policy</Link>.</p>
+      <p>Cards and eligible Apple Pay or Google Pay wallets are processed securely by Paystack. Wallets appear only on supported devices. We never store card details. See our <Link href="/privacy-policy">privacy policy</Link>.</p>
     </div>
   </section>;
 }
