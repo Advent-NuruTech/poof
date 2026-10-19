@@ -195,5 +195,17 @@ service cloud.firestore {
         && request.resource.data.status in ['pending', 'handled']
         && (request.resource.data.status == 'pending' ? request.resource.data.handledAt == null : request.resource.data.handledAt == request.time);
     }
+
+    // Donation PII, payment status, receipt state, and abuse-control records are
+    // only accessed through authenticated server routes using Firebase Admin.
+    match /donations/{document=**} {
+      allow read, write: if false;
+    }
+    match /donationStats/{document=**} {
+      allow read, write: if false;
+    }
+    match /donationRateLimits/{document=**} {
+      allow read, write: if false;
+    }
   }
 }

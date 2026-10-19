@@ -45,6 +45,15 @@ Firebase Web API keys identify the Firebase project and are expected to be prese
 - Local development does not run the cron automatically; invoke `/api/mailing/cron` with the configured bearer token to test due schedules.
 - Browser-side Firestore rules do not grant access to mailing collections. All mailing reads/writes are performed by server routes after admin checks, except public forms which validate and persist only their own submissions.
 
+### Paystack donations
+
+- Set the server-only `PAYSTACK_SECRET_KEY` to the live secret key in the deployment environment. The hosted checkout flow does not require `NEXT_PUBLIC_PAYSTACK_PUBLIC_KEY`, and no Paystack secret or card data is sent through the application browser bundle.
+- Set `PAYSTACK_CURRENCY` (default `NGN`) and, if needed, `PAYSTACK_MIN_AMOUNT` / `PAYSTACK_MAX_AMOUNT` in the main currency unit. The public form deliberately leaves the amount empty for the donor to enter.
+- In the Paystack live dashboard, set the webhook URL to `https://faithofthepioneers.org/api/paystack/webhook` (replace the origin if `NEXT_PUBLIC_SITE_URL` differs). The endpoint verifies Paystack's HMAC-SHA512 signature and re-verifies each successful transaction against Paystack before recording it.
+- Donation attempts are stored in the server-only Firestore `donations` collection. `/poof/admin/donations` shows verified totals, donor name and email, failed/abandoned attempts, exact local date/time, Paystack status, and receipt delivery state. **Refresh payment statuses** reconciles pending attempts because Paystack only emits transaction webhooks for successful charges.
+- Successful payments send an idempotent receipt through the existing Resend sender. Configure `RESEND_API_KEY` and `RESEND_FROM_EMAIL` in production. Receipt failure never changes a verified payment into a failed donation; it remains visible to administrators as a receipt-delivery failure.
+- `donationRateLimits` records have an `expireAt` field. Enable a Firestore TTL policy for that field on this collection so expired abuse-control buckets are removed automatically.
+
 ### Cloudflare catalog and document storage
 
 - Create a Cloudflare D1 database and apply [`migrations/0001_videos.sql`](migrations/0001_videos.sql). Create a Cloudflare API token with D1 read/edit permissions and set `CLOUDFLARE_ACCOUNT_ID`, `CLOUDFLARE_D1_DATABASE_ID`, and `CLOUDFLARE_API_TOKEN` in local development and Vercel. The existing `R2_ACCOUNT_ID` and `D1_DATABASE_ID` names are also accepted for the matching ID variables. `R2_API_TOKEN` is not used for D1: Cloudflare's R2 token/ S3 credentials do not automatically grant D1 API access. These values are server-only; do not add a `NEXT_PUBLIC_` prefix.

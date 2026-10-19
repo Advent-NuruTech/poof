@@ -64,7 +64,7 @@ export default function AdminInvites() {
   }
 
   return (
-    <section className="admin-panel">
+    <section className="admin-panel admin-invite-panel">
       <div className="section-heading">
         <div className="heading-content">
           <span className="eyebrow">ADMIN ACCESS</span>

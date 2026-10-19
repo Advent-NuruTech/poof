@@ -14,6 +14,8 @@ const sections = [
   { href: "/poof/admin/meetings", label: "Meetings", icon: "◷" },
   { href: "/poof/admin/library", label: "Library", icon: "▤" },
   { href: "/poof/admin/mailing", label: "Mailing", icon: "✉" },
+  { href: "/poof/admin/donations", label: "Donations", icon: "$" },
+  { href: "/poof/admin/administrators", label: "Administrators", icon: "+" },
 ];
 
 const inbox = [
