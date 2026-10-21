@@ -13,7 +13,7 @@ export default function DonatePage() {
       <Link href="/" className="donation-back">← Back to home</Link>
       <span className="donation-eyebrow">SUPPORT THE WORK</span>
       <h1 id="donation-title">Give securely.</h1>
-      <p>Your support helps Faith of the Pioneers continue its ministry, teaching, and fellowship. Choose your gift in USD; checkout converts and charges it in KES.</p>
+      <p>Your support helps Faith of the Pioneers continue its ministry, teaching, and fellowship.</p>
       <div className="donation-assurance" aria-label="Payment assurances">
         <div><span aria-hidden="true">✓</span><strong>Secure checkout</strong><small>Payment is completed on Paystack.</small></div>
         <div><span aria-hidden="true">✓</span><strong>Email receipt</strong><small>Sent after payment is verified.</small></div>

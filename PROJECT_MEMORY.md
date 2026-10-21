@@ -1,4 +1,10 @@
 # Project Memory
+## 2026-10-21: Polish donation payment badges
+
+- **Major change:** Centered the donation form heading and added colored card, Apple, and Google icons to the payment method badges, with wrapping for narrow screens.
+- **Build/runtime errors:** None encountered.
+- **Verification:** Focused ESLint and `git diff --check` passed.
+
 ## 2026-10-21: Convert USD donation intent into KES-only Paystack charges
 
 - **Major change:** The public donation form now accepts the donor's intended amount only in USD. A server-side quote converts USD cents to KES cents with exact six-decimal integer arithmetic and half-up rounding, then initializes Paystack with the literal KES charge currency. The quote uses Frankfurter's cached daily USD/KES reference rate by default or the optional server-only `DONATION_USD_KES_RATE` override. Converted charges below Paystack's KES 3.00 minimum are rejected before a donation attempt is created.
