@@ -12,6 +12,11 @@ type Donation = {
   email: string;
   amountSubunit: number;
   currency: string;
+  originalAmountSubunit: number;
+  originalCurrency: string;
+  conversionRate: number | null;
+  chargeAmountSubunit: number;
+  chargeCurrency: string;
   status: DonationStatus;
   providerStatus: string;
   failureMessage: string;
@@ -168,7 +173,7 @@ export default function DonationsManager() {
             <thead><tr><th>Donor</th><th>Amount</th><th>Status</th><th>Date & time</th><th>Receipt</th><th>Reference</th></tr></thead>
             <tbody>{visible.map((donation) => <tr key={donation.reference}>
               <td data-label="Donor"><strong>{donation.name}</strong><a href={`mailto:${encodeURIComponent(donation.email)}`}>{donation.email}</a></td>
-              <td data-label="Amount"><strong>{money(donation.amountSubunit, donation.currency)}</strong>{donation.channel && <small>{donation.channel}</small>}</td>
+              <td data-label="Amount"><strong>{money(donation.originalAmountSubunit, donation.originalCurrency)}</strong>{donation.chargeCurrency !== donation.originalCurrency && <small>Charged {money(donation.chargeAmountSubunit, donation.chargeCurrency)}{donation.conversionRate ? ` · 1 USD = ${donation.conversionRate.toLocaleString(undefined, { maximumFractionDigits: 6 })} KES` : ""}</small>}{donation.channel && <small>{donation.channel}</small>}</td>
               <td data-label="Status"><span className={`donation-status ${donation.status}`}>{statusLabel(donation.status)}</span><small>{donation.providerStatus.replaceAll("_", " ")}</small>{donation.failureMessage && <em title={donation.failureMessage}>{donation.failureMessage}</em>}</td>
               <td data-label="Date & time"><time dateTime={donation.paidAt || donation.createdAt || undefined}>{exactTime(donation.paidAt || donation.createdAt)}</time><small>{donation.status === "success" ? "Payment time" : "Attempt time"}</small></td>
               <td data-label="Receipt"><span className={`receipt-status ${donation.receiptStatus}`} title={donation.receiptError || undefined}>{donation.status === "success" ? donation.receiptStatus.replaceAll("_", " ") : "Not applicable"}</span>{donation.receiptError && <small>{donation.receiptError}</small>}</td>

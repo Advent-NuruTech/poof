@@ -16,6 +16,11 @@ function donationDto(snapshot: FirebaseFirestore.QueryDocumentSnapshot) {
     email: String(data.email ?? ""),
     amountSubunit: Number(data.amountSubunit ?? 0),
     currency: String(data.currency ?? "KES"),
+    originalAmountSubunit: Number(data.originalAmountSubunit ?? data.amountSubunit ?? 0),
+    originalCurrency: String(data.originalCurrency ?? data.currency ?? "KES"),
+    conversionRate: typeof data.conversionRate === "number" ? data.conversionRate : null,
+    chargeAmountSubunit: Number(data.chargeAmountSubunit ?? data.amountSubunit ?? 0),
+    chargeCurrency: String(data.chargeCurrency ?? data.currency ?? "KES"),
     status: String(data.status ?? "pending"),
     providerStatus: String(data.providerStatus ?? "unknown"),
     failureMessage: typeof data.failureMessage === "string" ? data.failureMessage : "",
@@ -43,7 +48,7 @@ export async function GET(request: Request) {
       donationsRef.where("status", "==", "pending").count().get(),
       db.collection("donationStats").get(),
     ]);
-    const totals = new Map(currencies.map((currency) => [currency, {
+    const totals = new Map<string, { currency: string; successfulCount: number; successfulAmountSubunit: number }>(currencies.map((currency) => [currency, {
       currency,
       successfulCount: 0,
       successfulAmountSubunit: 0,
@@ -62,10 +67,10 @@ export async function GET(request: Request) {
       // Legacy fallback: derive an exact result without a composite index if
       // donations predate the transactional donationStats documents.
       for (const currency of totals.keys()) totals.set(currency, { currency, successfulCount: 0, successfulAmountSubunit: 0 });
-      const successfulRecords = await donationsRef.where("status", "==", "success").select("currency", "amountSubunit").get();
+      const successfulRecords = await donationsRef.where("status", "==", "success").select("chargeCurrency", "chargeAmountSubunit", "currency", "amountSubunit").get();
       for (const snapshot of successfulRecords.docs) {
-        const currency = String(snapshot.get("currency") ?? "").toUpperCase();
-        const amountSubunit = Number(snapshot.get("amountSubunit"));
+        const currency = String(snapshot.get("chargeCurrency") ?? snapshot.get("currency") ?? "").toUpperCase();
+        const amountSubunit = Number(snapshot.get("chargeAmountSubunit") ?? snapshot.get("amountSubunit"));
         if (!/^[A-Z]{3}$/.test(currency) || !Number.isSafeInteger(amountSubunit) || amountSubunit <= 0) continue;
         const current = totals.get(currency) ?? { currency, successfulCount: 0, successfulAmountSubunit: 0 };
         current.successfulCount += 1;

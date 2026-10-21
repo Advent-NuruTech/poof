@@ -2,10 +2,15 @@ import "server-only";
 
 import { createHash, createHmac, randomBytes, timingSafeEqual } from "node:crypto";
 import { Resend } from "resend";
+import {
+  createDonationQuote,
+  DONATION_CURRENCY,
+  PAYSTACK_CHARGE_CURRENCY,
+} from "@/lib/donation-quote";
 import { FieldValue, getMailDb, Timestamp } from "@/lib/mailing-server";
+import { DonationError } from "@/lib/paystack-errors";
 
 const PAYSTACK_API = "https://api.paystack.co";
-const DEFAULT_CURRENCIES = "USD,KES";
 const RECEIPT_LEASE_MS = 5 * 60 * 1000;
 
 export type DonationStatus = "pending" | "success" | "failed";
@@ -35,8 +40,8 @@ type PaystackResponse<T> = {
 type DonationInput = {
   name: string;
   email: string;
-  amountSubunit: number;
-  currency: string;
+  originalAmountSubunit: number;
+  originalCurrency: typeof DONATION_CURRENCY;
 };
 
 type StoredDonation = {
@@ -44,29 +49,24 @@ type StoredDonation = {
   email?: string;
   amountSubunit?: number;
   currency?: string;
+  originalAmountSubunit?: number;
+  originalCurrency?: string;
+  conversionRate?: number;
+  chargeAmountSubunit?: number;
+  chargeCurrency?: string;
   status?: DonationStatus;
   receiptStatus?: string;
   receiptLeaseUntil?: Timestamp;
 };
 
-export class DonationError extends Error {
-  constructor(message: string, public readonly statusCode = 400) {
-    super(message);
-    this.name = "DonationError";
-  }
-}
+export { DonationError } from "@/lib/paystack-errors";
 
 export function paystackCurrencies() {
-  const configured = process.env.PAYSTACK_CURRENCIES || process.env.PAYSTACK_CURRENCY || DEFAULT_CURRENCIES;
-  const currencies = [...new Set(configured.split(",").map((value) => value.trim().toUpperCase()).filter(Boolean))];
-  if (!currencies.length || currencies.some((currency) => !/^[A-Z]{3}$/.test(currency))) {
-    throw new Error("PAYSTACK_CURRENCIES must contain comma-separated three-letter currency codes.");
-  }
-  return currencies;
+  return [PAYSTACK_CHARGE_CURRENCY];
 }
 
 export function paystackCurrency() {
-  return paystackCurrencies()[0];
+  return PAYSTACK_CHARGE_CURRENCY;
 }
 
 function amountToSubunit(value: string, label: string) {
@@ -88,7 +88,7 @@ export function parseDonationInput(value: unknown): DonationInput {
   const name = typeof input.name === "string" ? input.name.trim().replace(/\s+/g, " ") : "";
   const email = typeof input.email === "string" ? input.email.trim().toLowerCase() : "";
   const amount = typeof input.amount === "string" ? input.amount : "";
-  const requestedCurrency = typeof input.currency === "string" ? input.currency.trim().toUpperCase() : "";
+  const requestedCurrency = typeof input.currency === "string" ? input.currency.trim().toUpperCase() : DONATION_CURRENCY;
 
   if (name.length < 2 || name.length > 120) throw new DonationError("Enter your full name (2–120 characters).");
   if (email.length > 254 || !/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email)) {
@@ -97,11 +97,9 @@ export function parseDonationInput(value: unknown): DonationInput {
 
   const amountSubunit = amountToSubunit(amount, "Donation amount");
   if (amountSubunit <= 0) throw new DonationError("Donation amount must be greater than zero.");
-  const currencies = paystackCurrencies();
-  const currency = requestedCurrency || currencies[0];
-  if (!currencies.includes(currency)) throw new DonationError("Choose a supported donation currency.");
+  if (requestedCurrency !== DONATION_CURRENCY) throw new DonationError("Donations must be entered in USD.");
 
-  return { name, email, amountSubunit, currency };
+  return { name, email, originalAmountSubunit: amountSubunit, originalCurrency: DONATION_CURRENCY };
 }
 
 function paystackSecret() {
@@ -184,6 +182,7 @@ export function hasValidPaystackSignature(rawBody: string, signature: string | n
 }
 
 export async function initializeDonation(request: Request, input: DonationInput) {
+  const quote = await createDonationQuote(input.originalAmountSubunit);
   const db = getMailDb();
   const reference = `DON-${Date.now().toString(36)}-${randomBytes(12).toString("hex")}`;
   const donation = db.collection("donations").doc(reference);
@@ -191,8 +190,18 @@ export async function initializeDonation(request: Request, input: DonationInput)
     reference,
     name: input.name,
     email: input.email,
-    amountSubunit: input.amountSubunit,
-    currency: input.currency,
+    originalAmountSubunit: quote.originalAmountSubunit,
+    originalCurrency: quote.originalCurrency,
+    conversionRate: quote.conversionRate,
+    chargeAmountSubunit: quote.chargeAmountSubunit,
+    chargeCurrency: quote.chargeCurrency,
+    rateDate: quote.rateDate,
+    rateSource: quote.rateSource,
+    quotedAt: Timestamp.fromDate(new Date(quote.quotedAt)),
+    quote,
+    // These compatibility fields always describe the real Paystack charge.
+    amountSubunit: quote.chargeAmountSubunit,
+    currency: quote.chargeCurrency,
     status: "pending",
     providerStatus: "initializing",
     receiptStatus: "not_sent",
@@ -208,8 +217,8 @@ export async function initializeDonation(request: Request, input: DonationInput)
       method: "POST",
       body: JSON.stringify({
         email: input.email,
-        amount: String(input.amountSubunit),
-        currency: input.currency,
+        amount: String(quote.chargeAmountSubunit),
+        currency: PAYSTACK_CHARGE_CURRENCY,
         reference,
         callback_url: `${baseUrl}/donate/complete`,
         // Card remains the universal fallback. Paystack only renders either
@@ -218,6 +227,11 @@ export async function initializeDonation(request: Request, input: DonationInput)
         metadata: JSON.stringify({
           donation_reference: reference,
           donor_name: input.name,
+          original_amount_subunit: quote.originalAmountSubunit,
+          original_currency: quote.originalCurrency,
+          conversion_rate: quote.conversionRate,
+          charge_amount_subunit: quote.chargeAmountSubunit,
+          charge_currency: quote.chargeCurrency,
           cancel_action: `${baseUrl}/donate?payment=cancelled`,
         }),
       }),
@@ -232,7 +246,7 @@ export async function initializeDonation(request: Request, input: DonationInput)
       initializedAt: FieldValue.serverTimestamp(),
       updatedAt: FieldValue.serverTimestamp(),
     });
-    return { authorizationUrl, reference };
+    return { authorizationUrl, reference, quote };
   } catch (reason) {
     console.error("Paystack donation initialization failed", { reference, error: reason });
     await donation.update({
@@ -281,8 +295,8 @@ async function applyVerifiedTransaction(transaction: PaystackTransaction, source
     if (!snapshot.exists) throw new DonationError("This donation reference was not found.", 404);
     const donation = snapshot.data() as StoredDonation;
     const providerStatus = transaction.status ?? "unknown";
-    const expectedAmount = Number(donation.amountSubunit);
-    const expectedCurrency = String(donation.currency ?? "").toUpperCase();
+    const expectedAmount = Number(donation.chargeAmountSubunit ?? donation.amountSubunit);
+    const expectedCurrency = String(donation.chargeCurrency ?? donation.currency ?? "").toUpperCase();
     const expectedEmail = String(donation.email ?? "");
     const receivedAmount = Number(transaction.amount);
     const receivedCurrency = String(transaction.currency ?? "").toUpperCase();
@@ -332,6 +346,11 @@ async function applyVerifiedTransaction(transaction: PaystackTransaction, source
       email: expectedEmail,
       amountSubunit: expectedAmount,
       currency: expectedCurrency,
+      originalAmountSubunit: Number(donation.originalAmountSubunit ?? expectedAmount),
+      originalCurrency: String(donation.originalCurrency ?? expectedCurrency).toUpperCase(),
+      conversionRate: typeof donation.conversionRate === "number" ? donation.conversionRate : null,
+      chargeAmountSubunit: expectedAmount,
+      chargeCurrency: expectedCurrency,
       providerStatus,
       failureMessage: nextStatus === "failed" ? (matches ? failureMessage(transaction) : "Payment verification did not match this donation.") : "",
     };
@@ -382,8 +401,11 @@ export async function sendDonationReceipt(reference: string) {
     return {
       name: String(donation.name ?? "Donor"),
       email: String(donation.email ?? ""),
-      amountSubunit: Number(donation.amountSubunit ?? 0),
-      currency: String(donation.currency ?? paystackCurrency()),
+      originalAmountSubunit: Number(donation.originalAmountSubunit ?? donation.amountSubunit ?? 0),
+      originalCurrency: String(donation.originalCurrency ?? donation.currency ?? paystackCurrency()),
+      conversionRate: typeof donation.conversionRate === "number" ? donation.conversionRate : null,
+      chargeAmountSubunit: Number(donation.chargeAmountSubunit ?? donation.amountSubunit ?? 0),
+      chargeCurrency: String(donation.chargeCurrency ?? donation.currency ?? paystackCurrency()),
     };
   });
   if (!claimed) return;
@@ -392,7 +414,15 @@ export async function sendDonationReceipt(reference: string) {
     const apiKey = process.env.RESEND_API_KEY;
     const from = process.env.RESEND_FROM_EMAIL;
     if (!apiKey || !from) throw new Error("RESEND_API_KEY and RESEND_FROM_EMAIL must be configured.");
-    const amount = formatMoney(claimed.amountSubunit, claimed.currency);
+    const originalAmount = formatMoney(claimed.originalAmountSubunit, claimed.originalCurrency);
+    const chargeAmount = formatMoney(claimed.chargeAmountSubunit, claimed.chargeCurrency);
+    const converted = claimed.originalCurrency !== claimed.chargeCurrency;
+    const conversionRow = converted
+      ? `<tr><td style="padding:16px;border-top:1px solid #e2e5e1;color:#69736e">Amount paid</td><td style="padding:16px;border-top:1px solid #e2e5e1;text-align:right;font-weight:700">${escapeHtml(chargeAmount)}</td></tr>${claimed.conversionRate ? `<tr><td style="padding:16px;border-top:1px solid #e2e5e1;color:#69736e">Exchange rate</td><td style="padding:16px;border-top:1px solid #e2e5e1;text-align:right">1 USD = ${escapeHtml(formatRate(claimed.conversionRate))} KES</td></tr>` : ""}`
+      : "";
+    const conversionText = converted
+      ? `\nAmount paid: ${chargeAmount}${claimed.conversionRate ? `\nExchange rate: 1 USD = ${formatRate(claimed.conversionRate)} KES` : ""}`
+      : "";
     const siteUrl = (process.env.NEXT_PUBLIC_SITE_URL || "https://faithofthepioneers.org").replace(/\/+$/, "");
     const resend = new Resend(apiKey);
     const safeName = escapeHtml(claimed.name);
@@ -400,9 +430,9 @@ export async function sendDonationReceipt(reference: string) {
     const { error } = await resend.emails.send({
       from,
       to: claimed.email,
-      subject: `Donation receipt — ${amount}`,
-      html: `<!doctype html><html><body style="margin:0;background:#f3f4f1;font-family:Arial,Helvetica,sans-serif;color:#172126"><table role="presentation" width="100%" cellspacing="0" cellpadding="0" style="padding:28px 14px"><tr><td align="center"><table role="presentation" width="620" cellspacing="0" cellpadding="0" style="width:100%;max-width:620px;background:#fff;border:1px solid #dfe3dd;border-radius:14px;overflow:hidden"><tr><td style="padding:28px;background:#082d63;color:#fff;text-align:center"><div style="font-size:12px;letter-spacing:3px;font-weight:700;color:#f3d875">FAITH OF THE PIONEERS</div><h1 style="margin:13px 0 0;font-size:26px">Donation receipt</h1></td></tr><tr><td style="padding:34px"><p style="margin:0 0 18px;font-size:17px;line-height:1.6">Dear ${safeName},</p><p style="margin:0 0 24px;color:#4f5a55;line-height:1.7">Thank you for supporting Faith of the Pioneers. Your payment was securely confirmed by Paystack.</p><table role="presentation" width="100%" cellspacing="0" cellpadding="0" style="border:1px solid #e2e5e1;border-radius:10px"><tr><td style="padding:16px;color:#69736e">Amount</td><td style="padding:16px;text-align:right;font-size:20px;font-weight:700">${escapeHtml(amount)}</td></tr><tr><td style="padding:16px;border-top:1px solid #e2e5e1;color:#69736e">Reference</td><td style="padding:16px;border-top:1px solid #e2e5e1;text-align:right;font-family:monospace">${safeReference}</td></tr></table><p style="margin:24px 0 0;color:#748079;font-size:12px;line-height:1.6">Keep this email for your records. This acknowledgement is not a tax receipt unless applicable law and the ministry's legal status provide otherwise.</p></td></tr><tr><td style="padding:20px;background:#f7f8f6;text-align:center;font-size:12px"><a href="${escapeHtml(siteUrl)}" style="color:#263e69">faithofthepioneers.org</a></td></tr></table></td></tr></table></body></html>`,
-      text: `Dear ${claimed.name},\n\nThank you for supporting Faith of the Pioneers.\n\nAmount: ${amount}\nReference: ${reference}\n\nYour payment was securely confirmed by Paystack. Keep this email for your records. This acknowledgement is not a tax receipt unless applicable law and the ministry's legal status provide otherwise.\n\n${siteUrl}`,
+      subject: `Donation receipt — ${originalAmount}`,
+      html: `<!doctype html><html><body style="margin:0;background:#f3f4f1;font-family:Arial,Helvetica,sans-serif;color:#172126"><table role="presentation" width="100%" cellspacing="0" cellpadding="0" style="padding:28px 14px"><tr><td align="center"><table role="presentation" width="620" cellspacing="0" cellpadding="0" style="width:100%;max-width:620px;background:#fff;border:1px solid #dfe3dd;border-radius:14px;overflow:hidden"><tr><td style="padding:28px;background:#082d63;color:#fff;text-align:center"><div style="font-size:12px;letter-spacing:3px;font-weight:700;color:#f3d875">FAITH OF THE PIONEERS</div><h1 style="margin:13px 0 0;font-size:26px">Donation receipt</h1></td></tr><tr><td style="padding:34px"><p style="margin:0 0 18px;font-size:17px;line-height:1.6">Dear ${safeName},</p><p style="margin:0 0 24px;color:#4f5a55;line-height:1.7">Thank you for supporting Faith of the Pioneers. Your payment was securely confirmed by Paystack.</p><table role="presentation" width="100%" cellspacing="0" cellpadding="0" style="border:1px solid #e2e5e1;border-radius:10px"><tr><td style="padding:16px;color:#69736e">Donation amount</td><td style="padding:16px;text-align:right;font-size:20px;font-weight:700">${escapeHtml(originalAmount)}</td></tr>${conversionRow}<tr><td style="padding:16px;border-top:1px solid #e2e5e1;color:#69736e">Reference</td><td style="padding:16px;border-top:1px solid #e2e5e1;text-align:right;font-family:monospace">${safeReference}</td></tr></table><p style="margin:24px 0 0;color:#748079;font-size:12px;line-height:1.6">Keep this email for your records. This acknowledgement is not a tax receipt unless applicable law and the ministry's legal status provide otherwise.</p></td></tr><tr><td style="padding:20px;background:#f7f8f6;text-align:center;font-size:12px"><a href="${escapeHtml(siteUrl)}" style="color:#263e69">faithofthepioneers.org</a></td></tr></table></td></tr></table></body></html>`,
+      text: `Dear ${claimed.name},\n\nThank you for supporting Faith of the Pioneers.\n\nDonation amount: ${originalAmount}${conversionText}\nReference: ${reference}\n\nYour payment was securely confirmed by Paystack. Keep this email for your records. This acknowledgement is not a tax receipt unless applicable law and the ministry's legal status provide otherwise.\n\n${siteUrl}`,
     }, {
       idempotencyKey: createHash("sha256").update(`donation-receipt:${reference}`).digest("hex"),
     });
@@ -427,6 +457,10 @@ export async function sendDonationReceipt(reference: string) {
 
 export function formatMoney(amountSubunit: number, currency: string) {
   return new Intl.NumberFormat("en", { style: "currency", currency }).format(amountSubunit / 100);
+}
+
+function formatRate(rate: number) {
+  return new Intl.NumberFormat("en", { maximumFractionDigits: 6 }).format(rate);
 }
 
 function escapeHtml(value: string) {

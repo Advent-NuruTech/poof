@@ -11,6 +11,11 @@ type DonationResult = {
   email?: string;
   amountSubunit?: number;
   currency?: string;
+  originalAmountSubunit?: number;
+  originalCurrency?: string;
+  conversionRate?: number | null;
+  chargeAmountSubunit?: number;
+  chargeCurrency?: string;
   failureMessage?: string;
   error?: string;
 };
@@ -64,7 +69,8 @@ export default function DonationComplete() {
         <span className="donation-result-label">{status === "success" ? "PAYMENT VERIFIED" : status === "failed" ? "PAYMENT UNSUCCESSFUL" : "PAYMENT PENDING"}</span>
         <h1>{title}</h1>
         {status === "success" ? <>
-          <p>Thank you{result?.name ? `, ${result.name}` : ""}. Your gift of <strong>{money(result?.amountSubunit, result?.currency)}</strong> has been received.</p>
+          <p>Thank you{result?.name ? `, ${result.name}` : ""}. Your gift of <strong>{money(result?.originalAmountSubunit ?? result?.amountSubunit, result?.originalCurrency ?? result?.currency)}</strong> has been received.</p>
+          {result?.chargeCurrency && result.chargeCurrency !== result.originalCurrency && <p className="donation-result-note">Paystack charged <strong>{money(result.chargeAmountSubunit, result.chargeCurrency)}</strong>{result.conversionRate ? ` at 1 USD = ${result.conversionRate.toLocaleString(undefined, { maximumFractionDigits: 6 })} KES` : ""}.</p>}
           <p className="donation-result-note">A receipt is being sent to <strong>{result?.email}</strong>.</p>
         </> : status === "failed" ? <p>{result?.failureMessage || "Paystack did not complete this transaction. You have not been recorded as a successful donor."}</p> : <p>Paystack has not finalized this transaction. If you completed payment, wait a moment and check again.</p>}
         <div className="donation-result-reference"><span>Reference</span><code>{reference}</code></div>
