@@ -313,7 +313,7 @@ export async function deliverCampaign(
     const results = await Promise.all(group.map(async (recipient) => {
       const unsubscribe = campaign.kind === "newsletter" ? unsubscribeLink(recipient.id, baseUrl) : "";
       const oneClickUnsubscribe = campaign.kind === "newsletter" ? oneClickUnsubscribeLink(recipient.id, baseUrl) : "";
-      const content = renderCampaign(campaign, unsubscribe, `${baseUrl.replace(/\/$/, "")}/images/logo.jpeg`, {
+      const content = renderCampaign(campaign, unsubscribe, `${baseUrl.replace(/\/$/, "")}/images/foplogo.png`, {
         ...options,
         recipientName: recipient.name,
       });

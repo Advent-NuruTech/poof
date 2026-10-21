@@ -316,7 +316,7 @@ export default function PublicHeader({
             href="/"
             aria-label="Faith of the Pioneers home"
           >
-            <img src="/images/logo.jpeg" alt="" />
+            <img src="/images/foplogo.png" alt="" />
             <span className="zm-brand-text">
               <span>Faith</span>
               <span>of the Pioneers</span>
