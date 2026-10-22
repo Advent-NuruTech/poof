@@ -183,7 +183,6 @@ export default function HomeScreen() {
       <div className="latest-about-layout">
       <section className="home-section latest-section" id="latest"><SectionTitle icon="list" title={search ? "Search results" : "Latest Videos"} onViewAll={() => setShowAllVideos(!showAllVideos)}/>
         {!videosLoaded ? <VideoListSkeleton/> : visibleVideos.length ? <div className="latest-list">{visibleVideos.map((video) => <article className="latest-card" key={video.id}><button className="video-thumb" onClick={() => setWatching(video)} aria-label={`Watch ${video.title}`}><img src={video.thumbnail} alt=""/><span className="duration-tag">{formatDuration(video.duration)}</span><span className="thumb-play"><Icon name="play" size={17}/></span></button><button className="video-copy" onClick={() => setWatching(video)}><strong>{video.website?.displayTitle || video.title}</strong><time>{formatDate(video.publishedAt)}</time><span className="video-description">{video.description?.trim() || video.channelTitle}</span></button><button className="more-button" aria-label={`Share ${video.title}`} title="Share video" onClick={() => void shareVideo(video)}><Icon name="menu"/></button></article>)}</div> : <div className="empty-home"><span className="empty-video-icon"><Icon name="play" size={19}/></span><div><strong>{search ? "No videos found" : "Videos will appear here soon"}</strong><p>{search ? "Try another title, topic, or channel." : "New videos and messages will be added to the library as they become available."}</p></div></div>}</section>
-      <Testimonies home/>
         <aside className="about-card" aria-labelledby="about-card-title">
           <AboutMeetingCarousel meetings={meetings} loaded={meetingsLoaded} now={now}/>
           <div className="about-card-copy">
@@ -195,13 +194,14 @@ export default function HomeScreen() {
           </div>
         </aside>
       </div>
+      <Testimonies home/>
       {(!meetingsLoaded || meetingGroupsShown.length > 0) && <section className="home-section meetings-section" id="meetings"><SectionTitle icon="calendar" title="Meetings" href="/meetings"/>{!meetingsLoaded ? <MeetingListSkeleton/> : <div className="meeting-groups">{meetingGroupsShown.map((group) => <div className="meeting-group" key={group.status}>
         <h3 className="meeting-group-title">{group.label}<span>{group.meetings.length}</span></h3>
         <div className="zoom-meeting-list">{group.meetings.map((meeting) => <MeetingCard key={meeting.id} meeting={meeting} now={now}/>)}</div>
       </div>)}</div>}</section>}
       <section className="home-section" id="featured-playlists"><SectionTitle icon="list" title="Featured Playlists" href="/playlists"/>{!playlistsLoaded ? <CardGridSkeleton/> : topPlaylists.length ? <div className="playlist-strip">{topPlaylists.map((playlist) => <Link className="playlist-card" href={`/playlists/${encodeURIComponent(playlist.id)}`} key={playlist.id}><span className="playlist-art"><img src={playlist.thumbnail} alt=""/><span>{playlist.itemCount} videos</span></span><strong>{playlist.title}</strong><small>{playlist.channelTitle}</small></Link>)}</div> : <div className="playlist-empty"><Icon name="list" size={20}/><span>Playlists will appear here as they become available.</span></div>}</section>
       {[{ label: "2 years ago", items: twoYearVideos }, { label: "4 years ago", items: fourYearVideos }, { label: "Most Viewed", items: mostViewedVideos }].map(({ label, items }, archiveIndex) => ((archiveIndex < 2 && (!currentYear || (videosLoaded && !items.length))) || (archiveIndex > 1 && videosLoaded && !items.length)) ? null : <section className="home-section archive-section" key={label}>
-        <div className="archive-heading"><h2>{label}</h2></div>
+        <div className="home-section-title"><h2>{label}</h2></div>
         {!videosLoaded || (archiveIndex < 2 && !currentYear) ? <VideoListSkeleton/> : items.length ? <div className="archive-list">{archiveRows(items, 3).map((row, rowIndex) => <div className={`archive-row${rowIndex % 2 ? " archive-row-reverse" : ""}`} key={`${label}-${rowIndex}`}>
           {row.map((video, itemIndex) => {
             const isFeature = itemIndex === 0;
