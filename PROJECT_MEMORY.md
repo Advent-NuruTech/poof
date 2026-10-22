@@ -1,4 +1,10 @@
 # Project Memory
+## 2026-10-22: Move and share testimonies
+
+- **Major change:** Moved the homepage testimony shelf immediately after Latest Videos, including on mobile, while keeping the About card beside videos on desktop. Added a Share action for each testimony on the homepage and public testimonies page, using the existing native-share and clipboard fallback with a link to the individual story.
+- **Build/runtime errors:** None encountered.
+- **Verification:** TypeScript, focused ESLint (zero errors; existing image and unused-import warnings), and `git diff --check` passed. Native sharing was not exercised in a browser.
+
 ## 2026-10-22: Repair testimony permissions
 
 - **Reported error and diagnosis:** Publishing returned ?Missing or insufficient permissions.? A live anonymous Firestore list request to `testimonies` returned HTTP 403, although the local rules grant public reads; the local testimony rules have not been applied to the live database (or the live rules differ). The previous implementation explicitly recorded that deployment was still required.
