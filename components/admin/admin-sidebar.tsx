@@ -12,6 +12,7 @@ const sections = [
   { href: "/poof/admin", label: "Dashboard", icon: "⌂" },
   { href: "/poof/admin/channels", label: "Channels", icon: "▶" },
   { href: "/poof/admin/meetings", label: "Meetings", icon: "◷" },
+  { href: "/poof/admin/testimonies", label: "Testimonies", icon: "?" },
   { href: "/poof/admin/library", label: "Library", icon: "▤" },
   { href: "/poof/admin/mailing", label: "Mailing", icon: "✉" },
   { href: "/poof/admin/donations", label: "Donations", icon: "$" },

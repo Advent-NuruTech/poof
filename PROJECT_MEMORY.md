@@ -1,4 +1,10 @@
 # Project Memory
+## 2026-10-22: Add community testimonies
+
+- **Major changes:** Added administrator create, edit, and delete for testimonies, using the shared rich-text editor and authenticated Cloudinary image upload. Each testimony has a title, author, optional separate profile image, and images before, inline in, or after the content. The save form limits story images to 15, excluding the profile image. Added public Firestore read/admin write rules, a newest-three homepage shelf, and a full testimonies page. Missing profile images use the author's initial; broken story images are hidden.
+- **Build/runtime errors:** No application runtime errors encountered. Focused lint initially reported a synchronous state-update effect; loading now updates state in the asynchronous Firestore callback and focused lint passes with image optimization warnings only.
+- **Verification and deployment:** TypeScript and focused ESLint passed; ESLint reported five image optimization warnings. The webpack build compiled and generated all 61 pages, but was stopped while collecting build traces, so it did not complete. Live uploads and Firestore writes were not exercised. Deploy the updated Firestore rules and application before using the feature in production.
+
 ## 2026-10-21: Polish donation payment badges
 
 - **Major change:** Centered the donation form heading and added colored card, Apple, and Google icons to the payment method badges, with wrapping for narrow screens.

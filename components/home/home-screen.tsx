@@ -1,4 +1,6 @@
 "use client";
+
+import Testimonies from "@/components/home/testimonies";
 import { useEffect, useState } from "react";
 import type { ReactNode } from "react";
 import Link from "next/link";
@@ -212,6 +214,7 @@ export default function HomeScreen() {
       </section>)}
       <section className="home-section studies-section" id="studies"><SectionTitle icon="list" title="Latest Studies" href="/library"/>{!studiesLoaded ? <CardGridSkeleton/> : latestStudies.length ? <div className="study-grid">{latestStudies.map((study) => <Link className="study-card" href={`/library/${encodeURIComponent(study.id)}`} key={study.id}><span className="study-card-preview"><span className="study-kind">{studyKindLabel(study.kind)}</span>{study.kind === "pdf" && study.fileUrl ? (studyPreviewUrl(study) ? <img src={studyPreviewUrl(study)} alt={`${study.title}, page 1`} loading="lazy"/> : <span className="study-note-preview">PDF document</span>) : study.kind === "doc" && study.fileUrl ? <iframe src={`https://view.officeapps.live.com/op/embed.aspx?src=${encodeURIComponent(study.fileUrl)}`} title={`${study.title} first page`} tabIndex={-1}/> : <span className="study-note-preview" dangerouslySetInnerHTML={{ __html: study.contentHtml ?? "" }}/>}<span className="study-card-arrow" aria-hidden="true">&#8594;</span></span><span className="study-card-body"><strong>{study.title}</strong><small>{study.description?.trim() || (study.kind === "note" ? "Read this study note online" : study.fileName || study.categoryName || "Study resource")}</small></span></Link>)}</div> : <div className="playlist-empty"><Icon name="list" size={20}/><span>Study resources will appear here as they are published.</span></div>}</section>
       <section className="home-section channels-section" id="channels"><SectionTitle icon="grid" title="Our Channels" href="#channels"/>{!channelsLoaded ? <CardGridSkeleton/> : channels.length ? <div className="channel-strip">{channels.map((channel) => <a className="public-channel" href={channel.customUrl ? `https://www.youtube.com/${channel.customUrl}` : `https://www.youtube.com/channel/${channel.id}`} target="_blank" rel="noreferrer" key={channel.id}><ChannelAvatar channel={channel}/><span><strong>{channel.title}</strong><small>Explore channel</small></span><Icon name="chevron" size={16}/></a>)}</div> : <p className="channel-empty">A growing collection of messages, ministries, and music.</p>}</section>
+    <Testimonies home/>
     <NewsletterSignup />
     <SiteFooter />
     {shareNotice && <div className="share-notice" role="status">{shareNotice}</div>}
