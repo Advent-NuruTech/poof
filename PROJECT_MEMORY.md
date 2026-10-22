@@ -1,4 +1,9 @@
 # Project Memory
+## 2026-10-22: Repair testimony permissions
+
+- **Reported error and diagnosis:** Publishing returned ?Missing or insufficient permissions.? A live anonymous Firestore list request to `testimonies` returned HTTP 403, although the local rules grant public reads; the local testimony rules have not been applied to the live database (or the live rules differ). The previous implementation explicitly recorded that deployment was still required.
+- **Change:** Simplified testimony writes to the same shared `isAdmin()` authorization used by the other admin features, with public reads. The editor continues to validate the content and image count. Firebase CLI compiled and deployed the rules to the live `poof-40b24` database as ruleset `5497cad8-320d-4aaf-bab7-d94b2b7c2866`. An anonymous public testimony read changed from HTTP 403 to HTTP 200 after deployment. A live administrator write was not exercised.
+
 ## 2026-10-22: Add community testimonies
 
 - **Major changes:** Added administrator create, edit, and delete for testimonies, using the shared rich-text editor and authenticated Cloudinary image upload. Each testimony has a title, author, optional separate profile image, and images before, inline in, or after the content. The save form limits story images to 15, excluding the profile image. Added public Firestore read/admin write rules, a newest-three homepage shelf, and a full testimonies page. Missing profile images use the author's initial; broken story images are hidden.
