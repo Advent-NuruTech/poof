@@ -1,4 +1,16 @@
 # Project Memory
+## 2026-10-22: Expand the shared writing area
+
+- **Major change:** Increased the minimum writing area across all shared rich-text editors to 65% of viewport height on desktop and 70% on mobile, using the full available width and reduced mobile padding. Long content grows with the page so the floating toolbar remains accessible while writing.
+- **Build/runtime errors:** None encountered.
+- **Verification:** `git diff --check` passed. Browser interaction was not exercised.
+
+## 2026-10-22: Keep editor formatting controls accessible
+
+- **Major change:** Wrapped the shared rich-text editor and toolbar in a common region so the toolbar remains sticky throughout the writing area in testimony, library, meeting, and mailing editors. On screens with the mobile admin menu, the toolbar sticks below that menu; on desktop it sticks near the top of the viewport.
+- **Build/runtime errors:** None encountered.
+- **Verification:** TypeScript and focused ESLint passed (one existing image optimization warning); `git diff --check` passed. Browser interaction was not exercised.
+
 ## 2026-10-22: Remove inline testimony images
 
 - **Major change:** Added an opt-in inline-image preview and individual Remove buttons to the shared rich-text editor, enabled for testimony editing. The editor removes the selected image from its content and updates the form; the administrator saves the testimony to publish that change. Guidance appears below the editor.

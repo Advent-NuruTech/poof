@@ -132,7 +132,7 @@ const RichTextEditor = forwardRef<HTMLDivElement, RichTextEditorProps>(function 
     }
   }
 
-  return <>
+  return <div className="rich-editor-region">
     <div className="rich-toolbar" role="toolbar" aria-label={`${label} formatting`}>
       <button type="button" title="Bold" aria-label="Bold" onMouseDown={(event) => event.preventDefault()} onClick={() => runCommand("bold")}><b>B</b></button>
       <button type="button" title="Italic" aria-label="Italic" onMouseDown={(event) => event.preventDefault()} onClick={() => runCommand("italic")}><i>I</i></button>
@@ -178,7 +178,7 @@ const RichTextEditor = forwardRef<HTMLDivElement, RichTextEditorProps>(function 
         <button type="button" aria-label={`Remove inline image ${index + 1}`} onClick={() => removeInlineImage(index)}>Remove</button>
       </div>)}</div>}
     </div>}
-  </>;
+  </div>;
 });
 
 export default RichTextEditor;
