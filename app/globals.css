@@ -400,7 +400,13 @@ body{font-size:16px}.home-section-title h2{font-size:25px}.latest-card .video-co
 .rich-editor-region .rich-inline-images{margin-top:10px}
 @media(max-width:900px){.rich-editor-region .rich-toolbar{top:64px}.rich-editor-region .rich-editor{min-height:70vh;padding:10px}}
 
-/* Consistent centered headings for all homepage content sections. */
-.home-content .home-section-title{display:flex;flex-direction:column;justify-content:center;align-items:center;gap:8px;text-align:center;margin-bottom:20px}
-.home-content .home-section-title h2{justify-content:center;font-size:clamp(21px,2.4vw,25px);line-height:1.2}
-.home-content .home-section-title>a,.home-content .home-section-title>button{justify-content:center;color:var(--red);font-size:13px;font-weight:700}
+/* An editorial heading treatment shared by every homepage shelf. */
+.home-content .home-section-title{display:flex;flex-direction:column;align-items:center;gap:12px;margin:0 0 24px;padding:8px 0 0;text-align:center}
+.home-content .home-section-title::before{content:"";width:32px;height:3px;border-radius:2px;background:var(--red)}
+.home-content .home-section-title h2{display:flex;align-items:center;justify-content:center;gap:clamp(12px,2vw,24px);width:100%;margin:0;color:#172126;font-size:clamp(23px,2.6vw,30px);font-weight:700;letter-spacing:-.035em;line-height:1.2}
+.home-content .home-section-title h2::before,.home-content .home-section-title h2::after{content:"";flex:1 1 0;max-width:100px;height:1px;background:#d9dcd6}
+.home-content .home-section-title h2 svg{display:none}
+.home-content .home-section-title>a,.home-content .home-section-title>button{display:inline-flex;align-items:center;justify-content:center;gap:4px;min-height:36px;padding:0 13px;border:1px solid #e2e3dd;border-radius:999px;background:transparent;color:#7d2732;font:inherit;font-size:12px;font-weight:700;line-height:1.2;white-space:normal;transition:background .18s ease,border-color .18s ease,color .18s ease}
+.home-content .home-section-title>a:hover,.home-content .home-section-title>button:hover{border-color:#c9a5a9;background:#faf2f2;color:#a71c2e}
+.home-content .home-section-title>a:focus-visible,.home-content .home-section-title>button:focus-visible{outline:2px solid var(--red);outline-offset:3px}
+@media(max-width:760px){.home-content .home-section-title{gap:10px;margin-bottom:20px}.home-content .home-section-title h2{font-size:clamp(21px,5.5vw,26px);gap:12px}.home-content .home-section-title h2::before,.home-content .home-section-title h2::after{max-width:55px}}

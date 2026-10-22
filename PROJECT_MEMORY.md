@@ -1,4 +1,10 @@
 # Project Memory
+## 2026-10-22: Refine homepage section titles
+
+- **Major change:** Restyled the shared homepage section headings with consistent typography, a red accent, subtle divider lines, and matching action links. The layout adapts to mobile and includes visible keyboard focus states.
+- **Build/runtime errors:** None encountered; this was a CSS-only change.
+- **Verification:** `git diff --check` passed. Browser rendering was not exercised.
+
 ## 2026-10-22: Expand the shared writing area
 
 - **Major change:** Increased the minimum writing area across all shared rich-text editors to 65% of viewport height on desktop and 70% on mobile, using the full available width and reduced mobile padding. Long content grows with the page so the floating toolbar remains accessible while writing.
