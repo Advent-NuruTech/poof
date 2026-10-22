@@ -1,4 +1,10 @@
 # Project Memory
+## 2026-10-22: Remove inline testimony images
+
+- **Major change:** Added an opt-in inline-image preview and individual Remove buttons to the shared rich-text editor, enabled for testimony editing. The editor removes the selected image from its content and updates the form; the administrator saves the testimony to publish that change. Guidance appears below the editor.
+- **Build/runtime errors:** None encountered.
+- **Verification:** TypeScript, focused ESLint (zero errors; image optimization warnings), and `git diff --check` passed. Browser interaction and live publishing were not exercised.
+
 ## 2026-10-22: Move and share testimonies
 
 - **Major change:** Moved the homepage testimony shelf immediately after Latest Videos, including on mobile, while keeping the About card beside videos on desktop. Added a Share action for each testimony on the homepage and public testimonies page, using the existing native-share and clipboard fallback with a link to the individual story.

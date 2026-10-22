@@ -390,3 +390,5 @@ body{font-size:16px}.home-section-title h2{font-size:25px}.latest-card .video-co
 /* Keep testimonies directly after latest videos on both desktop and mobile. */
 @media(min-width:761px){.latest-about-layout>.about-card{grid-column:2;grid-row:1}.latest-about-layout>.testimonies-home{grid-column:1 / -1}}
 .testimony-share{display:inline-flex;align-items:center;gap:6px;border:1px solid #ddd8d0;background:#fff;color:#343934;padding:8px 11px;font:inherit;font-size:13px;font-weight:650;cursor:pointer}.testimony-share:hover{background:#f2eee8}.testimony-share svg{width:16px;height:16px}
+
+.rich-inline-images p{margin:0;color:#68706b;font-size:12px;line-height:1.5}.rich-inline-image-list{display:flex;flex-wrap:wrap;gap:12px;margin-top:10px}.rich-inline-image-list>div{display:grid;gap:6px;width:100px}.rich-inline-image-list img{width:100px;height:80px;object-fit:cover;border-radius:6px}.rich-inline-image-list button{border:1px solid #dfe2df;border-radius:6px;background:#fff;padding:7px;font:inherit;font-size:12px;cursor:pointer}.rich-inline-image-list button:hover{background:#f7f8f6}

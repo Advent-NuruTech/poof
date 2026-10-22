@@ -9,13 +9,14 @@ type RichTextEditorProps = {
   value?: string;
   maxTextLength?: number;
   allowImages?: boolean;
+  manageInlineImages?: boolean;
   onUploadImage?: (file: File) => Promise<string>;
   onChange?: (value: string) => void;
   className?: string;
 };
 
 const RichTextEditor = forwardRef<HTMLDivElement, RichTextEditorProps>(function RichTextEditor(
-  { label, placeholder, value, maxTextLength, allowImages = false, onUploadImage, onChange, className = "" },
+  { label, placeholder, value, maxTextLength, allowImages = false, manageInlineImages = false, onUploadImage, onChange, className = "" },
   forwardedRef,
 ) {
   const editor = useRef<HTMLDivElement>(null);
@@ -55,6 +56,18 @@ const RichTextEditor = forwardRef<HTMLDivElement, RichTextEditorProps>(function 
     }
     onChange?.(safeValue);
   }
+
+  function removeInlineImage(index: number) {
+    const element = editor.current;
+    const image = element?.querySelectorAll("img")[index];
+    if (!element || !image) return;
+    image.remove();
+    savedSelection.current = null;
+    updateContent(element);
+  }
+
+  const inlineImages = manageInlineImages ? [...sanitizeRichText(value ?? "").matchAll(/<img\s+src="([^"]*)"/gi)]
+    .map((match) => match[1].replace(/&amp;/g, "&").replace(/&quot;/g, '"').replace(/&lt;/g, "<").replace(/&gt;/g, ">")) : [];
 
   function pasteFormattedContent(event: React.ClipboardEvent<HTMLDivElement>) {
     event.preventDefault();
@@ -158,6 +171,13 @@ const RichTextEditor = forwardRef<HTMLDivElement, RichTextEditorProps>(function 
       onInput={(event) => updateContent(event.currentTarget)}
       onPaste={pasteFormattedContent}
     />
+    {manageInlineImages && <div className="rich-inline-images">
+      <p>To remove an image from the testimony, select Remove under its preview, then save your changes.</p>
+      {inlineImages.length > 0 && <div className="rich-inline-image-list">{inlineImages.map((src, index) => <div key={`${src}-${index}`}>
+        <img src={src} alt={`Inline image ${index + 1} preview`}/>
+        <button type="button" aria-label={`Remove inline image ${index + 1}`} onClick={() => removeInlineImage(index)}>Remove</button>
+      </div>)}</div>}
+    </div>}
   </>;
 });
 
