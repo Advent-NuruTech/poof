@@ -335,7 +335,7 @@ export default function PlaylistsPage({ playlistId }: { playlistId?: string }) {
   const playlist = playlistId ? visiblePlaylists.find((item) => item.id === playlistId) ?? null : null;
   const detailLoaded = !playlistId || loaded;
   const detailVideosReady = !playlist || (playlistVideos?.playlistId === playlist.id && !playlistVideos.loading);
-  const videos = playlistVideos?.playlistId === playlist?.id ? playlistVideos.videos : [];
+  const videos = playlist && playlistVideos && playlistVideos.playlistId === playlist.id ? playlistVideos.videos : [];
   const videosById = new Map(videos.map((video) => [video.id, video]));
   const revealedIds = revealed.playlistId === playlistId ? revealed.ids : [];
   const availablePlaylistVideoIds = playlist ? playlist.videoIds.filter((id) => videosById.has(id)) : [];
