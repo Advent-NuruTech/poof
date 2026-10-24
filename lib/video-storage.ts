@@ -71,6 +71,15 @@ async function saveBatch(videos: Video[]) {
   }
 }
 
+/** Delete records rather than retaining unavailable YouTube placeholders in D1. */
+async function deleteBatch(ids: Iterable<string>) {
+  const uniqueIds = [...new Set(ids)];
+  for (let offset = 0; offset < uniqueIds.length; offset += 100) {
+    const batch = uniqueIds.slice(offset, offset + 100);
+    await queryD1(`DELETE FROM videos WHERE id IN (${batch.map(() => "?").join(",")})`, batch);
+  }
+}
+
 /** Move a channel's synchronized video records to D1, preserving Firestore editorial fields on first sync. */
 export async function syncVideoRecords(channelId: string, videos: Video[], unavailableIds: string[], idToken: string) {
   const priorRows = decodeRows(await queryD1<StoredVideoRow>(
@@ -89,6 +98,7 @@ export async function syncVideoRecords(channelId: string, videos: Video[], unava
   for (const video of [...legacy, ...priorRows, ...otherRows]) previousById.set(video.id, { ...previousById.get(video.id), ...video });
   const previousIds = new Set(previousById.keys());
   const currentIds = new Set(videos.map((video) => video.id));
+  const deletedIds = new Set(unavailableIds);
   const nextVideos: StoredVideo[] = videos.map((video) => {
     const previous = previousById.get(video.id);
     const channelPlaylistIds = { ...(previous?.channelPlaylistIds ?? {}), [channelId]: video.playlistIds ?? [] };
@@ -108,22 +118,25 @@ export async function syncVideoRecords(channelId: string, videos: Video[], unava
     const catalogChannelIds = (previous.catalogChannelIds ?? []).filter((id) => id !== channelId);
     const channelPlaylistIds = { ...(previous.channelPlaylistIds ?? {}) };
     delete channelPlaylistIds[channelId];
-    nextVideos.push({
-      ...previous,
-      catalogChannelIds,
-      channelPlaylistIds,
-      playlistIds: [...new Set(Object.values(channelPlaylistIds).flat())],
-      // A video that disappeared from its last connected channel must no
-      // longer be public. Previously it kept its old "available" status and
-      // remained in the website feed after being deleted on YouTube.
-      availability: catalogChannelIds.length ? "available" : "unavailable",
-      lastSyncedAt: new Date().toISOString(),
-    });
-  }
-  for (const id of unavailableIds) {
-    const previous = previousById.get(id);
-    if (previous) nextVideos.push({ ...previous, availability: "unavailable", lastSyncedAt: new Date().toISOString() });
+    if (catalogChannelIds.length) {
+      nextVideos.push({
+        ...previous,
+        catalogChannelIds,
+        channelPlaylistIds,
+        playlistIds: [...new Set(Object.values(channelPlaylistIds).flat())],
+        availability: "available",
+        lastSyncedAt: new Date().toISOString(),
+      });
+    } else {
+      // The video no longer appears in this channel's uploads or playlists,
+      // and no other connected channel references it. Remove it outright.
+      deletedIds.add(previous.id);
+    }
   }
   await saveBatch(nextVideos);
-  return { newVideoCount: videos.filter((video) => !previousIds.has(video.id)).length, videoCount: videos.length, migratedLegacyRecords: legacy.length };
+  await deleteBatch(deletedIds);
+  // Clear records left by older syncs, which stored unavailable videos as
+  // placeholders instead of deleting them.
+  await queryD1("DELETE FROM videos WHERE availability = 'unavailable' OR json_array_length(catalog_channel_ids_json) = 0");
+  return { newVideoCount: videos.filter((video) => !previousIds.has(video.id)).length, videoCount: videos.length, deletedVideoCount: deletedIds.size, migratedLegacyRecords: legacy.length };
 }

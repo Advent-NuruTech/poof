@@ -16,7 +16,7 @@ export async function getPublicPlaylistVideos(playlistId: string): Promise<FeedV
   cacheLife("catalogFeed");
   cacheTag(PUBLIC_CATALOG_CACHE_TAG);
 
-  if (!isD1Configured()) return [];
+  if (!isD1Configured()) throw new Error("Video catalog storage is not configured.");
 
   try {
     const rows = await queryD1<VideoRow>(
@@ -33,6 +33,6 @@ export async function getPublicPlaylistVideos(playlistId: string): Promise<FeedV
     });
   } catch (error) {
     console.error(`Could not load public videos for playlist ${playlistId}.`, error);
-    return [];
+    throw error;
   }
 }

@@ -2,6 +2,7 @@
 
 import { useEffect, useState } from "react";
 import Link from "next/link";
+import { useRouter } from "next/navigation";
 import { formatDate, formatDuration, type Video } from "@/lib/catalog";
 import { feedChannels, feedPlaylists, usePublicCatalog } from "@/lib/use-catalog";
 import MobileBottomNav from "@/components/home/mobile-bottom-nav";
@@ -319,6 +320,7 @@ const CSS = `
 `;
 
 export default function PlaylistsPage({ playlistId }: { playlistId?: string }) {
+  const router = useRouter();
   const [watching, setWatching] = useState<Video | null>(null);
   const [shareNotice, setShareNotice] = useState("");
   const [loadingMore, setLoadingMore] = useState(false);
@@ -333,6 +335,7 @@ export default function PlaylistsPage({ playlistId }: { playlistId?: string }) {
   const activeChannelIds = new Set(channels.map((channel) => channel.id));
   const visiblePlaylists = playlists.filter((item) => activeChannelIds.has(item.channelId));
   const playlist = playlistId ? visiblePlaylists.find((item) => item.id === playlistId) ?? null : null;
+  const activePlaylistId = playlist?.id;
   const detailLoaded = !playlistId || loaded;
   const detailVideosReady = !playlist || (playlistVideos?.playlistId === playlist.id && !playlistVideos.loading);
   const videos = playlist && playlistVideos && playlistVideos.playlistId === playlist.id ? playlistVideos.videos : [];
@@ -343,19 +346,24 @@ export default function PlaylistsPage({ playlistId }: { playlistId?: string }) {
   const hiddenCount = availablePlaylistVideoIds.length - playlistVideoIds.length;
 
   useEffect(() => {
-    if (!playlist) return;
+    if (!activePlaylistId) return;
     let active = true;
-    setPlaylistVideos({ playlistId: playlist.id, videos: [], loading: true, failed: false });
-    setRevealed({ ids: [] });
-    void fetch(`/api/catalog/playlist?id=${encodeURIComponent(playlist.id)}`, { cache: "no-store" })
+    void fetch(`/api/catalog/playlist?id=${encodeURIComponent(activePlaylistId)}`, { cache: "no-store" })
       .then(async (response) => {
         if (!response.ok) throw new Error("Could not load playlist videos.");
         const body = await response.json() as { videos?: Video[] };
-        if (active) setPlaylistVideos({ playlistId: playlist.id, videos: body.videos ?? [], loading: false, failed: false });
+        if (active) setPlaylistVideos({ playlistId: activePlaylistId, videos: body.videos ?? [], loading: false, failed: false });
       })
-      .catch(() => { if (active) setPlaylistVideos({ playlistId: playlist.id, videos: [], loading: false, failed: true }); });
+      .catch(() => { if (active) setPlaylistVideos({ playlistId: activePlaylistId, videos: [], loading: false, failed: true }); });
     return () => { active = false; };
-  }, [playlist?.id]);
+  }, [activePlaylistId]);
+
+  const shouldRemovePlaylist = Boolean(playlist && detailVideosReady && !playlistVideos?.failed && videos.length === 0);
+  const shouldRedirectToDirectory = Boolean(playlistId && loaded && (!playlist || shouldRemovePlaylist));
+
+  useEffect(() => {
+    if (shouldRedirectToDirectory) router.replace("/playlists");
+  }, [router, shouldRedirectToDirectory]);
 
   async function loadRemainingVideos() {
     if (!playlist) return;
@@ -376,6 +384,8 @@ export default function PlaylistsPage({ playlistId }: { playlistId?: string }) {
     }
     window.setTimeout(() => setShareNotice(""), 2200);
   }
+
+  if (shouldRedirectToDirectory) return null;
 
   return (
     <>
@@ -436,7 +446,7 @@ export default function PlaylistsPage({ playlistId }: { playlistId?: string }) {
             {!detailVideosReady ? (
               <VideoListSkeleton />
             ) : !videos.length ? (
-              <div className="pl-empty"><p>{playlistVideos?.failed ? "We could not load this playlist right now." : "No available videos remain in this playlist."}</p><Link href="/playlists">← All playlists</Link></div>
+              <div className="pl-empty"><p>We could not load this playlist right now.</p><Link href="/playlists">← All playlists</Link></div>
             ) : (
               <div className="pl-video-list">
                 {playlistVideoIds.map((id, index) => {

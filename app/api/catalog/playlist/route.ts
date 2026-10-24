@@ -8,6 +8,10 @@ export async function GET(request: Request) {
     return NextResponse.json({ error: "A valid playlist ID is required." }, { status: 400 });
   }
 
-  const videos = await getPublicPlaylistVideos(playlistId);
-  return NextResponse.json({ videos }, { headers: { "Cache-Control": "no-store" } });
+  try {
+    const videos = await getPublicPlaylistVideos(playlistId);
+    return NextResponse.json({ videos }, { headers: { "Cache-Control": "no-store" } });
+  } catch {
+    return NextResponse.json({ error: "Playlist videos are temporarily unavailable." }, { status: 503 });
+  }
 }
