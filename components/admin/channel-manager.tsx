@@ -117,7 +117,7 @@ export default function AdminPage() {
       if (!response.ok) throw new Error(result.error ?? "Could not sync the channel.");
       const videoCount = Number(result.videoCount ?? 0);
       const newVideoCount = Number(result.newVideoCount ?? 0);
-      const playlists = result.playlists as Playlist[];
+      const playlists = (result.playlists as Playlist[]).filter((playlist) => playlist.videoIds.length > 0 && playlist.itemCount > 0);
       const priorPlaylistSnapshot = await getDocs(query(collection(db, "playlists"), where("channelId", "==", channel.id)));
       const currentPlaylistIds = new Set(playlists.map((playlist) => playlist.id));
       let batch = writeBatch(db);

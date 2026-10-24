@@ -209,7 +209,9 @@ export async function getPublicCatalog(): Promise<PublicCatalogFeed> {
     channels: channels.filter((channel) => channel.enabled !== false),
     videos: videos.filter((video) => video.availability !== "unavailable" && video.website?.hidden !== true),
     mostViewedVideos,
-    playlists,
+    // Stale Firestore rows are hidden immediately. The next channel sync also
+    // deletes them from Firestore, so zero-video playlists never become cards.
+    playlists: playlists.filter((playlist) => playlist.videoIds.length > 0 && playlist.itemCount > 0),
     meetings,
     fetchedAt: new Date().toISOString(),
     truncated: channels.length >= MAX_CHANNEL_FEED_ROWS || videos.length >= MAX_VIDEO_FEED_ROWS || playlists.length >= MAX_FEED_ROWS || meetings.length >= MAX_FEED_ROWS,

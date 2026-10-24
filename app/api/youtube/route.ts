@@ -188,9 +188,11 @@ export async function GET(request: Request) {
     // YouTube can retain a "deleted video" placeholder in playlistItems while
     // omitting it from videos.list. Do not persist those orphaned IDs in the
     // playlist document or advertise them in its count.
-    const playlists = playlistDrafts.map((playlist) => {
+    const playlists = playlistDrafts.flatMap((playlist) => {
       const videoIds = playlist.videoIds.filter((id) => availableIds.has(id));
-      return { ...playlist, videoIds, itemCount: videoIds.length };
+      // An empty playlist is not a public resource. Returning it would keep a
+      // zero-video card in Firestore even after every YouTube video is gone.
+      return videoIds.length ? [{ ...playlist, videoIds, itemCount: videoIds.length }] : [];
     });
     const channel: Channel = {
       id: channelId, title: channelRow.snippet?.title ?? "YouTube Channel", description: channelRow.snippet?.description ?? "",

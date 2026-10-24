@@ -333,7 +333,7 @@ export default function PlaylistsPage({ playlistId }: { playlistId?: string }) {
   const loaded = feed.fetchedAt !== "";
 
   const activeChannelIds = new Set(channels.map((channel) => channel.id));
-  const visiblePlaylists = playlists.filter((item) => activeChannelIds.has(item.channelId));
+  const visiblePlaylists = playlists.filter((item) => activeChannelIds.has(item.channelId) && item.videoIds.length > 0 && item.itemCount > 0);
   const playlist = playlistId ? visiblePlaylists.find((item) => item.id === playlistId) ?? null : null;
   const activePlaylistId = playlist?.id;
   const detailLoaded = !playlistId || loaded;
