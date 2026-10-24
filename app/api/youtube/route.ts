@@ -145,7 +145,7 @@ export async function GET(request: Request) {
     if (!channelRow) return Response.json({ error: "YouTube channel no longer exists or is unavailable." }, { status: 404 });
     const uploadsId = channelRow.contentDetails?.relatedPlaylists?.uploads ?? "";
     const uploads = uploadsId ? await allPages<YoutubePlaylistItem>("playlistItems", { part: "snippet,contentDetails", playlistId: uploadsId, maxResults: "50" }) : [];
-    const playlistResults = await mapConcurrent(playlistRows, 5, async (row) => {
+    const playlistDrafts = await mapConcurrent(playlistRows, 5, async (row) => {
       const items = await allPages<YoutubePlaylistItem>("playlistItems", { part: "snippet,contentDetails", playlistId: row.id, maxResults: "50" });
       const videoIds = items
         .sort((a, b) => (a.snippet?.position ?? 0) - (b.snippet?.position ?? 0))
@@ -160,7 +160,7 @@ export async function GET(request: Request) {
     });
     const ids = [...new Set([
       ...uploads.map((item) => item.contentDetails?.videoId ?? item.snippet?.resourceId?.videoId ?? ""),
-      ...playlistResults.flatMap((playlist) => playlist.videoIds),
+      ...playlistDrafts.flatMap((playlist) => playlist.videoIds),
     ].filter(Boolean))];
     const details: YoutubeVideo[] = [];
     for (let offset = 0; offset < ids.length; offset += 50) {
@@ -169,7 +169,7 @@ export async function GET(request: Request) {
       details.push(...(result.items ?? []));
     }
     const playlistByVideo = new Map<string, string[]>();
-    for (const playlist of playlistResults) for (const videoId of playlist.videoIds) playlistByVideo.set(videoId, [...(playlistByVideo.get(videoId) ?? []), playlist.id]);
+    for (const playlist of playlistDrafts) for (const videoId of playlist.videoIds) playlistByVideo.set(videoId, [...(playlistByVideo.get(videoId) ?? []), playlist.id]);
     const videos: Video[] = details.filter((video) => video.status?.privacyStatus !== "private").map((video) => ({
       id: video.id, videoUrl: `https://www.youtube.com/watch?v=${encodeURIComponent(video.id)}`, title: video.snippet?.title ?? "Untitled video", description: video.snippet?.description ?? "",
       thumbnail: image(video.snippet?.thumbnails), publishedAt: video.snippet?.publishedAt ?? "", channelId: video.snippet?.channelId ?? channelId,
@@ -185,13 +185,20 @@ export async function GET(request: Request) {
     }));
     const availableIds = new Set(videos.map((video) => video.id));
     const unavailableVideoIds = ids.filter((id) => !availableIds.has(id));
+    // YouTube can retain a "deleted video" placeholder in playlistItems while
+    // omitting it from videos.list. Do not persist those orphaned IDs in the
+    // playlist document or advertise them in its count.
+    const playlists = playlistDrafts.map((playlist) => {
+      const videoIds = playlist.videoIds.filter((id) => availableIds.has(id));
+      return { ...playlist, videoIds, itemCount: videoIds.length };
+    });
     const channel: Channel = {
       id: channelId, title: channelRow.snippet?.title ?? "YouTube Channel", description: channelRow.snippet?.description ?? "",
       thumbnail: image(channelRow.snippet?.thumbnails), customUrl: channelRow.snippet?.customUrl,
       uploadsPlaylistId: uploadsId, enabled: true, syncStatus: "complete",
     };
     const videoSync = await syncVideoRecords(channelId, videos, unavailableVideoIds, token);
-    return Response.json({ channel, playlists: playlistResults, ...videoSync, syncedAt: new Date().toISOString() });
+    return Response.json({ channel, playlists, ...videoSync, syncedAt: new Date().toISOString() });
   } catch (error) {
     return Response.json({ error: error instanceof Error ? error.message : "YouTube synchronization failed." }, { status: 502 });
   }

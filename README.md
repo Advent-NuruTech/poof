@@ -15,7 +15,7 @@ A responsive YouTube catalog. YouTube owns source video and playlist metadata; s
 4. Create a Google Cloud API key with the YouTube Data API v3 enabled. Set it as `YOUTUBE_DATA_API_KEY` in `.env.local` and your deployment's server environment. Do not add a `NEXT_PUBLIC_` prefix. Restrict the key to the YouTube Data API and the server environments that need it.
 5. Start the app with `npm run dev`.
 6. Sign in at `/poof/admin` with the initial administrator account (Firebase UID `3H3BclyO2FePQ59KYIO2kKSirnx2`). On first sign-in, the app creates `admins/{uid}` automatically. Only this UID can bootstrap the first admin; any active administrator can invite another administrator by email. Existing enabled administrator records, including legacy `codeHash` records, remain active without re-invitation. Every active administrator receives the same website management permissions. The former `/admin` route is not available.
-7. Add a channel by URL, handle, or channel ID. The initial sync discovers playlists, playlist order, and unique video records. The homepage reads the shared cached public catalog; its Most Viewed shelf uses the bounded per-channel view-count query described below.
+7. Add a channel by URL, handle, or channel ID. The initial sync discovers playlists, playlist order, and unique video records. The homepage reads the shared cached public catalog; playlist pages load their available videos separately from D1, so older playlist videos are not limited by the homepage's newest-video window. Its Most Viewed shelf uses the bounded per-channel view-count query described below.
 
 8. Configure the email environment variables below, deploy to Vercel, and verify your sending domain in Resend. Open `/poof/admin/mailing` to verify meeting requests, add meeting members, and create or schedule emails.
 
@@ -26,7 +26,7 @@ Firebase Web API keys identify the Firebase project and are expected to be prese
 - `app/(public)` contains the public experience; the route group does not add a URL segment.
 - `app/(admin)/poof/admin` contains channel and catalog management.
 - `app/api/youtube` validates a Firebase ID token against Firebase Authentication, checks the caller's Firestore admin record, and then calls YouTube. It saves synchronized video records to D1 from the server; channels, playlists, meetings, and library metadata continue using Firestore.
-- `videos/{youtubeVideoId}` uses the YouTube video ID as its D1 primary key. Playlist membership/order remain on Firestore playlist records. Video editorial controls remain in each D1 video record's `website` map.
+- `videos/{youtubeVideoId}` uses the YouTube video ID as its D1 primary key. Playlist membership/order remain on Firestore playlist records. Video editorial controls remain in each D1 video record's `website` map. During a channel sync, deleted/private YouTube videos are removed from playlist membership and a video no longer belonging to a connected channel is marked unavailable, so it disappears from public pages.
 - The homepage's Most Viewed shelf queries indexed D1 video metadata for each enabled channel, then merges those small result sets. The shared 24-hour server-cached catalog feed remains in place.
 - Existing Firestore video rows and editorial settings are imported automatically on the first successful D1 sync of each channel. After configuring D1, use **Sync now** once for each connected channel before relying on the D1-backed public video feed.
 - Channel deletion only removes the channel source record; it does not delete videos or playlists.

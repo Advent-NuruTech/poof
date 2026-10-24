@@ -1,9 +1,9 @@
 "use client";
 
-import { useState } from "react";
+import { useEffect, useState } from "react";
 import Link from "next/link";
 import { formatDate, formatDuration, type Video } from "@/lib/catalog";
-import { fetchCatalogFeed, feedChannels, feedPlaylists, feedVideos, usePublicCatalog } from "@/lib/use-catalog";
+import { feedChannels, feedPlaylists, usePublicCatalog } from "@/lib/use-catalog";
 import MobileBottomNav from "@/components/home/mobile-bottom-nav";
 import { CardGridSkeleton, VideoListSkeleton } from "@/components/home/skeleton";
 
@@ -323,6 +323,7 @@ export default function PlaylistsPage({ playlistId }: { playlistId?: string }) {
   const [shareNotice, setShareNotice] = useState("");
   const [loadingMore, setLoadingMore] = useState(false);
   const [revealed, setRevealed] = useState<{ playlistId?: string; ids: string[] }>({ ids: [] });
+  const [playlistVideos, setPlaylistVideos] = useState<{ playlistId: string; videos: Video[]; loading: boolean; failed: boolean } | null>(null);
 
   const { feed } = usePublicCatalog();
   const channels = feedChannels(feed);
@@ -333,20 +334,33 @@ export default function PlaylistsPage({ playlistId }: { playlistId?: string }) {
   const visiblePlaylists = playlists.filter((item) => activeChannelIds.has(item.channelId));
   const playlist = playlistId ? visiblePlaylists.find((item) => item.id === playlistId) ?? null : null;
   const detailLoaded = !playlistId || loaded;
-  const videos = playlist ? feedVideos(feed).filter((video) => playlist.videoIds.includes(video.id)) : [];
+  const detailVideosReady = !playlist || (playlistVideos?.playlistId === playlist.id && !playlistVideos.loading);
+  const videos = playlistVideos?.playlistId === playlist?.id ? playlistVideos.videos : [];
   const videosById = new Map(videos.map((video) => [video.id, video]));
   const revealedIds = revealed.playlistId === playlistId ? revealed.ids : [];
-  const playlistVideoIds = playlist ? (revealedIds.length ? revealedIds : playlist.videoIds.slice(0, PLAYLIST_DETAIL_LIMIT)) : [];
-  const hiddenCount = playlist ? playlist.videoIds.length - playlistVideoIds.length : 0;
+  const availablePlaylistVideoIds = playlist ? playlist.videoIds.filter((id) => videosById.has(id)) : [];
+  const playlistVideoIds = revealedIds.length ? revealedIds : availablePlaylistVideoIds.slice(0, PLAYLIST_DETAIL_LIMIT);
+  const hiddenCount = availablePlaylistVideoIds.length - playlistVideoIds.length;
+
+  useEffect(() => {
+    if (!playlist) return;
+    let active = true;
+    setPlaylistVideos({ playlistId: playlist.id, videos: [], loading: true, failed: false });
+    setRevealed({ ids: [] });
+    void fetch(`/api/catalog/playlist?id=${encodeURIComponent(playlist.id)}`, { cache: "no-store" })
+      .then(async (response) => {
+        if (!response.ok) throw new Error("Could not load playlist videos.");
+        const body = await response.json() as { videos?: Video[] };
+        if (active) setPlaylistVideos({ playlistId: playlist.id, videos: body.videos ?? [], loading: false, failed: false });
+      })
+      .catch(() => { if (active) setPlaylistVideos({ playlistId: playlist.id, videos: [], loading: false, failed: true }); });
+    return () => { active = false; };
+  }, [playlist?.id]);
 
   async function loadRemainingVideos() {
     if (!playlist) return;
     setLoadingMore(true);
-    const next = await fetchCatalogFeed();
-    if (next) {
-      const ids = new Set(next.videos.map((video) => video.id));
-      setRevealed({ playlistId, ids: playlist.videoIds.filter((id) => ids.has(id)) });
-    }
+    setRevealed({ playlistId, ids: availablePlaylistVideoIds });
     setLoadingMore(false);
   }
 
@@ -419,8 +433,10 @@ export default function PlaylistsPage({ playlistId }: { playlistId?: string }) {
               </div>
             </div>
 
-            {!videos.length ? (
+            {!detailVideosReady ? (
               <VideoListSkeleton />
+            ) : !videos.length ? (
+              <div className="pl-empty"><p>{playlistVideos?.failed ? "We could not load this playlist right now." : "No available videos remain in this playlist."}</p><Link href="/playlists">← All playlists</Link></div>
             ) : (
               <div className="pl-video-list">
                 {playlistVideoIds.map((id, index) => {

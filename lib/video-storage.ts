@@ -108,7 +108,17 @@ export async function syncVideoRecords(channelId: string, videos: Video[], unava
     const catalogChannelIds = (previous.catalogChannelIds ?? []).filter((id) => id !== channelId);
     const channelPlaylistIds = { ...(previous.channelPlaylistIds ?? {}) };
     delete channelPlaylistIds[channelId];
-    nextVideos.push({ ...previous, catalogChannelIds, channelPlaylistIds, playlistIds: [...new Set(Object.values(channelPlaylistIds).flat())], lastSyncedAt: new Date().toISOString() });
+    nextVideos.push({
+      ...previous,
+      catalogChannelIds,
+      channelPlaylistIds,
+      playlistIds: [...new Set(Object.values(channelPlaylistIds).flat())],
+      // A video that disappeared from its last connected channel must no
+      // longer be public. Previously it kept its old "available" status and
+      // remained in the website feed after being deleted on YouTube.
+      availability: catalogChannelIds.length ? "available" : "unavailable",
+      lastSyncedAt: new Date().toISOString(),
+    });
   }
   for (const id of unavailableIds) {
     const previous = previousById.get(id);

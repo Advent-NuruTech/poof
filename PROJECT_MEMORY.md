@@ -1,4 +1,11 @@
 # Project Memory
+## 2026-10-24: Repair public playlist details and stale YouTube videos
+
+- **Root cause and fix:** Playlist detail pages incorrectly tried to render their videos from the public catalog's intentionally bounded newest-100-video feed. Playlists containing only older videos therefore remained on the loading skeleton indefinitely. A cached, playlist-specific D1 endpoint now supplies the available videos for the selected playlist, while the homepage feed remains safely bounded.
+- **YouTube sync fix:** A YouTube `playlistItems` response can retain deleted-video placeholders even when `videos.list` does not return a corresponding video. Sync now removes those IDs before saving playlists and updates the playlist count. It also marks a video unavailable when it has disappeared from its final connected channel, preventing a previously synchronized, deleted upload from continuing to appear in the public catalog.
+- **Operational note:** Existing stale records update on the next **Sync now** for each affected channel (or the existing administrator-session automatic sync). The shared catalog cache is invalidated after that sync.
+- **Verification:** Focused TypeScript, ESLint, and `git diff --check` passed. The webpack production build was started but did not reach a completion result in this Windows workspace; it left Next's generated `.next/lock` in place, so no second build was started against that active/stalled process. Browser and live YouTube/D1 synchronization were not exercised.
+
 ## 2026-10-22: Refine homepage section titles
 
 - **Major change:** Restyled the shared homepage section headings with consistent typography, a red accent, subtle divider lines, and matching action links. The layout adapts to mobile and includes visible keyboard focus states.
