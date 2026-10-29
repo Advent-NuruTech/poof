@@ -157,10 +157,10 @@ SUBSCRIBE TO OUR NEWSLETTER
       align-items: center;
       gap: 32px;
       padding: 40px;
-      color: #ffffff;
-      background-color: #0b3d91;
+      color: #102e47;
+      background-color: #0098fb;
       background-image: none;
-      border: 1px solid #1d4ed8;
+      border: 1px solid #0098fb;
       border-radius: 16px;
       box-shadow: 0 12px 32px rgba(15, 23, 42, 0.1);
     }
@@ -172,7 +172,7 @@ SUBSCRIBE TO OUR NEWSLETTER
     .about-card-eyebrow {
       display: inline-block;
       margin-bottom: 14px;
-      color: #bfdbfe;
+      color: #102e47;
       font-size: 0.75rem;
       font-weight: 700;
       letter-spacing: 0.12em;
@@ -181,7 +181,7 @@ SUBSCRIBE TO OUR NEWSLETTER
 
     .newsletter-content h2 {
       margin: 0 0 14px;
-      color: #ffffff;
+      color: #102e47;
       font-size: clamp(1.65rem, 3vw, 2.35rem);
       font-weight: 700;
       letter-spacing: -0.035em;
@@ -191,7 +191,7 @@ SUBSCRIBE TO OUR NEWSLETTER
     .newsletter-description {
       max-width: 440px;
       margin: 0;
-      color: #dbeafe;
+      color: #102e47;
       font-size: 1rem;
       line-height: 1.75;
     }
@@ -204,7 +204,7 @@ SUBSCRIBE TO OUR NEWSLETTER
     }
 
     .newsletter-form label {
-      color: #ffffff;
+      color: #102e47;
       font-size: 0.9rem;
       font-weight: 600;
     }
@@ -297,7 +297,7 @@ SUBSCRIBE TO OUR NEWSLETTER
     }
 
     .newsletter-privacy {
-      color: #dbeafe;
+      color: #102e47;
       font-size: 0.8rem;
       line-height: 1.6;
     }

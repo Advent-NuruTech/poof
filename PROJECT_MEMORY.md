@@ -1,4 +1,10 @@
 # Project Memory
+## 2026-10-29: Extend the brand blue
+
+- **Major change:** Applied the sampled `#0098fb` brand blue to the homepage About card, loading screen, newsletter signup, mailing template and preview, and donation receipt header. Updated text colors on the brighter backgrounds for readability.
+- **Build/runtime errors:** None encountered.
+- **Verification:** TypeScript and `git diff --check` passed. Browser rendering and email delivery were not exercised.
+
 ## 2026-10-29: Match homepage hero to brand blue
 
 - **Major change:** Changed the homepage hero background to `#0098fb`, sampled from the supplied brand image, and adjusted its text and button colors for readability on the brighter background.
