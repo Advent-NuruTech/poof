@@ -1,4 +1,10 @@
 # Project Memory
+## 2026-10-29: Library editing and file replacement
+
+- **Major changes:** Administrators can select a replacement PDF, Word, or PowerPoint file while editing a file resource. The file is uploaded before its existing record is updated, retaining the resource ID and preserving the old file on upload failure. The replacement updates its type, filename, URL, and cover together; an outdated cover is cleared when no new cover is available. Note content is now controlled so switching between resources restores it correctly, and the admin list updates after saves and uploads. A successful public cache refresh also clears the current tab's library cache; refresh failures are reported separately from successful saves.
+- **Build error and fix:** TypeScript initially inferred the upload helper's document kind as a general string, incompatible with `LibraryDocument`. Explicitly typed the kind as `"pdf" | "doc" | null`; the subsequent type check passed.
+- **Verification and limitations:** Focused ESLint and `git diff --check` passed. Live authenticated file replacement and browser interaction were not exercised. The previously documented R2 credentials and bucket permissions must be correct in the deployed environment; the former file remains in storage after replacement.
+
 ## 2026-10-29: Library PDF covers and large document reading
 
 - **Major changes:** PDF uploads attempt to generate and save a small first-page JPEG through the existing authenticated image upload. Library cards use the saved image, or lazily render page one for existing PDFs and failed images. The PDF reader requests byte ranges through the existing validated download proxy and renders only the selected page, with previous, next, and page-number navigation. Rendering resolution is capped to reduce memory use.

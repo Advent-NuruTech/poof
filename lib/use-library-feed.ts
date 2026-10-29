@@ -8,17 +8,28 @@ const EMPTY: LibraryFeed = { categories: [], documents: [], truncated: false };
 let cached: LibraryFeed | null = null;
 let cachedAt = 0;
 let pending: Promise<LibraryFeed | null> | null = null;
+let generation = 0;
+export function clearPublicLibraryCache() {
+  cached = null;
+  cachedAt = 0;
+  generation++;
+  pending = null;
+}
 // The server shares the same 24-hour snapshot across visitors. This client
 // cache prevents route changes in one tab from repeatedly calling the API.
 const CACHE_MS = 24 * 60 * 60 * 1000;
 
 async function fetchLibrary(): Promise<LibraryFeed | null> {
   if (cached && Date.now() - cachedAt < CACHE_MS) return cached;
-  if (!pending) pending = fetch("/api/library", { cache: "no-store" })
+  if (!pending) {
+    const currentGeneration = generation;
+    const request = fetch("/api/library", { cache: "no-store" })
     .then((response) => response.ok ? response.json() as Promise<LibraryFeed> : null)
-    .then((value) => { if (value) { cached = value; cachedAt = Date.now(); } return value; })
+    .then((value) => { if (value && generation === currentGeneration) { cached = value; cachedAt = Date.now(); } return value; })
     .catch(() => null)
-    .finally(() => { pending = null; });
+    .finally(() => { if (pending === request) pending = null; });
+    pending = request;
+  }
   return pending;
 }
 
