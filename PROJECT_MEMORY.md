@@ -1,4 +1,10 @@
 # Project Memory
+## 2026-10-29: Match homepage hero to brand blue
+
+- **Major change:** Changed the homepage hero background to `#0098fb`, sampled from the supplied brand image, and adjusted its text and button colors for readability on the brighter background.
+- **Build/runtime errors:** None encountered; this was a CSS-only change.
+- **Verification:** `git diff --check` passed. Browser rendering was not exercised.
+
 ## 2026-10-29: Restore continuous PDF scrolling
 
 - **Major change:** Replaced PDF previous/next page controls with a continuous vertical stack. Pages near the reader viewport are rendered on demand and their canvases are released when far away; placeholders retain the page positions so long documents can be scrolled without rendering every page at once. First-page covers and byte-range loading remain in place. Unseen pages initially use the first page's proportions and adjust when their actual dimensions are loaded.

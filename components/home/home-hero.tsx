@@ -351,7 +351,8 @@ key={heroSlideKey}
 
     <style jsx global>{`
     .hero {
-      --hero-blue: #0b3d91;
+      --hero-blue: #0098fb;
+      --hero-ink: #102e47;
       --hero-blue-accent: #1d4ed8;
       --hero-blue-light: #bfdbfe;
 
@@ -360,7 +361,7 @@ key={heroSlideKey}
       overflow: hidden;
       color: #ffffff;
       background: var(--hero-blue);
-      border: 1px solid #1d4ed8;
+      border: 1px solid var(--hero-blue);
       border-radius: 0;
       box-shadow: 0 12px 36px rgba(11, 61, 145, 0.1);
     }
@@ -431,7 +432,7 @@ key={heroSlideKey}
     }
 
     .hero-media-empty {
-      color: var(--hero-blue);
+      color: var(--hero-ink);
       background: #dbeafe;
     }
 
@@ -467,7 +468,7 @@ key={heroSlideKey}
       justify-content: center;
       flex-direction: column;
       padding: clamp(32px, 4.5vw, 64px);
-      color: #ffffff;
+      color: var(--hero-ink);
       background: var(--hero-blue);
     }
 
@@ -476,7 +477,7 @@ key={heroSlideKey}
       align-items: center;
       gap: 10px;
       margin-bottom: 22px;
-      color: var(--hero-blue-light);
+      color: var(--hero-ink);
       font-size: 0.72rem;
       font-weight: 750;
       letter-spacing: 0.13em;
@@ -499,7 +500,7 @@ key={heroSlideKey}
     .hero-copy h1 {
       width: 100%;
       margin: 0 0 18px;
-      color: #ffffff;
+      color: var(--hero-ink);
       font-size: clamp(2rem, 3.25vw, 3.5rem);
       font-weight: 800;
       letter-spacing: -0.045em;
@@ -517,7 +518,7 @@ key={heroSlideKey}
     .hero-description {
       max-width: 480px;
       margin: 0 0 28px;
-      color: #dbeafe;
+      color: var(--hero-ink);
       font-size: 0.98rem;
       line-height: 1.8;
       overflow-wrap: anywhere;
@@ -553,24 +554,24 @@ key={heroSlideKey}
     }
 
     .watch-button {
-      color: var(--hero-blue);
+      color: var(--hero-ink);
       background: #ffffff;
     }
 
     .watch-button:hover {
-      color: var(--hero-blue);
+      color: var(--hero-ink);
       background: #dbeafe;
       border-color: #dbeafe;
     }
 
     .hero-secondary-button {
-      color: var(--hero-blue);
+      color: var(--hero-ink);
       background: #d4af37;
       border-color: #d4af37;
     }
 
     .hero-secondary-button:hover {
-      color: var(--hero-blue);
+      color: var(--hero-ink);
       background: #e5c65a;
       border-color: #e5c65a;
     }
@@ -603,7 +604,7 @@ key={heroSlideKey}
     }
 
     .hero-arrow:hover {
-      color: var(--hero-blue);
+      color: var(--hero-ink);
       background: #ffffff;
     }
 
@@ -648,7 +649,7 @@ key={heroSlideKey}
     .hero-counter {
       position: absolute;
       right: 0;
-      color: #dbeafe;
+      color: var(--hero-ink);
       font-size: 0.72rem;
       font-weight: 650;
       letter-spacing: 0.06em;
