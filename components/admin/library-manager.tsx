@@ -135,8 +135,31 @@ export default function LibraryManager() {
         throw new Error("The storage service blocked the browser upload. Configure the R2 bucket CORS policy and try again.");
       }
       if (!stored.ok) throw new Error("The file could not be stored. Please try again.");
+      let previewUrl = "";
+      if (kind === "pdf") {
+        try {
+          const pdfjs = await import("pdfjs-dist");
+          pdfjs.GlobalWorkerOptions.workerSrc = "/pdf.worker.min.mjs";
+          const task = pdfjs.getDocument({ data: new Uint8Array(await file.arrayBuffer()) });
+          try {
+            const pdf = await task.promise;
+            const page = await pdf.getPage(1);
+            const viewport = page.getViewport({ scale: 400 / page.getViewport({ scale: 1 }).width });
+            const canvas = document.createElement("canvas");
+            canvas.width = Math.ceil(viewport.width); canvas.height = Math.ceil(viewport.height);
+            const context = canvas.getContext("2d");
+            if (!context) throw new Error("Canvas unavailable");
+            await page.render({ canvas, canvasContext: context, viewport }).promise;
+            const blob = await new Promise<Blob | null>((resolve) => canvas.toBlob(resolve, "image/jpeg", 0.8));
+            if (!blob) throw new Error("Cover could not be generated");
+            const form = new FormData(); form.set("file", blob, "cover.jpg");
+            const coverResponse = await fetch("/api/meetings/poster", { method: "POST", headers: { Authorization: `Bearer ${token}` }, body: form });
+            if (coverResponse.ok) previewUrl = (await coverResponse.json() as { secureUrl?: string }).secureUrl ?? "";
+          } finally { await task.destroy(); }
+        } catch { /* The public listing can render page one if cover generation fails. */ }
+      }
       const selected = categories.find((item) => item.id === categoryId);
-      await addDoc(collection(db, "libraryDocuments"), { title: title.trim(), description: description.trim(), categoryId, categoryName: selected?.name ?? "Library", kind, fileUrl: result.secureUrl, fileName: file.name, createdAt: new Date().toISOString(), updatedAt: new Date().toISOString() });
+      await addDoc(collection(db, "libraryDocuments"), { title: title.trim(), description: description.trim(), categoryId, categoryName: selected?.name ?? "Library", kind, fileUrl: result.secureUrl, ...(previewUrl ? { previewUrl } : {}), fileName: file.name, createdAt: new Date().toISOString(), updatedAt: new Date().toISOString() });
       await refreshPublicLibrary();
       setTitle(""); setDescription(""); setNotice("File uploaded and published.");
     } catch (reason) { setError(reason instanceof Error ? reason.message : "Could not upload file."); }

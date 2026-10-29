@@ -1,4 +1,11 @@
 # Project Memory
+## 2026-10-29: Library PDF covers and large document reading
+
+- **Major changes:** PDF uploads attempt to generate and save a small first-page JPEG through the existing authenticated image upload. Library cards use the saved image, or lazily render page one for existing PDFs and failed images. The PDF reader requests byte ranges through the existing validated download proxy and renders only the selected page, with previous, next, and page-number navigation. Rendering resolution is capped to reduce memory use.
+- **Performance limits:** Range loading depends on the upstream host supporting byte ranges; otherwise PDF.js must fetch the full file. Existing documents without saved covers need browser-side rendering. PDF upload size remains limited to 25 MB. Cloudinary cover generation is best effort and falls back to browser rendering.
+- **Build/runtime errors:** No application runtime errors encountered; browser and live storage/upload behavior were not exercised.
+- **Verification:** TypeScript and `git diff --check` passed. Focused ESLint did not finish and was stopped; no lint result was obtained.
+
 ## 2026-10-24: Repair public playlist details and stale YouTube videos
 
 - **Root cause and fix:** Playlist detail pages incorrectly tried to render their videos from the public catalog's intentionally bounded newest-100-video feed. Playlists containing only older videos therefore remained on the loading skeleton indefinitely. A cached, playlist-specific D1 endpoint now supplies the available videos for the selected playlist, while the homepage feed remains safely bounded.

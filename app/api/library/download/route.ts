@@ -14,14 +14,20 @@ export async function GET(request: Request) {
     let isR2Document = false;
     try { isR2Document = validateR2PublicUrl(source); } catch { /* Existing Cloudinary documents remain downloadable without R2 settings. */ }
     if (!isLegacyCloudinary && !isR2Document) return Response.json({ error: "Unsupported document URL." }, { status: 400 });
-    const upstream = await fetch(parsed, { cache: "no-store" });
+    const range = request.headers.get("range");
+    const upstream = await fetch(parsed, { cache: "no-store", headers: range && /^bytes=\d+-\d*$/.test(range) ? { Range: range } : undefined });
     if (!upstream.ok || !upstream.body) return Response.json({ error: "Could not retrieve document." }, { status: 502 });
     const safeName = requestedName.replace(/[\r\n"\\/]/g, "_").slice(0, 180) || "document";
-    return new Response(upstream.body, { headers: {
+    const headers = new Headers({
       "Content-Type": upstream.headers.get("content-type") ?? "application/octet-stream",
       "Content-Disposition": `attachment; filename="${safeName}"`,
       "Cache-Control": "private, no-store",
-    } });
+    });
+    for (const name of ["content-length", "content-range", "accept-ranges"]) {
+      const value = upstream.headers.get(name);
+      if (value) headers.set(name, value);
+    }
+    return new Response(upstream.body, { status: upstream.status, headers });
   } catch {
     return Response.json({ error: "Invalid document URL." }, { status: 400 });
   }

@@ -6,7 +6,7 @@ import type { LibraryDocument } from "@/lib/library";
 import { usePublicLibrary } from "@/lib/use-library-feed";
 import { feedPlaylists, usePublicCatalog } from "@/lib/use-catalog";
 import MobileBottomNav from "@/components/home/mobile-bottom-nav";
-import PdfDocument from "@/components/home/pdf-document";
+import PdfDocument, { PdfCover } from "@/components/home/pdf-document";
 import { sharePublicUrl } from "@/lib/share";
 
 const CSS = `
@@ -156,6 +156,7 @@ const CSS = `
 .lib-card:hover{transform:translateY(-4px);border-color:var(--line-strong);box-shadow:0 10px 30px -12px rgba(10,10,10,.18)}
 .lib-card-thumb{position:relative;aspect-ratio:4/5;background:var(--paper-2);overflow:hidden;border-bottom:1px solid var(--line)}
 .lib-card-thumb img,.lib-card-thumb iframe{width:100%;height:100%;border:0;object-fit:cover;display:block;transition:transform .5s}
+.pdf-cover{width:100%;height:100%;display:flex;justify-content:center;align-items:flex-start;overflow:hidden}.pdf-cover canvas{display:block;width:100%;height:auto}.lib-card-thumb .pdf-cover img{object-fit:contain;object-position:top}.pdf-cover span{padding:20px;font-size:12px;color:var(--muted)}
 .lib-card:hover .lib-card-thumb img{transform:scale(1.04)}
 .lib-card-kind{position:absolute;top:12px;left:12px;z-index:2;background:var(--paper);color:var(--ink);font-size:10px;letter-spacing:.18em;font-weight:700;padding:5px 9px;border-radius:4px;border:1px solid var(--line-strong)}
 .lib-card-kind::before{content:"";display:inline-block;width:5px;height:5px;background:var(--red);border-radius:50%;margin-right:6px;vertical-align:middle;transform:translateY(-1px)}
@@ -330,14 +331,6 @@ export default function LibraryPage({ documentId }: { documentId?: string }) {
   const officeUrl = target?.fileUrl
     ? `https://view.officeapps.live.com/op/embed.aspx?src=${encodeURIComponent(target.fileUrl)}`
     : "";
-  const cloudinaryName = process.env.NEXT_PUBLIC_CLOUDINARY_CLOUD_NAME;
-
-  const previewUrl = (item: LibraryDocument) =>
-    item.previewUrl ||
-    (item.fileUrl?.startsWith("https://res.cloudinary.com/") && cloudinaryName
-      ? `https://res.cloudinary.com/${cloudinaryName}/image/fetch/pg_1,f_jpg,w_1000/${encodeURIComponent(item.fileUrl)}`
-      : "");
-
   async function shareStudy() {
     if (!target) return;
     await sharePublicUrl({
@@ -489,7 +482,7 @@ export default function LibraryPage({ documentId }: { documentId?: string }) {
                       <div className="lib-card-thumb">
                         <span className="lib-card-kind">{kindLabel(item.kind)}</span>
                         {item.kind === "pdf" && item.fileUrl ? (
-                          previewUrl(item) ? <img src={previewUrl(item)} alt={`${item.title}, page 1`} loading="lazy" /> : <div className="lib-card-note">PDF document</div>
+                          <PdfCover fileUrl={item.fileUrl} title={item.title} previewUrl={item.previewUrl} />
                         ) : item.kind === "doc" && item.fileUrl ? (
                           <iframe
                             src={`https://view.officeapps.live.com/op/embed.aspx?src=${encodeURIComponent(item.fileUrl)}`}
