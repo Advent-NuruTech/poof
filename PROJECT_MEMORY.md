@@ -1,4 +1,10 @@
 # Project Memory
+## 2026-10-29: Restore continuous PDF scrolling
+
+- **Major change:** Replaced PDF previous/next page controls with a continuous vertical stack. Pages near the reader viewport are rendered on demand and their canvases are released when far away; placeholders retain the page positions so long documents can be scrolled without rendering every page at once. First-page covers and byte-range loading remain in place. Unseen pages initially use the first page's proportions and adjust when their actual dimensions are loaded.
+- **Lint error and fix:** React lint rejected reading the scroll-container ref during render. Passing the ref itself and reading it inside the observer effect fixed the error.
+- **Verification:** TypeScript, focused ESLint (one existing image warning), and `git diff --check` passed. Browser interaction and a live 1,000-page PDF were not exercised; byte-range performance still depends on the source server.
+
 ## 2026-10-29: Library editing and file replacement
 
 - **Major changes:** Administrators can select a replacement PDF, Word, or PowerPoint file while editing a file resource. The file is uploaded before its existing record is updated, retaining the resource ID and preserving the old file on upload failure. The replacement updates its type, filename, URL, and cover together; an outdated cover is cleared when no new cover is available. Note content is now controlled so switching between resources restores it correctly, and the admin list updates after saves and uploads. A successful public cache refresh also clears the current tab's library cache; refresh failures are reported separately from successful saves.
