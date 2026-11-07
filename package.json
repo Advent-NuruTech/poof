@@ -8,7 +8,8 @@
     "start": "next start",
     "lint": "eslint",
     "r2:cors": "node --env-file=.env.local scripts/configure-r2-cors.mjs",
-    "cron:sync": "node --env-file=.env.local scripts/sync-mailing-cron.mjs"
+    "cron:sync": "node --env-file=.env.local scripts/sync-mailing-cron.mjs",
+    "cron:youtube": "node --env-file=.env.local scripts/sync-youtube-cron.mjs"
   },
 
 

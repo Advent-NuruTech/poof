@@ -1,4 +1,17 @@
 # Project Memory
+## 2026-11-07: Run recent YouTube check once daily
+
+- **Major change:** Changed the recent-upload scheduler from four runs per day to one run at 00:00 UTC. Run `npm run cron:youtube` after deployment to register or update the scheduler.
+- **Build/runtime errors:** None encountered.
+- **Verification:** Scheduler script syntax and `git diff --check` passed. The live scheduler was not changed.
+
+## 2026-11-07: Scheduled recent YouTube upload checks
+
+- **Major change:** Added a secret-protected scheduled check of the latest 50 uploads per enabled channel. It looks up only those IDs in D1 and inserts missing public uploads without changing existing video or editorial settings; cache invalidation occurs only when a video is inserted. Existing administrator sync continues to reconcile playlists, removals, and older history. This does not implement push notifications.
+- **Operations and limits:** After deploying, run `npm run cron:youtube` with the existing cron-job.org credentials and matching production `CRON_SECRET` to schedule four checks daily at 00:00, 06:00, 12:00, and 18:00 UTC. More than 50 uploads between successful checks may leave older uploads for full sync. Scheduler timeouts and YouTube quota or outages can delay discovery. Production credentials and a live scheduled run were not tested.
+- **Build/runtime errors:** None encountered during implementation.
+- **Verification:** TypeScript, focused ESLint, script syntax and `git diff --check` passed.
+
 ## 2026-10-29: Extend the brand blue
 
 - **Major change:** Applied the sampled `#0098fb` brand blue to the homepage About card, loading screen, newsletter signup, mailing template and preview, and donation receipt header. Updated text colors on the brighter backgrounds for readability.
