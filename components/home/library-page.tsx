@@ -1,8 +1,7 @@
 "use client";
 
 import Link from "next/link";
-import { useEffect, useMemo, useRef, useState } from "react";
-import type { LibraryDocument } from "@/lib/library";
+import { useEffect, useRef, useState } from "react";
 import { usePublicLibrary } from "@/lib/use-library-feed";
 import { feedPlaylists, usePublicCatalog } from "@/lib/use-catalog";
 import MobileBottomNav from "@/components/home/mobile-bottom-nav";
@@ -236,6 +235,10 @@ const CSS = `
   .lib-cat-rail{max-width:100%;padding-bottom:6px}
   .lib-section{padding:40px 20px 24px}
   .lib-grid,.lib-playlist-grid,.lib-skeleton-grid{gap:16px}
+  .lib-grid,.lib-playlist-grid,.lib-skeleton-grid{grid-template-columns:repeat(2,minmax(0,1fr))}
+  .lib-card-body,.lib-playlist-body{padding:12px}
+  .lib-card-title,.lib-playlist-body strong{font-size:14px;overflow-wrap:anywhere}
+  .lib-card-desc,.lib-playlist-body small{font-size:12px;overflow-wrap:anywhere}
   .lib-reader-bar{flex-wrap:wrap;gap:10px;padding:10px 14px}
   .lib-reader-title{order:3;flex-basis:100%}
   .lib-reader-actions{margin-left:auto}
@@ -295,7 +298,10 @@ export default function LibraryPage({ documentId }: { documentId?: string }) {
   const loading = !library.loaded;
   const error = library.error;
   const current = documentId ? documents.find((item) => item.id === documentId) ?? null : null;
-  const playlists = feedPlaylists(feed).filter((item) => !item.website?.hidden);
+  const query = search.trim().toLowerCase();
+  const playlists = feedPlaylists(feed).filter((item) =>
+    !item.website?.hidden && `${item.title} ${item.channelTitle}`.toLowerCase().includes(query),
+  );
 
   /* Floating search bar on scroll */
   useEffect(() => {
@@ -310,15 +316,11 @@ export default function LibraryPage({ documentId }: { documentId?: string }) {
     return () => obs.disconnect();
   }, [documentId]);
 
-  const visible = useMemo(
-    () =>
-      documents.filter(
+  const visible = documents.filter(
         (item) =>
           (filter === "all" || item.categoryId === filter ||
             categories.some((category) => category.id === item.categoryId && category.parentId === filter)) &&
-          `${item.title} ${item.description ?? ""} ${item.categoryName}`.toLowerCase().includes(search.toLowerCase()),
-      ),
-    [categories, documents, filter, search],
+          `${item.title} ${item.description ?? ""} ${item.categoryName ?? ""}`.toLowerCase().includes(query),
   );
 
   const topCategories = categories.filter((item) => !item.parentId);
@@ -511,8 +513,8 @@ export default function LibraryPage({ documentId }: { documentId?: string }) {
                 </div>
               ) : (
                 <p className="lib-empty">
-                  No resources match {search ? "this search" : "the current filter"}
-                  {search && filter !== "all" ? " in this category" : ""} yet.{" "}
+                  No resources match {query ? "this search" : "the current filter"}
+                  {query && filter !== "all" ? " in this category" : ""} yet.{" "}
                   {filter !== "all" && (
                     <button
                       type="button"
@@ -566,7 +568,7 @@ export default function LibraryPage({ documentId }: { documentId?: string }) {
                   ))}
                 </div>
               ) : (
-                <p className="lib-empty">Video playlists will appear here when available.</p>
+                <p className="lib-empty">{query ? "No playlists match this search." : "Video playlists will appear here when available."}</p>
               )}
             </section>
           </>

@@ -1,4 +1,10 @@
 # Project Memory
+## 2026-11-07: Mobile library columns and search
+
+- **Major changes:** The public library displays resources, loading placeholders, and playlists in two columns on mobile, with compact card text and wrapping. Search now filters playlist titles and channel names as well as resources, ignores leading and trailing spaces, and reports when no playlists match. Category filters continue to include direct subcategories and combine with resource search.
+- **Lint error and fix:** React Compiler rejected the existing manual memoization after the normalized search query was added as a dependency. Computing the filtered list directly resolved the lint error.
+- **Verification:** TypeScript and focused ESLint passed (one existing image warning); `git diff --check` passed. Browser interaction was not exercised.
+
 ## 2026-11-07: Run recent YouTube check once daily
 
 - **Major change:** Changed the recent-upload scheduler from four runs per day to one run at 00:00 UTC. Run `npm run cron:youtube` after deployment to register or update the scheduler.
