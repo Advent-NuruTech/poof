@@ -103,7 +103,9 @@ try {
       ? "Incorrect email or password."
       : code === "auth/too-many-requests"
         ? "Too many attempts. Please try again later."
-        : "Unable to sign in. Please check your details and try again.",
+        : reason instanceof Error
+          ? reason.message
+          : "Unable to sign in. Please check your details and try again.",
   );
 } finally {
   setBusy(false);
@@ -152,10 +154,12 @@ return (
         <input
           type="checkbox"
           ref={rememberInput}
+          defaultChecked
           disabled={busy}
         />
         Keep me signed in on this device
       </label>
+      <p className="remember-hint">Only enable this on a device you trust.</p>
 
       {error && <p className="auth-error" role="alert">{error}</p>}
 
@@ -240,12 +244,13 @@ return (
       display: flex;
       align-items: center;
       gap: 9px;
-      margin: 5px 0;
+      margin: 5px 0 0;
       color: #475569;
       font-size: 13px;
       cursor: pointer;
     }
     .remember-option input { accent-color: #0b3d91; }
+    .remember-hint { margin: -6px 0 4px 24px; color: #64748b; font-size: 12px; }
     .primary-button {
       min-height: 46px;
       margin-top: 8px;

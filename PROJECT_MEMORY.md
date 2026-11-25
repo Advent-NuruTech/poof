@@ -1,4 +1,18 @@
 # Project Memory
+## 2026-11-25: Add temporary invitation-code signup entry
+
+- **Major change:** Added `/temporary-signup` as a temporary entry point for entering an admin invitation code. It redirects to the existing `/signup?invite=...` route, preserving invite validation, invited-email matching, account creation, and automatic sign-in; it does not create accounts or change existing admin access on its own.
+- **Live check:** The production `/temporary-signup` path returned 404 because this local change is not deployed. The production `/signup` form, submitted with dummy values and no invite, displayed “An administrator invitation is required to create an admin account.” before any server request; no account was created. On a subsequent sign-in attempt, Firebase password sign-in and identity lookup returned HTTP 200, while `/api/auth/session` returned HTTP 403. The UI had hidden the server error behind a generic message; the local sign-in page now surfaces the returned error.
+- **Credential handling:** The browser snapshot exposed the password entered for the test. The password field and one persisted Firebase Auth record were cleared from the test browser; the user was advised to change the password and revoke sessions. No credential value is recorded here.
+- **Build/runtime errors and fixes:** Focused ESLint and `npx.cmd --no-install tsc --noEmit` passed after changing the sign-in error fallback. The production site still needs this code deployed to display the more specific server error.
+- **Verification:** Focused ESLint, `npx.cmd --no-install tsc --noEmit`, and `npm.cmd run build -- --webpack` passed before the latest sign-in error-handling change. No account or invitation was created.
+
+## 2026-11-25: Keep administrator sign-in remembered by default
+
+- **Major change:** The sign-in page now defaults “Keep me signed in on this device” to selected, so Firebase local persistence prevents repeat password entry on the user’s trusted device. Added a concise warning not to enable it on shared devices. Users can still uncheck the option to use browser-session persistence; the app never stores passwords.
+- **Build/runtime errors:** None encountered.
+- **Verification:** `npx.cmd --no-install tsc --noEmit` and focused ESLint on `app/(public)/signin/page.tsx` passed.
+
 ## 2026-11-07: Mobile library columns and search
 
 - **Major changes:** The public library displays resources, loading placeholders, and playlists in two columns on mobile, with compact card text and wrapping. Search now filters playlist titles and channel names as well as resources, ignores leading and trailing spaces, and reports when no playlists match. Category filters continue to include direct subcategories and combine with resource search.
