@@ -1,6 +1,7 @@
 import { Timestamp } from "firebase-admin/firestore";
 import { getMailDb, requireMailAdmin } from "@/lib/mailing-server";
 import { DonationError, paystackCurrencies, verifyAndReconcileDonation } from "@/lib/paystack";
+import { getFirebaseAdminDataFailure } from "@/lib/firebase-admin-error";
 
 const noStoreHeaders = { "Cache-Control": "private, no-store, max-age=0" };
 
@@ -90,7 +91,8 @@ export async function GET(request: Request) {
     }, { headers: noStoreHeaders });
   } catch (reason) {
     console.error("Admin donations could not be loaded", reason);
-    return Response.json({ error: "Could not load donations." }, { status: 500, headers: noStoreHeaders });
+    const failure = getFirebaseAdminDataFailure(reason, "Could not load donations.");
+    return Response.json({ error: failure.message }, { status: failure.status, headers: noStoreHeaders });
   }
 }
 

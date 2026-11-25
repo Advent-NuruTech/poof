@@ -1,4 +1,11 @@
 # Project Memory
+## 2026-11-25: Diagnose admin donation and mailing data failures
+
+- **Root-cause path:** Both `/api/admin/donations` and `/api/mailing` require the server-side Firebase Admin service account to read Firestore. The admin layout itself uses Firebase REST, so an accessible dashboard does not prove that the server Admin SDK credentials/IAM are valid.
+- **Major change:** Added `lib/firebase-admin-error.ts` to return actionable responses for Firestore quota exhaustion, permission denial, missing/invalid Admin credentials, query/index preconditions, and transient Firestore availability. Donation and mailing list GET handlers now use the same classification instead of hiding every failure behind a generic 500.
+- **Verification:** Focused ESLint, TypeScript, unit-style checks for each error category, and `npm.cmd run build -- --webpack` passed. Production API data loading was not re-tested because the shared browser had no administrator session; deployment environment configuration still needs verification.
+- **Build/runtime errors:** None encountered.
+
 ## 2026-11-25: Add temporary invitation-code signup entry
 
 - **Major change:** Added `/temporary-signup` as a temporary entry point for entering an admin invitation code. It redirects to the existing `/signup?invite=...` route, preserving invite validation, invited-email matching, account creation, and automatic sign-in; it does not create accounts or change existing admin access on its own.

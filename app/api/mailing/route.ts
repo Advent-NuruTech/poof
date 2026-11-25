@@ -4,6 +4,7 @@ import {
   type Campaign, type CampaignAudience, deliverCampaign,
 } from "@/lib/mailing-server";
 import { extractFeaturedVideoUrl, richTextToPlainText, sanitizeRichText } from "@/lib/rich-text";
+import { getFirebaseAdminDataFailure } from "@/lib/firebase-admin-error";
 
 export const maxDuration = 300;
 
@@ -55,14 +56,6 @@ function parseCampaign(body: ScheduleInput): Campaign | string {
   if (result.kind === "meeting" && !result.buttonUrl) return "Add the meeting link before sending.";
   if (result.kind === "newsletter" && !richTextToPlainText(result.body)) return "Write the newsletter message before sending.";
   return result;
-}
-
-function isFirestoreReadLimit(error: unknown) {
-  if (!error || typeof error !== "object") return false;
-  const code = "code" in error ? error.code : undefined;
-  const message = error instanceof Error ? error.message : "";
-  return code === 8 || code === 429 || code === "resource-exhausted" ||
-    /RESOURCE_EXHAUSTED|quota exceeded/i.test(message);
 }
 
 async function recordDelivery(
@@ -137,12 +130,10 @@ export async function GET(request: Request) {
     }, { headers: { "Cache-Control": "no-store" } });
   } catch (error) {
     console.error("Mailing admin list failed", error);
-    const rateLimited = isFirestoreReadLimit(error);
+    const failure = getFirebaseAdminDataFailure(error, "Could not load mailing lists and history.");
     return Response.json({
-      error: rateLimited
-        ? "Firestore is temporarily rate-limited (read quota exceeded). Check the Firebase usage and billing limits, then try again."
-        : "Could not load mailing lists and history.",
-    }, { status: rateLimited ? 429 : 500, headers: { "Cache-Control": "no-store" } });
+      error: failure.message,
+    }, { status: failure.status, headers: { "Cache-Control": "no-store" } });
   }
 }
 
