@@ -201,15 +201,30 @@ service cloud.firestore {
         && (request.resource.data.status == 'pending' ? request.resource.data.handledAt == null : request.resource.data.handledAt == request.time);
     }
 
-    // Mailing records and campaign history contain private email addresses and
-    // message content. Admins may read them; all writes stay on trusted routes.
+    // Mailing records contain private email addresses. Only active admins may
+    // manage list entries; public subscription endpoints continue to use trusted
+    // server routes.
     match /onlineMeetingMembers/{memberId} {
       allow read: if isAdmin();
-      allow write: if false;
+      allow create, update: if isAdmin()
+        && request.resource.data.email is string
+        && request.resource.data.email.size() > 0
+        && request.resource.data.email.size() <= 254
+        && request.resource.data.status in ['pending', 'verified']
+        && (!('name' in request.resource.data)
+          || (request.resource.data.name is string && request.resource.data.name.size() <= 120));
+      allow delete: if isAdmin();
     }
     match /newsletterSubscribers/{subscriberId} {
       allow read: if isAdmin();
-      allow write: if false;
+      allow create, update: if isAdmin()
+        && request.resource.data.email is string
+        && request.resource.data.email.size() > 0
+        && request.resource.data.email.size() <= 254
+        && request.resource.data.status in ['active', 'unsubscribed']
+        && (!('name' in request.resource.data)
+          || (request.resource.data.name is string && request.resource.data.name.size() <= 120));
+      allow delete: if isAdmin();
     }
     match /mailingSchedules/{scheduleId} {
       allow read: if isAdmin();

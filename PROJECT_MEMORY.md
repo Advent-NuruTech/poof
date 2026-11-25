@@ -1,4 +1,11 @@
 # Project Memory
+## 2026-11-25: Manage mailing list entries with client SDK
+
+- **Major change:** Admin mailing-list add, edit, verify, and remove actions now use the signed-in Firebase client SDK for both online-meeting members and newsletter subscribers. Updates that change an email use the existing SHA-256 email document ID convention; the old newsletter record is retained as unsubscribed so already-issued unsubscribe links remain valid. Admin-added newsletter subscribers are marked active without sending a welcome email.
+- **Authorization:** Firestore rules allow writes to these two list collections only for active admins and validate the email, status, and optional name. Public subscription and unsubscribe routes retain their existing behavior; schedules, history, and actual email delivery remain on their existing protected server routes.
+- **Verification:** TypeScript, focused ESLint (0 errors; 3 existing image-optimization warnings), `git diff --check`, and `npm.cmd run build -- --webpack` passed. Rules were inspected but not deployed because the Firebase CLI is not installed in this workspace.
+- **Operational note:** Deploy the updated application and `firestore.rules` for the admin client writes to work in production.
+
 ## 2026-11-25: Load donations and mailing data with admin rules
 
 - **Root cause path:** The Donations and Mailing screens read through API handlers backed by the Firebase Admin SDK, unlike working admin screens that query Firestore with the signed-in user's Firebase client SDK. This made those reads dependent on server credentials and bypassed the established client/rules path.

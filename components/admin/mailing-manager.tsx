@@ -2,7 +2,7 @@
 
 import { onAuthStateChanged, type User } from "firebase/auth";
 import Link from "next/link";
-import { collection, doc, getAggregateFromServer, getCountFromServer, getDoc, getDocs, limit, orderBy, query, sum, where, type DocumentData, type QuerySnapshot } from "firebase/firestore";
+import { collection, deleteDoc, deleteField, doc, getAggregateFromServer, getCountFromServer, getDoc, getDocs, limit, orderBy, query, runTransaction, serverTimestamp, sum, updateDoc, where, type DocumentData, type QuerySnapshot } from "firebase/firestore";
 import { useCallback, useEffect, useMemo, useState } from "react";
 import type { FormEvent } from "react";
 import { auth, db } from "@/lib/firebase";
@@ -50,6 +50,11 @@ const tabs: Array<{ id: MailingTab; label: string }> = [
   { id: "meeting", label: "Online meeting members" },
   { id: "newsletter", label: "Newsletter" },
 ];
+
+async function emailDocumentId(email: string) {
+  const digest = await crypto.subtle.digest("SHA-256", new TextEncoder().encode(email));
+  return Array.from(new Uint8Array(digest), (byte) => byte.toString(16).padStart(2, "0")).join("");
+}
 
 function dateLabel(value: DateLike) {
   let date: Date | null = null;
@@ -101,6 +106,7 @@ export default function MailingManager() {
   const [historySourceId, setHistorySourceId] = useState("");
   const [memberEmail, setMemberEmail] = useState("");
   const [memberName, setMemberName] = useState("");
+  const [editingMember, setEditingMember] = useState<{ id: string; collection: "members" | "subscribers" } | null>(null);
   const [memberSearch, setMemberSearch] = useState("");
   const [focusedComposer, setFocusedComposer] = useState(false);
   const [editingScheduleId, setEditingScheduleId] = useState<string | null>(null);
@@ -233,20 +239,133 @@ export default function MailingManager() {
     event.preventDefault();
     setError(""); setNotice(""); setBusy(true);
     try {
-      const result = await request("/api/mailing", { method: "POST", body: JSON.stringify({ action: "add-member", email: memberEmail, name: memberName }) });
+      const email = memberEmail.trim().toLowerCase();
+      const name = memberName.trim();
+      if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email) || email.length > 254) throw new Error("Enter a valid email address.");
+      if (name.length > 120) throw new Error("Keep the first name under 120 characters.");
+      const id = await emailDocumentId(email);
+      const collectionName = tab === "meeting" ? "onlineMeetingMembers" : "newsletterSubscribers";
+      const record = doc(db, collectionName, id);
+      let alreadyActive = false;
+      await runTransaction(db, async (transaction) => {
+        const prior = await transaction.get(record);
+        const activeStatus = tab === "meeting" ? "verified" : "active";
+        alreadyActive = prior.exists() && prior.get("status") === activeStatus;
+        if (tab === "newsletter" && prior.exists() && prior.get("status") === "unsubscribed") {
+          throw new Error("This address has unsubscribed. Confirm consent before adding it again.");
+        }
+        if (alreadyActive) {
+          if (name && name !== prior.get("name")) transaction.update(record, { name, updatedAt: serverTimestamp() });
+          return;
+        }
+        transaction.set(record, {
+          email,
+          ...(name ? { name } : prior.exists() && prior.get("name") ? { name: prior.get("name") } : {}),
+          status: activeStatus,
+          source: "admin",
+          ...(prior.exists() ? { createdAt: prior.get("createdAt") } : { createdAt: serverTimestamp() }),
+          ...(tab === "meeting" ? { verifiedAt: serverTimestamp() } : { subscribedAt: serverTimestamp(), updatedAt: serverTimestamp() }),
+        });
+      });
       setMemberEmail("");
       setMemberName("");
-      setNotice(result.status === "already-verified" ? "That email is already verified." : "Email added and marked verified.");
+      setEditingMember(null);
+      setNotice(alreadyActive
+        ? tab === "meeting" ? "That email is already verified." : "That email is already subscribed."
+        : tab === "meeting" ? "Email added and marked verified." : "Subscriber added as active. No welcome email was sent.");
       await refresh();
     } catch (reason) {
       setError(reason instanceof Error ? reason.message : "Could not add email.");
     } finally { setBusy(false); }
   }
 
-  async function updateRecord(collection: "members" | "schedules", id: string, status: string) {
+  function editMember(member: MailingRecord) {
+    setEditingMember({ id: member.id, collection: tab === "meeting" ? "members" : "subscribers" });
+    setMemberEmail(String(member.email ?? ""));
+    setMemberName(String(member.name ?? ""));
+    setError("");
+    setNotice("Edit the email address or name, then save your changes.");
+  }
+
+  async function saveMemberEdit() {
+    if (!user || !editingMember) return;
     setError(""); setNotice(""); setBusy(true);
     try {
-      await request("/api/mailing", { method: "PATCH", body: JSON.stringify({ collection, id, status }) });
+      const email = memberEmail.trim().toLowerCase();
+      const name = memberName.trim();
+      if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email) || email.length > 254) throw new Error("Enter a valid email address.");
+      if (name.length > 120) throw new Error("Keep the first name under 120 characters.");
+      const collectionName = editingMember.collection === "members" ? "onlineMeetingMembers" : "newsletterSubscribers";
+      const oldRecord = doc(db, collectionName, editingMember.id);
+      const newId = await emailDocumentId(email);
+      const newRecord = doc(db, collectionName, newId);
+      await runTransaction(db, async (transaction) => {
+        const prior = await transaction.get(oldRecord);
+        if (!prior.exists()) throw new Error("This email record no longer exists. Refresh the list and try again.");
+        if (newId !== editingMember.id) {
+          const duplicate = await transaction.get(newRecord);
+          if (duplicate.exists()) throw new Error("An email record already exists for that address.");
+          const nextData = {
+            ...prior.data(),
+            email,
+            ...(name ? { name } : {}),
+            updatedAt: serverTimestamp(),
+          };
+          if (!name) delete nextData.name;
+          transaction.set(newRecord, nextData);
+          if (editingMember.collection === "subscribers") {
+            transaction.update(oldRecord, {
+              status: "unsubscribed",
+              unsubscribedAt: serverTimestamp(),
+              updatedAt: serverTimestamp(),
+            });
+          } else {
+            transaction.delete(oldRecord);
+          }
+        } else {
+          transaction.update(oldRecord, {
+            email,
+            name: name || deleteField(),
+            updatedAt: serverTimestamp(),
+          });
+        }
+      });
+      setRecipientIds((ids) => ids.map((id) => id === editingMember.id ? newId : id));
+      setEditingMember(null);
+      setMemberEmail("");
+      setMemberName("");
+      setNotice(editingMember.collection === "subscribers" && newId !== editingMember.id
+        ? "Email record updated. The previous address remains unsubscribed."
+        : "Email record updated.");
+      await refresh();
+    } catch (reason) {
+      setError(reason instanceof Error ? reason.message : "Could not update the email record.");
+    } finally { setBusy(false); }
+  }
+
+  async function updateRecord(collection: "members" | "subscribers" | "schedules", id: string, status: string) {
+    setError(""); setNotice(""); setBusy(true);
+    try {
+      if (collection === "schedules") {
+        await request("/api/mailing", { method: "PATCH", body: JSON.stringify({ collection, id, status }) });
+      } else {
+        if (!user) throw new Error("Sign in to manage mailing lists.");
+        const collectionName = collection === "members" ? "onlineMeetingMembers" : "newsletterSubscribers";
+        const record = doc(db, collectionName, id);
+        if (status === "delete") {
+          await deleteDoc(record);
+          setRecipientIds((ids) => ids.filter((recipientId) => recipientId !== id));
+          if (editingMember?.id === id) {
+            setEditingMember(null);
+            setMemberEmail("");
+            setMemberName("");
+          }
+        } else if (collection === "members" && status === "verified") {
+          await updateDoc(record, { status, verifiedAt: serverTimestamp(), verifiedBy: user.uid });
+        } else {
+          throw new Error("Unsupported mailing-list update.");
+        }
+      }
       if (collection === "schedules" && id === editingScheduleId) setEditingScheduleId(null);
       setNotice(status === "verified" ? "Email verified." : status === "cancelled" ? "Schedule cancelled." : "Email removed.");
       await refresh();
@@ -420,11 +539,18 @@ export default function MailingManager() {
             <article><span>Emails delivered</span><strong>{data.counts.emailsSent.toLocaleString()}</strong></article>
             <article><span>Scheduled sends</span><strong>{currentSchedules.filter((item) => item.active === true).length.toLocaleString()}</strong></article>
           </section>
-          <nav className="mailing-tabs" aria-label="Mailing lists">{tabs.map((item) => <button type="button" key={item.id} className={tab === item.id ? "active" : ""} onClick={() => { setTab(item.id); setEditingScheduleId(null); setCampaign({ ...initialCampaign, letterTitle: item.id === "meeting" ? "Online meeting reminder" : "A letter for your journey" }); setPreheaderEdited(false); setAudienceMode("all"); setRecipientIds([]); setAudienceSince(""); setHistorySourceId(""); setError(""); setNotice(""); }}>{item.label}</button>)}</nav>
+          <nav className="mailing-tabs" aria-label="Mailing lists">{tabs.map((item) => <button type="button" key={item.id} className={tab === item.id ? "active" : ""} onClick={() => { setTab(item.id); setEditingMember(null); setMemberEmail(""); setMemberName(""); setEditingScheduleId(null); setCampaign({ ...initialCampaign, letterTitle: item.id === "meeting" ? "Online meeting reminder" : "A letter for your journey" }); setPreheaderEdited(false); setAudienceMode("all"); setRecipientIds([]); setAudienceSince(""); setHistorySourceId(""); setError(""); setNotice(""); }}>{item.label}</button>)}</nav>
           <section className={"mailing-grid" + (focusedComposer ? " mailing-grid-focused" : "")}>
             <div className="mailing-people" id="mailing-audience">
               <div className="mailing-section-heading"><div><span className="eyebrow">{tab === "meeting" ? "ONLINE MEETING MEMBERS" : "NEWSLETTER AUDIENCE"}</span><h2>{tab === "meeting" ? "Email list" : "Subscribers"}</h2></div><button className="text-button" onClick={() => void refresh()} disabled={loading}>{loading ? "Refreshing…" : "Refresh"}</button></div>
-              {tab === "meeting" && <form className="mailing-add-form" onSubmit={(event) => void addMember(event)}><label htmlFor="add-member-name">First name (optional)<input id="add-member-name" type="text" maxLength={120} value={memberName} onChange={(event) => setMemberName(event.target.value)} placeholder="Name"/></label><label htmlFor="add-member-email">Email address<input id="add-member-email" type="email" required maxLength={254} value={memberEmail} onChange={(event) => setMemberEmail(event.target.value)} placeholder="person@example.com"/></label><button className="primary-button" disabled={busy}>Add email as verified</button></form>}
+              <form className="mailing-add-form" onSubmit={(event) => {
+                if (editingMember) {
+                  event.preventDefault();
+                  void saveMemberEdit();
+                } else {
+                  void addMember(event);
+                }
+              }}><label htmlFor="add-member-name">First name (optional)<input id="add-member-name" type="text" maxLength={120} value={memberName} onChange={(event) => setMemberName(event.target.value)} placeholder="Name"/></label><label htmlFor="add-member-email">Email address<input id="add-member-email" type="email" required maxLength={254} value={memberEmail} onChange={(event) => setMemberEmail(event.target.value)} placeholder="person@example.com"/></label><button className="primary-button" disabled={busy}>{editingMember ? "Save changes" : tab === "meeting" ? "Add email as verified" : "Add subscriber as active"}</button>{editingMember && <button type="button" className="text-button" disabled={busy} onClick={() => { setEditingMember(null); setMemberEmail(""); setMemberName(""); setNotice(""); }}>Cancel editing</button>}</form>
               <label className="mailing-search-label">Search this list
                 <input type="search" value={memberSearch} onChange={(event) => setMemberSearch(event.target.value)} placeholder="Search email, name or status…" aria-label="Search subscribers and members" />
               </label>
@@ -437,7 +563,7 @@ export default function MailingManager() {
                 : !visibleMembers.length ? <div className="mailing-empty">No contacts match “{memberSearch}”. Try another search.</div> : <div className="mailing-member-list">{visibleMembers.map((member) => {
                   const status = String(member.status ?? "unknown");
                   const eligible = status === (tab === "meeting" ? "verified" : "active");
-                  return <article key={member.id}>{audienceMode === "selected" && <input className="mailing-recipient-check" type="checkbox" aria-label={"Select " + String(member.email ?? "email")} checked={recipientIds.includes(member.id)} disabled={!eligible || busy} onChange={() => toggleRecipient(member.id)}/>}<div><strong>{String(member.email ?? "")}</strong><small>{String(member.name ?? (member.source === "admin" ? "Added by administrator" : "Subscriber"))} · {dateLabel(member.createdAt as DateLike)}</small></div><span className={"mailing-status " + status}>{status}</span>{tab === "meeting" && status !== "verified" && <button className="outline-button" disabled={busy} onClick={() => void updateRecord("members", member.id, "verified")}>Verify</button>}{tab === "meeting" && <button className="icon-action remove-action" aria-label={"Remove " + String(member.email ?? "email")} disabled={busy} onClick={() => void updateRecord("members", member.id, "delete")}>×</button>}</article>;
+                  return <article key={member.id}>{audienceMode === "selected" && <input className="mailing-recipient-check" type="checkbox" aria-label={"Select " + String(member.email ?? "email")} checked={recipientIds.includes(member.id)} disabled={!eligible || busy} onChange={() => toggleRecipient(member.id)}/>}<div><strong>{String(member.email ?? "")}</strong><small>{String(member.name ?? (member.source === "admin" ? "Added by administrator" : "Subscriber"))} · {dateLabel(member.createdAt as DateLike)}</small></div><span className={"mailing-status " + status}>{status}</span>{tab === "meeting" && status !== "verified" && <button className="outline-button" disabled={busy} onClick={() => void updateRecord("members", member.id, "verified")}>Verify</button>}<button className="outline-button" disabled={busy} onClick={() => editMember(member)}>Edit</button><button className="icon-action remove-action" aria-label={"Remove " + String(member.email ?? "email")} disabled={busy} onClick={() => void updateRecord(tab === "meeting" ? "members" : "subscribers", member.id, "delete")}>×</button></article>;
                 })}</div>}
             </div>
             <div className="mailing-compose" id="mailing-compose">
