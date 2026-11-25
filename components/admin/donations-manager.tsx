@@ -1,8 +1,10 @@
 "use client";
 
 import { onAuthStateChanged, type User } from "firebase/auth";
+import { collection, doc, getCountFromServer, getDoc, getDocs, limit, orderBy, query, Timestamp, where, type DocumentData, type QueryDocumentSnapshot } from "firebase/firestore";
 import { useCallback, useEffect, useMemo, useState } from "react";
-import { auth } from "@/lib/firebase";
+import { auth, db } from "@/lib/firebase";
+import { isAdminIdentity } from "@/lib/admin-access";
 import { readApiResponse } from "@/lib/api-response";
 
 type DonationStatus = "pending" | "success" | "failed";
@@ -63,6 +65,38 @@ function statusLabel(status: DonationStatus) {
   return status === "success" ? "Successful" : status === "failed" ? "Failed" : "Pending";
 }
 
+function dateIso(value: unknown) {
+  if (value instanceof Timestamp) return value.toDate().toISOString();
+  if (typeof value === "string" && Number.isFinite(Date.parse(value))) return new Date(value).toISOString();
+  return null;
+}
+
+function donationFromSnapshot(snapshot: QueryDocumentSnapshot<DocumentData>): Donation {
+  const data = snapshot.data();
+  const status = data.status === "success" || data.status === "failed" ? data.status : "pending";
+  return {
+    reference: snapshot.id,
+    name: String(data.name ?? "Unknown donor"),
+    email: String(data.email ?? ""),
+    amountSubunit: Number(data.amountSubunit ?? 0),
+    currency: String(data.currency ?? "KES"),
+    originalAmountSubunit: Number(data.originalAmountSubunit ?? data.amountSubunit ?? 0),
+    originalCurrency: String(data.originalCurrency ?? data.currency ?? "KES"),
+    conversionRate: typeof data.conversionRate === "number" ? data.conversionRate : null,
+    chargeAmountSubunit: Number(data.chargeAmountSubunit ?? data.amountSubunit ?? 0),
+    chargeCurrency: String(data.chargeCurrency ?? data.currency ?? "KES"),
+    status,
+    providerStatus: String(data.providerStatus ?? "unknown"),
+    failureMessage: typeof data.failureMessage === "string" ? data.failureMessage : "",
+    receiptStatus: String(data.receiptStatus ?? "not_sent"),
+    receiptError: typeof data.receiptError === "string" ? data.receiptError : "",
+    channel: typeof data.channel === "string" ? data.channel : "",
+    createdAt: dateIso(data.createdAt),
+    paidAt: dateIso(data.paidAt),
+    updatedAt: dateIso(data.updatedAt),
+  };
+}
+
 export default function DonationsManager() {
   const [user, setUser] = useState<User | null>(null);
   const [authReady, setAuthReady] = useState(false);
@@ -78,12 +112,60 @@ export default function DonationsManager() {
     setLoading(true);
     setError("");
     try {
-      const token = await currentUser.getIdToken();
-      const response = await fetch("/api/admin/donations", {
-        headers: { Authorization: `Bearer ${token}` },
-        cache: "no-store",
+      const adminSnapshot = await getDoc(doc(db, "admins", currentUser.uid));
+      const admin = adminSnapshot.data();
+      if (!adminSnapshot.exists() || !isAdminIdentity(currentUser.uid, {
+        enabled: admin?.enabled,
+        expiresAt: admin?.expiresAt?.toMillis?.() ?? 0,
+        inviteId: admin?.inviteId,
+        codeHash: admin?.codeHash,
+      })) {
+        throw new Error("Administrator access is required.");
+      }
+
+      const donationsRef = collection(db, "donations");
+      const [records, successful, failed, pending, storedTotals] = await Promise.all([
+        getDocs(query(donationsRef, orderBy("createdAt", "desc"), limit(250))),
+        getCountFromServer(query(donationsRef, where("status", "==", "success"))),
+        getCountFromServer(query(donationsRef, where("status", "==", "failed"))),
+        getCountFromServer(query(donationsRef, where("status", "==", "pending"))),
+        getDocs(collection(db, "donationStats")),
+      ]);
+      const totals = new Map<string, { currency: string; successfulCount: number; successfulAmountSubunit: number }>(
+        ["USD", "KES"].map((currency) => [currency, { currency, successfulCount: 0, successfulAmountSubunit: 0 }]),
+      );
+      for (const snapshot of storedTotals.docs) {
+        const currency = snapshot.id.toUpperCase();
+        const successfulCount = Number(snapshot.get("successfulCount"));
+        const successfulAmountSubunit = Number(snapshot.get("successfulAmountSubunit"));
+        if (!/^[A-Z]{3}$/.test(currency) || !Number.isSafeInteger(successfulCount) || successfulCount < 0
+          || !Number.isSafeInteger(successfulAmountSubunit) || successfulAmountSubunit < 0) continue;
+        totals.set(currency, { currency, successfulCount, successfulAmountSubunit });
+      }
+      const successfulCount = successful.data().count;
+      if ([...totals.values()].reduce((sum, total) => sum + total.successfulCount, 0) !== successfulCount) {
+        for (const currency of totals.keys()) totals.set(currency, { currency, successfulCount: 0, successfulAmountSubunit: 0 });
+        const successfulRecords = await getDocs(query(donationsRef, where("status", "==", "success")));
+        for (const snapshot of successfulRecords.docs) {
+          const donation = snapshot.data();
+          const currency = String(donation.chargeCurrency ?? donation.currency ?? "").toUpperCase();
+          const amountSubunit = Number(donation.chargeAmountSubunit ?? donation.amountSubunit);
+          if (!/^[A-Z]{3}$/.test(currency) || !Number.isSafeInteger(amountSubunit) || amountSubunit <= 0) continue;
+          const current = totals.get(currency) ?? { currency, successfulCount: 0, successfulAmountSubunit: 0 };
+          current.successfulCount += 1;
+          current.successfulAmountSubunit += amountSubunit;
+          totals.set(currency, current);
+        }
+      }
+      setData({
+        donations: records.docs.map(donationFromSnapshot),
+        summary: {
+          successfulCount,
+          failedCount: failed.data().count,
+          pendingCount: pending.data().count,
+          totals: [...totals.values()],
+        },
       });
-      setData(await readApiResponse<DonationData>(response, "Donation records"));
     } catch (reason) {
       setError(reason instanceof Error ? reason.message : "Could not load donations.");
     } finally {

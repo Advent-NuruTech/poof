@@ -1,4 +1,12 @@
 # Project Memory
+## 2026-11-25: Load donations and mailing data with admin rules
+
+- **Root cause path:** The Donations and Mailing screens read through API handlers backed by the Firebase Admin SDK, unlike working admin screens that query Firestore with the signed-in user's Firebase client SDK. This made those reads dependent on server credentials and bypassed the established client/rules path.
+- **Major change:** Donations and Mailing now read their existing records and counts directly from Firestore's client SDK. Firestore rules explicitly allow reads of donation, donation-stat, mailing, campaign-history, schedule, and mailing-stat documents only to active admins; direct client writes remain denied. Existing server routes remain in place for donation reconciliation and mailing changes/sends.
+- **Verification:** Focused ESLint passed with 0 errors (3 existing image-optimization warnings); TypeScript, `git diff --check`, and `npm.cmd run build -- --webpack` passed. The build generated all admin pages and API routes.
+- **Build errors and fixes:** The first TypeScript check found untyped Firestore snapshot data. Added explicit Firestore snapshot/document types; the subsequent TypeScript check and production build passed.
+- **Deployment requirement:** Deploy the updated application and `firestore.rules` together. The Firebase CLI is not installed in this workspace, and production Firestore access was not changed from here.
+
 ## 2026-11-25: Diagnose admin donation and mailing data failures
 
 - **Root-cause path:** Both `/api/admin/donations` and `/api/mailing` require the server-side Firebase Admin service account to read Firestore. The admin layout itself uses Firebase REST, so an accessible dashboard does not prove that the server Admin SDK credentials/IAM are valid.

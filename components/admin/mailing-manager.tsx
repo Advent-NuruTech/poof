@@ -2,7 +2,7 @@
 
 import { onAuthStateChanged, type User } from "firebase/auth";
 import Link from "next/link";
-import { doc, getDoc } from "firebase/firestore";
+import { collection, doc, getAggregateFromServer, getCountFromServer, getDoc, getDocs, limit, orderBy, query, sum, where, type DocumentData, type QuerySnapshot } from "firebase/firestore";
 import { useCallback, useEffect, useMemo, useState } from "react";
 import type { FormEvent } from "react";
 import { auth, db } from "@/lib/firebase";
@@ -36,6 +36,10 @@ type MailingData = {
 };
 type ApiResult = { error?: string; status?: string; sent?: number; failed?: number; imageUrl?: string };
 type DateLike = { _seconds?: number; seconds?: number } | string | null | undefined;
+
+function mailingRecords(snapshot: QuerySnapshot<DocumentData>): MailingRecord[] {
+  return snapshot.docs.map((item) => ({ id: item.id, ...item.data() }));
+}
 
 const initialCampaign: CampaignForm = {
   subject: "", letterTitle: "Online meeting reminder", headline: "", preheader: "", body: "",
@@ -145,11 +149,39 @@ export default function MailingManager() {
   const refresh = useCallback(async () => {
     if (!user) return;
     setLoading(true);
+    setError("");
     try {
-      const token = await user.getIdToken();
-      const response = await fetch("/api/mailing", {       headers: { Authorization: "Bearer " + token }, cache: "no-store" });
-      const result = await readApiResponse<MailingData & { error?: string }>(response, "Could not load mailing lists");
-      setData(result);
+      const [members, subscribers, schedules, history, verified, pending, active, unsubscribed, totalMembers, totalSubscribers, stats] = await Promise.all([
+        getDocs(query(collection(db, "onlineMeetingMembers"), orderBy("createdAt", "desc"), limit(500))),
+        getDocs(query(collection(db, "newsletterSubscribers"), orderBy("createdAt", "desc"), limit(500))),
+        getDocs(query(collection(db, "mailingSchedules"), orderBy("createdAt", "desc"), limit(100))),
+        getDocs(query(collection(db, "mailingHistory"), orderBy("sentAt", "desc"), limit(50))),
+        getCountFromServer(query(collection(db, "onlineMeetingMembers"), where("status", "==", "verified"))),
+        getCountFromServer(query(collection(db, "onlineMeetingMembers"), where("status", "==", "pending"))),
+        getCountFromServer(query(collection(db, "newsletterSubscribers"), where("status", "==", "active"))),
+        getCountFromServer(query(collection(db, "newsletterSubscribers"), where("status", "==", "unsubscribed"))),
+        getCountFromServer(collection(db, "onlineMeetingMembers")),
+        getCountFromServer(collection(db, "newsletterSubscribers")),
+        getDoc(doc(db, "mailingStats", "summary")),
+      ]);
+      const emailsSent = stats.exists()
+        ? Number(stats.get("emailsSent") ?? 0)
+        : Number((await getAggregateFromServer(collection(db, "mailingHistory"), { sent: sum("sent") })).data().sent ?? 0);
+      setData({
+        members: mailingRecords(members),
+        subscribers: mailingRecords(subscribers),
+        schedules: mailingRecords(schedules),
+        history: mailingRecords(history),
+        counts: {
+          verified: verified.data().count,
+          pending: pending.data().count,
+          active: active.data().count,
+          unsubscribed: unsubscribed.data().count,
+          totalMembers: totalMembers.data().count,
+          totalSubscribers: totalSubscribers.data().count,
+          emailsSent,
+        },
+      });
     } catch (reason) {
       setError(reason instanceof Error ? reason.message : "Could not load mailing lists.");
     } finally {

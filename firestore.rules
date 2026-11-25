@@ -201,13 +201,39 @@ service cloud.firestore {
         && (request.resource.data.status == 'pending' ? request.resource.data.handledAt == null : request.resource.data.handledAt == request.time);
     }
 
-    // Donation PII, payment status, receipt state, and abuse-control records are
-    // only accessed through authenticated server routes using Firebase Admin.
-    match /donations/{document=**} {
-      allow read, write: if false;
+    // Mailing records and campaign history contain private email addresses and
+    // message content. Admins may read them; all writes stay on trusted routes.
+    match /onlineMeetingMembers/{memberId} {
+      allow read: if isAdmin();
+      allow write: if false;
     }
-    match /donationStats/{document=**} {
-      allow read, write: if false;
+    match /newsletterSubscribers/{subscriberId} {
+      allow read: if isAdmin();
+      allow write: if false;
+    }
+    match /mailingSchedules/{scheduleId} {
+      allow read: if isAdmin();
+      allow write: if false;
+    }
+    match /mailingHistory/{historyId} {
+      allow read: if isAdmin();
+      allow write: if false;
+    }
+    match /mailingStats/{statId} {
+      allow read: if isAdmin();
+      allow write: if false;
+    }
+
+    // Donation PII, payment status, receipt state, and abuse-control records are
+    // readable only by admins through Firestore rules. All writes remain on
+    // authenticated server routes using Firebase Admin.
+    match /donations/{donationId} {
+      allow read: if isAdmin();
+      allow write: if false;
+    }
+    match /donationStats/{currency} {
+      allow read: if isAdmin();
+      allow write: if false;
     }
     match /donationRateLimits/{document=**} {
       allow read, write: if false;
