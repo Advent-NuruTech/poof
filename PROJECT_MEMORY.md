@@ -3,7 +3,8 @@
 
 - **Root-cause path:** Both `/api/admin/donations` and `/api/mailing` require the server-side Firebase Admin service account to read Firestore. The admin layout itself uses Firebase REST, so an accessible dashboard does not prove that the server Admin SDK credentials/IAM are valid.
 - **Major change:** Added `lib/firebase-admin-error.ts` to return actionable responses for Firestore quota exhaustion, permission denial, missing/invalid Admin credentials, query/index preconditions, and transient Firestore availability. Donation and mailing list GET handlers now use the same classification instead of hiding every failure behind a generic 500.
-- **Verification:** Focused ESLint, TypeScript, unit-style checks for each error category, and `npm.cmd run build -- --webpack` passed. Production API data loading was not re-tested because the shared browser had no administrator session; deployment environment configuration still needs verification.
+- **Live check:** The signed-in production admin pages loaded, but both `/api/admin/donations` and `/api/mailing` returned HTTP 500 with the old generic error messages. The deployed routes are not returning the new local classifications yet, so the precise Firebase Admin/Firestore cause remains unverified.
+- **Verification:** Focused ESLint, TypeScript, unit-style checks for each error category, and `npm.cmd run build -- --webpack` passed. The local changes still need deployment; check the resulting specific response and Vercel function logs if it reports an environment issue.
 - **Build/runtime errors:** None encountered.
 
 ## 2026-11-25: Add temporary invitation-code signup entry
