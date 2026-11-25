@@ -4,16 +4,12 @@ import {
   initializeDonation,
   parseDonationInput,
 } from "@/lib/paystack";
-
-function validOrigin(request: Request) {
-  const origin = request.headers.get("origin");
-  return !origin || origin === new URL(request.url).origin;
-}
+import { isValidRequestOrigin } from "@/lib/request-origin";
 
 const noStoreHeaders = { "Cache-Control": "no-store, max-age=0" };
 
 export async function POST(request: Request) {
-  if (!validOrigin(request)) {
+  if (!isValidRequestOrigin(request)) {
     return Response.json({ error: "Invalid request origin." }, { status: 403, headers: noStoreHeaders });
   }
   const contentLength = Number(request.headers.get("content-length") ?? 0);

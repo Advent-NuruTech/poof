@@ -1,9 +1,5 @@
 import { getMailDb, requireMailAdmin, sendAdminInvitationEmail, Timestamp } from "@/lib/mailing-server";
-
-function validOrigin(request: Request) {
-  const origin = request.headers.get("origin");
-  return !origin || origin === new URL(request.url).origin;
-}
+import { isValidRequestOrigin } from "@/lib/request-origin";
 
 function siteBaseUrl(request: Request) {
   const configuredUrl = process.env.NEXT_PUBLIC_SITE_URL?.trim().replace(/\/+$/, "");
@@ -26,7 +22,7 @@ async function removeUnsentInvitation(invitation: FirebaseFirestore.DocumentRefe
 }
 
 export async function POST(request: Request) {
-  if (!validOrigin(request)) return Response.json({ error: "Invalid request origin." }, { status: 403 });
+  if (!isValidRequestOrigin(request)) return Response.json({ error: "Invalid request origin." }, { status: 403 });
 
   try {
     const adminId = await requireMailAdmin(request);

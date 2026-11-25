@@ -1,6 +1,7 @@
 import { NextResponse } from "next/server";
 import { cookies } from "next/headers";
 import { getAdminSessionExpiry, ROOT_ADMIN_UID, isAdminIdentity, isAdminSource } from "@/lib/admin-access";
+import { isValidRequestOrigin } from "@/lib/request-origin";
 
 const COOKIE_NAME = "poof_admin_session";
 const ACCESS_COOKIE_NAME = "poof_admin_access";
@@ -92,11 +93,6 @@ function expiredSession() {
   return response;
 }
 
-function validOrigin(request: Request) {
-  const origin = request.headers.get("origin");
-  return !origin || origin === new URL(request.url).origin;
-}
-
 async function renewSession(refreshToken: string, mode: "active" | "restore" | "fresh-sign-in") {
   if (!API_KEY || !PROJECT_ID) {
     return { response: NextResponse.json({ error: "Authentication is not configured." }, { status: 503 }) };
@@ -163,7 +159,7 @@ async function renewSession(refreshToken: string, mode: "active" | "restore" | "
 }
 
 export async function POST(request: Request) {
-  if (!validOrigin(request)) return NextResponse.json({ error: "Invalid request origin." }, { status: 403 });
+  if (!isValidRequestOrigin(request)) return NextResponse.json({ error: "Invalid request origin." }, { status: 403 });
 
   let body: { refreshToken?: unknown; restore?: unknown; freshSignIn?: unknown };
   try {
@@ -191,7 +187,7 @@ export async function POST(request: Request) {
 }
 
 export async function PATCH(request: Request) {
-  if (!validOrigin(request)) return NextResponse.json({ error: "Invalid request origin." }, { status: 403 });
+  if (!isValidRequestOrigin(request)) return NextResponse.json({ error: "Invalid request origin." }, { status: 403 });
   if (!API_KEY || !PROJECT_ID) {
     return NextResponse.json({ error: "Authentication is not configured." }, { status: 503 });
   }

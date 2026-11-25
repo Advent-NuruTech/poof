@@ -1,5 +1,6 @@
 import { NextResponse } from "next/server";
 import { getAdminSessionExpiry, isAdminSource } from "@/lib/admin-access";
+import { isValidRequestOrigin } from "@/lib/request-origin";
 
 type FirestoreDocument = {
   fields?: {
@@ -26,7 +27,7 @@ export async function POST(request: Request) {
   if (!apiKey || !projectId) {
     return NextResponse.json({ error: "Signup is not configured on the server." }, { status: 503 });
   }
-  if (request.headers.get("origin") && request.headers.get("origin") !== new URL(request.url).origin) {
+  if (!isValidRequestOrigin(request)) {
     return NextResponse.json({ error: "Invalid request origin." }, { status: 403 });
   }
 
