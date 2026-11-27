@@ -194,8 +194,8 @@ export async function GET(request: Request) {
       }
     }
     return Response.json({ processed, sent, failed });
-  } catch {
-    console.error("Mailing cron failed unexpectedly.");
+  } catch (error) {
+    console.error("Mailing cron failed unexpectedly", error);
     return Response.json({ error: "Could not process scheduled email delivery." }, { status: 500 });
   }
 }

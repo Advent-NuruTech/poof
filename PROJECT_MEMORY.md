@@ -1,4 +1,11 @@
 # Project Memory
+## 2026-11-27: Diagnose scheduled-mailing runtime failure
+
+- **Verified production error:** The provided server logs show Firebase Admin `Failed to parse private key`, with OpenSSL `ERR_OSSL_UNSUPPORTED` / `DECODER routines::unsupported`. The cron handler initializes Firestore before querying schedules or calling Resend, explaining the HTTP 500 and the absence of Resend API requests. The same credential error also appears in recent YouTube checks and mailing actions, indicating a shared Firebase Admin credential problem rather than a Resend rejection.
+- **Major change:** The cron handler now includes the caught exception in server logs instead of logging only a generic message; its public 500 response remains generic.
+- **Remaining fix:** Replace the production Firebase Admin private-key environment value with a valid complete service-account PEM, preserving the `BEGIN/END PRIVATE KEY` lines and correct newline formatting, then redeploy/restart. This hosting configuration was not changed or verified here.
+- **Verification:** TypeScript, focused ESLint, and `git diff --check` passed.
+
 ## 2026-11-27: Route mailing-list additions through admin API
 
 - **Reported issue and diagnosis:** The manual-add form wrote mailing records directly from the browser using Firestore client permissions, while `/api/mailing` already had a server-side active-admin check. A stale or incomplete deployed Firestore ruleset could therefore return “Missing or insufficient permissions” even for a signed-in admin. The reported “Failed to parse private key” email error was not independently reproduced; do not infer a specific key-format defect from the report alone.
