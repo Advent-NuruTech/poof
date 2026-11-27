@@ -2,6 +2,7 @@
 ## 2026-11-27: Diagnose scheduled-mailing runtime failure
 
 - **Verified production error:** The provided server logs show Firebase Admin `Failed to parse private key`, with OpenSSL `ERR_OSSL_UNSUPPORTED` / `DECODER routines::unsupported`. The cron handler initializes Firestore before querying schedules or calling Resend, explaining the HTTP 500 and the absence of Resend API requests. The same credential error also appears in recent YouTube checks and mailing actions, indicating a shared Firebase Admin credential problem rather than a Resend rejection.
+- **Runtime formatting check:** A safe in-container diagnostic confirmed the key variable is present and has PEM begin/end markers, but has neither actual newlines nor literal `\n` sequences. The key itself was not read or recorded. This strongly indicates Coolify is passing a flattened PEM value, which OpenSSL cannot decode.
 - **Major change:** The cron handler now includes the caught exception in server logs instead of logging only a generic message; its public 500 response remains generic.
 - **Remaining fix:** Replace the production Firebase Admin private-key environment value with a valid complete service-account PEM, preserving the `BEGIN/END PRIVATE KEY` lines and correct newline formatting, then redeploy/restart. This hosting configuration was not changed or verified here.
 - **Verification:** TypeScript, focused ESLint, and `git diff --check` passed.
