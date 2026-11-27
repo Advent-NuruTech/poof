@@ -243,33 +243,14 @@ export default function MailingManager() {
       const name = memberName.trim();
       if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email) || email.length > 254) throw new Error("Enter a valid email address.");
       if (name.length > 120) throw new Error("Keep the first name under 120 characters.");
-      const id = await emailDocumentId(email);
-      const collectionName = tab === "meeting" ? "onlineMeetingMembers" : "newsletterSubscribers";
-      const record = doc(db, collectionName, id);
-      let alreadyActive = false;
-      await runTransaction(db, async (transaction) => {
-        const prior = await transaction.get(record);
-        const activeStatus = tab === "meeting" ? "verified" : "active";
-        alreadyActive = prior.exists() && prior.get("status") === activeStatus;
-        if (tab === "newsletter" && prior.exists() && prior.get("status") === "unsubscribed") {
-          throw new Error("This address has unsubscribed. Confirm consent before adding it again.");
-        }
-        if (alreadyActive) {
-          if (name && name !== prior.get("name")) transaction.update(record, { name, updatedAt: serverTimestamp() });
-          return;
-        }
-        transaction.set(record, {
-          email,
-          ...(name ? { name } : prior.exists() && prior.get("name") ? { name: prior.get("name") } : {}),
-          status: activeStatus,
-          source: "admin",
-          ...(prior.exists() ? { createdAt: prior.get("createdAt") } : { createdAt: serverTimestamp() }),
-          ...(tab === "meeting" ? { verifiedAt: serverTimestamp() } : { subscribedAt: serverTimestamp(), updatedAt: serverTimestamp() }),
-        });
+      const result = await request("/api/mailing", {
+        method: "POST",
+        body: JSON.stringify({ action: "add-member", kind: tab, email, name }),
       });
       setMemberEmail("");
       setMemberName("");
       setEditingMember(null);
+      const alreadyActive = result.status === "already-verified" || result.status === "already-active";
       setNotice(alreadyActive
         ? tab === "meeting" ? "That email is already verified." : "That email is already subscribed."
         : tab === "meeting" ? "Email added and marked verified." : "Subscriber added as active. No welcome email was sent.");

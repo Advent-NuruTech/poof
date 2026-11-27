@@ -147,26 +147,41 @@ export async function POST(request: Request) {
     catch { return Response.json({ error: "Invalid request body." }, { status: 400 }); }
     if (!body || typeof body !== "object" || Array.isArray(body)) return Response.json({ error: "Invalid request body." }, { status: 400 });
     if (body.action === "add-member") {
+      if (body.kind !== "meeting" && body.kind !== "newsletter") {
+        return Response.json({ error: "Choose a mailing list." }, { status: 400 });
+      }
       const email = typeof body.email === "string" ? body.email.trim().toLowerCase() : "";
       if (email.length > 254 || !/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email)) return Response.json({ error: "Enter a valid email address." }, { status: 400 });
       if (body.name !== undefined && typeof body.name !== "string") return Response.json({ error: "Enter a valid first name." }, { status: 400 });
       const name = typeof body.name === "string" ? body.name.trim() : "";
       if (name.length > 120) return Response.json({ error: "Keep the first name under 120 characters." }, { status: 400 });
       const id = createHash("sha256").update(email).digest("hex");
-      const member = mailDb.collection("onlineMeetingMembers").doc(id);
+      const isMeeting = body.kind === "meeting";
+      const member = mailDb.collection(isMeeting ? "onlineMeetingMembers" : "newsletterSubscribers").doc(id);
       const result = await mailDb.runTransaction(async (transaction) => {
         const prior = await transaction.get(member);
-        const alreadyVerified = prior.exists && prior.get("status") === "verified";
-        transaction.set(member, {
+        const alreadyActive = prior.exists && prior.get("status") === (isMeeting ? "verified" : "active");
+        if (!isMeeting && prior.exists && prior.get("status") === "unsubscribed") return "unsubscribed";
+        const fields = {
           email,
-          ...(name ? { name } : prior.exists && prior.get("name") ? { name: prior.get("name") } : {}),
-          status: "verified", source: "admin",
-          ...(prior.exists ? { createdAt: prior.get("createdAt") } : { createdAt: FieldValue.serverTimestamp() }),
-          verifiedAt: FieldValue.serverTimestamp(),
-        });
-        return alreadyVerified ? "already-verified" : "verified";
+          status: isMeeting ? "verified" : "active", source: "admin",
+          ...(isMeeting
+            ? { verifiedAt: FieldValue.serverTimestamp() }
+            : { subscribedAt: FieldValue.serverTimestamp(), updatedAt: FieldValue.serverTimestamp() }),
+          ...(name ? { name } : {}),
+        };
+        if (alreadyActive) {
+          if (name && name !== prior.get("name")) transaction.update(member, { name, updatedAt: FieldValue.serverTimestamp() });
+          return isMeeting ? "already-verified" : "already-active";
+        }
+        if (prior.exists) transaction.update(member, fields);
+        else transaction.set(member, { ...fields, createdAt: FieldValue.serverTimestamp() });
+        return isMeeting ? "verified" : "active";
       });
-      return Response.json({ status: result }, { status: result === "verified" ? 201 : 200 });
+      if (result === "unsubscribed") {
+        return Response.json({ error: "This address has unsubscribed. Confirm consent before adding it again." }, { status: 409 });
+      }
+      return Response.json({ status: result }, { status: result === "verified" || result === "active" ? 201 : 200 });
     }
     if (body.action === "history-send") {
       if (typeof body.historyId !== "string" || !body.historyId || body.historyId.length > 150) {

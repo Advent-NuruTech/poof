@@ -1,4 +1,11 @@
 # Project Memory
+## 2026-11-27: Route mailing-list additions through admin API
+
+- **Reported issue and diagnosis:** The manual-add form wrote mailing records directly from the browser using Firestore client permissions, while `/api/mailing` already had a server-side active-admin check. A stale or incomplete deployed Firestore ruleset could therefore return “Missing or insufficient permissions” even for a signed-in admin. The reported “Failed to parse private key” email error was not independently reproduced; do not infer a specific key-format defect from the report alone.
+- **Major change:** Meeting-member and newsletter additions now use the authenticated `/api/mailing` endpoint. It authorizes active admins server-side, writes both list types with their existing verified/active semantics, preserves existing record fields, and refuses to reactivate unsubscribed newsletter addresses.
+- **Verification:** `npx.cmd --no-install tsc --noEmit` passed; focused ESLint passed with zero errors and three existing image-optimization warnings; `git diff --check` passed. Live email delivery and the reported private-key failure were not tested.
+- **Runtime/build errors:** None encountered.
+
 ## 2026-11-25: Manage mailing list entries with client SDK
 
 - **Major change:** Admin mailing-list add, edit, verify, and remove actions now use the signed-in Firebase client SDK for both online-meeting members and newsletter subscribers. Updates that change an email use the existing SHA-256 email document ID convention; the old newsletter record is retained as unsubscribed so already-issued unsubscribe links remain valid. Admin-added newsletter subscribers are marked active without sending a welcome email.
